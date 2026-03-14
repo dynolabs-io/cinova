@@ -12,6 +12,13 @@ import type { Movie, TVShow, Person, AuthResponse, SearchResult, WatchProvider }
 
 export const BASE_URL = 'https://api.cinova.openova.io';
 
+// Map snake_case backend fields to camelCase frontend types
+function normalizeMedia(item: Record<string, unknown>) {
+  if (!item || typeof item !== 'object') return item;
+  const tmdbId = (item.tmdb_id ?? item.tmdbId ?? item.id) as number;
+  return { ...item, id: tmdbId, tmdbId, cinovaScore: item.cinova_score ?? item.cinovaScore };
+}
+
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   timeout: 15_000,
@@ -92,29 +99,29 @@ export async function authRefresh(refreshToken: string): Promise<AuthResponse> {
 
 export async function getTrending(country = 'US', limit = 20): Promise<Movie[]> {
   const { data } = await api.get<{ results: Movie[]; total: number }>('/api/v1/trending', { params: { country, limit } });
-  return data.results ?? [];
+  return (data.results ?? []).map(normalizeMedia) as Movie[];
 }
 
 export async function getPopular(country = 'US', limit = 20, page = 1): Promise<Movie[]> {
   const { data } = await api.get<{ results: Movie[]; total: number }>('/api/v1/popular', { params: { country, limit, page } });
-  return data.results ?? [];
+  return (data.results ?? []).map(normalizeMedia) as Movie[];
 }
 
 export async function getDiscoverFeed(country = 'US', page = 1): Promise<Movie[]> {
   const { data } = await api.get<{ reels: Movie[]; total: number }>('/api/v1/discover/reels', { params: { country, page, limit: 20 } });
-  return data.reels ?? [];
+  return (data.reels ?? []).map(normalizeMedia) as Movie[];
 }
 
 export async function getRecommendations(country = 'US', limit = 20): Promise<Movie[]> {
   const { data } = await api.get<{ results: Movie[]; total: number }>('/api/v1/recommend', { params: { country, limit } });
-  return data.results ?? [];
+  return (data.results ?? []).map(normalizeMedia) as Movie[];
 }
 
 // ── Content Detail ────────────────────────────────────────────────────────────
 
 export async function getMovie(id: number, country = 'US'): Promise<Movie> {
   const { data } = await api.get<Movie>(`/api/v1/movie/${id}`, { params: { country } });
-  return data;
+  return normalizeMedia(data as Record<string, unknown>) as unknown as Movie;
 }
 
 export async function getMovieProviders(id: number, country = 'US'): Promise<WatchProvider[]> {
@@ -165,7 +172,7 @@ export async function dismissTitle(tmdbId: number, mediaType: 'movie' | 'tv'): P
 
 export async function getWatchlist(page = 1, limit = 20): Promise<Movie[]> {
   const { data } = await api.get<{ results: Movie[] | null; total: number }>('/api/v1/me/watchlist', { params: { page, limit } });
-  return data.results ?? [];
+  return (data.results ?? []).map(normalizeMedia) as Movie[];
 }
 
 /** Alias used by home screen — maps to /api/v1/popular */
