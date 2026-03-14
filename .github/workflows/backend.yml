@@ -111,14 +111,19 @@ jobs:
           token: ${{ secrets.OPENOVA_PRIVATE_PAT }}
           path: openova-private
 
-      - name: Update API manifest with new SHA
+      - name: Update API and ingestion manifests with new SHA
         env:
           SHA_SHORT: ${{ needs.build-api.outputs.sha_short }}
         run: |
-          MANIFEST="openova-private/clusters/contabo-mkt/apps/cinova/services/api.yaml"
-          sed -i "s|image: ${API_IMAGE}:.*|image: ${API_IMAGE}:${SHA_SHORT}|" "$MANIFEST"
+          API_MANIFEST="openova-private/clusters/contabo-mkt/apps/cinova/services/api.yaml"
+          sed -i "s|image: ${API_IMAGE}:.*|image: ${API_IMAGE}:${SHA_SHORT}|" "$API_MANIFEST"
           echo "Updated API manifest to SHA ${SHA_SHORT}:"
-          grep "image:" "$MANIFEST"
+          grep "image:" "$API_MANIFEST"
+
+          INGESTION_MANIFEST="openova-private/clusters/contabo-mkt/apps/cinova/cronjobs/ingestion.yaml"
+          sed -i "s|image: ${INGESTION_IMAGE}:.*|image: ${INGESTION_IMAGE}:${SHA_SHORT}|" "$INGESTION_MANIFEST"
+          echo "Updated ingestion manifest to SHA ${SHA_SHORT}:"
+          grep "image:" "$INGESTION_MANIFEST"
 
       - name: Commit and push manifest updates
         env:
