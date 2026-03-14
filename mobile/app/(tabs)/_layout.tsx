@@ -30,10 +30,7 @@ export default function TabLayout() {
           paddingTop: 4,
           elevation: 0,
         },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '500',
-        },
+        tabBarShowLabel: false,
       }}
     >
       <Tabs.Screen
