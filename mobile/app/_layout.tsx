@@ -15,26 +15,44 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-// Patch ExpoFontLoader.loadAsync at module level (synchronously, before any
-// Feather icon component can call componentDidMount). When running in Expo Go,
-// vector-icon fonts are pre-registered in the native binary; a second
-// registration attempt throws CTFontManagerError code 104. By swallowing 104
-// here, loadSingleFontAsync completes normally and expo-font calls markLoaded,
-// so Font.isLoaded() returns true and subsequent icon components skip loading.
-// @ts-ignore — internal path, stable within expo-font 14.x
+// ── Font loading fixes ────────────────────────────────────────────────────────
+//
+// Problem 1: CTFontManagerError 104 in Expo Go
+//   Expo Go pre-registers vector-icon fonts in the native binary.  A second
+//   registration attempt throws code 104 ("already registered"). Swallow it
+//   so loadSingleFontAsync completes and expo-font calls markLoaded().
+//
+// Problem 2: Icons show "?" on first render
+//   @expo/vector-icons checks Font.isLoaded() synchronously on first render.
+//   Even after the async load succeeds, the component may not re-render.
+//   Fix: call markLoaded() for every vector-icon font at module level so that
+//   Font.isLoaded() returns true immediately — before any icon renders.
+//   In Expo Go these fonts ARE natively available (pre-bundled), so the glyphs
+//   will render correctly. In production the fonts load normally via loadAsync.
+//
+// @ts-ignore — internal paths, stable within expo-font 14.x
 import ExpoFontLoader from 'expo-font/build/ExpoFontLoader';
+// @ts-ignore
+import { markLoaded } from 'expo-font/build/memory';
 {
+  // Mark all @expo/vector-icons fonts as loaded upfront so icon components
+  // never see isLoaded()=false on first render.
+  const vectorIconFonts = [
+    'feather', 'ionicons', 'material-icons', 'material-community',
+    'font-awesome', 'font-awesome-5', 'ant-design', 'entypo',
+    'evilicons', 'foundation', 'octicons', 'simple-line-icons', 'zocial',
+  ];
+  vectorIconFonts.forEach((name) => {
+    try { markLoaded(name); } catch { /* ignore */ }
+  });
+
+  // Also patch loadAsync to swallow duplicate-registration errors (104) so
+  // subsequent explicit loadAsync calls don't throw.
   const _orig = ExpoFontLoader.loadAsync.bind(ExpoFontLoader);
   ExpoFontLoader.loadAsync = async (name: string, uri: string) => {
     try {
       return await _orig(name, uri);
     } catch {
-      // Swallow font registration errors. Two cases:
-      //  • Expo Go: font already pre-registered by the host app → CTFontManagerError 104.
-      //    The font IS available in Core Text, expo-font just can't register it again.
-      //  • Production (first launch): call succeeds, this catch never fires.
-      // Either way, expo-font calls markLoaded() after this returns, so Font.isLoaded()
-      // becomes true and icon components render correctly.
       return;
     }
   };

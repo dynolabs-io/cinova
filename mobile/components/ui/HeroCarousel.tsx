@@ -78,9 +78,11 @@ export default function HeroCarousel({ movies, onSave }: HeroCarouselProps) {
     if (movies.length > 1) startAutoScroll();
   };
 
-  const renderItem = ({ item }: { item: Movie }) => (
+  const renderItem = ({ item, index }: { item: Movie; index: number }) => (
     <HeroItem
       movie={item}
+      currentIndex={currentIndex}
+      totalCount={movies.length}
       onWatchNow={() => router.push(`/movie/${item.id}`)}
       onSave={() => onSave?.(item)}
     />
@@ -114,18 +116,6 @@ export default function HeroCarousel({ movies, onSave }: HeroCarouselProps) {
         removeClippedSubviews
       />
 
-      {/* Dot pagination */}
-      <View style={styles.dots}>
-        {movies.map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.dot,
-              i === currentIndex ? styles.dotActive : styles.dotInactive,
-            ]}
-          />
-        ))}
-      </View>
     </View>
   );
 }
@@ -134,11 +124,13 @@ export default function HeroCarousel({ movies, onSave }: HeroCarouselProps) {
 
 interface HeroItemProps {
   movie: Movie;
+  currentIndex: number;
+  totalCount: number;
   onWatchNow: () => void;
   onSave: () => void;
 }
 
-function HeroItem({ movie, onWatchNow, onSave }: HeroItemProps) {
+function HeroItem({ movie, currentIndex, totalCount, onWatchNow, onSave }: HeroItemProps) {
   const genreLabel = movie.genres.slice(0, 2).map((g) => g.name).join(' · ');
 
   return (
@@ -203,6 +195,18 @@ function HeroItem({ movie, onWatchNow, onSave }: HeroItemProps) {
             <Text style={styles.btnSaveText}>＋ Save</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Pagination dots — below buttons, inside content flow */}
+        {totalCount > 1 && (
+          <View style={styles.dots}>
+            {Array.from({ length: totalCount }).map((_, i) => (
+              <View
+                key={i}
+                style={[styles.dot, i === currentIndex ? styles.dotActive : styles.dotInactive]}
+              />
+            ))}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -237,7 +241,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingHorizontal: Spacing[4],
-    paddingBottom: Spacing[5],
+    paddingBottom: Spacing[4],
   },
   tagline: {
     color: Colors.textSecondary,
@@ -306,11 +310,10 @@ const styles = StyleSheet.create({
     fontWeight: Typography.semibold,
   },
   dots: {
-    position: 'absolute',
-    bottom: Spacing[20],
-    alignSelf: 'center',
     flexDirection: 'row',
+    justifyContent: 'center',
     gap: Spacing[1.5],
+    marginTop: Spacing[3],
   },
   dot: {
     borderRadius: Radius.full,
