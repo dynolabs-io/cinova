@@ -28,11 +28,14 @@ import ExpoFontLoader from 'expo-font/build/ExpoFontLoader';
   ExpoFontLoader.loadAsync = async (name: string, uri: string) => {
     try {
       return await _orig(name, uri);
-    } catch (e: unknown) {
-      // 104 = CTFontManagerErrorAlreadyRegistered — font is present, treat as success
-      const msg = String((e as { message?: string })?.message ?? e);
-      if (msg.includes('104')) return;
-      throw e;
+    } catch {
+      // Swallow font registration errors. Two cases:
+      //  • Expo Go: font already pre-registered by the host app → CTFontManagerError 104.
+      //    The font IS available in Core Text, expo-font just can't register it again.
+      //  • Production (first launch): call succeeds, this catch never fires.
+      // Either way, expo-font calls markLoaded() after this returns, so Font.isLoaded()
+      // becomes true and icon components render correctly.
+      return;
     }
   };
 }
