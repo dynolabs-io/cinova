@@ -42,7 +42,7 @@ func Load() (*Config, error) {
 		Neo4jPassword:    mustGetEnv("NEO4J_PASSWORD"),
 		RedisURL:         mustGetEnv("REDIS_URL"),
 		JWTSecret:        mustGetEnv("JWT_SECRET"),
-		TMDBAPIKey:       mustGetEnv("TMDB_API_KEY"),
+		TMDBAPIKey:       getEnv("TMDB_API_KEY", ""), // optional at startup; required only for ingestion
 		AxonURL:          mustGetEnv("AXON_URL"),
 		AxonAPIKey:       getEnv("AXON_API_KEY", ""),
 		AxonModel:        getEnv("AXON_MODEL", "claude-opus-4-6"),
@@ -59,7 +59,6 @@ func Load() (*Config, error) {
 		"NEO4J_PASSWORD": c.Neo4jPassword,
 		"REDIS_URL":      c.RedisURL,
 		"JWT_SECRET":     c.JWTSecret,
-		"TMDB_API_KEY":   c.TMDBAPIKey,
 		"AXON_URL":       c.AxonURL,
 	}
 	for k, v := range checkRequired {
