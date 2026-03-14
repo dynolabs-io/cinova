@@ -2,14 +2,14 @@
  * Tab navigator layout
  *
  * Five tabs: Home · Discover · Search · Watchlist · Profile
- * Dark background, cinematic red active tint, Feather icons.
+ * Icons drawn with React Native Views — no font loading required.
  */
 
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import TabIcon from '../../components/ui/TabIcon';
 import { Colors, Layout } from '../../constants/theme';
 
 export default function TabLayout() {
@@ -37,35 +37,35 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <Feather name="home" size={22} color={color} />,
+          tabBarIcon: ({ color }) => <TabIcon name="home" color={color} />,
         }}
       />
       <Tabs.Screen
         name="discover"
         options={{
           title: 'Discover',
-          tabBarIcon: ({ color }) => <Feather name="play-circle" size={22} color={color} />,
+          tabBarIcon: ({ color }) => <TabIcon name="discover" color={color} />,
         }}
       />
       <Tabs.Screen
         name="search"
         options={{
           title: 'Search',
-          tabBarIcon: ({ color }) => <Feather name="search" size={22} color={color} />,
+          tabBarIcon: ({ color }) => <TabIcon name="search" color={color} />,
         }}
       />
       <Tabs.Screen
         name="watchlist"
         options={{
           title: 'Watchlist',
-          tabBarIcon: ({ color }) => <Feather name="bookmark" size={22} color={color} />,
+          tabBarIcon: ({ color }) => <TabIcon name="watchlist" color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => <Feather name="user" size={22} color={color} />,
+          tabBarIcon: ({ color }) => <TabIcon name="profile" color={color} />,
         }}
       />
     </Tabs>
