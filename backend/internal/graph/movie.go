@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j/dbtype"
+
 	"github.com/foundrylab-app/cinova/backend/internal/models"
 )
 
@@ -385,13 +387,11 @@ func (r *MovieRepository) UpsertMood(ctx context.Context, tmdbID int, name strin
 
 func movieNodeToModel(v interface{}) *models.Movie {
 	m := &models.Movie{}
-	node, ok := v.(interface {
-		Props() map[string]interface{}
-	})
+	node, ok := v.(dbtype.Node)
 	if !ok {
 		return m
 	}
-	props := node.Props()
+	props := node.Props
 	m.TMDBID = int64Val(props["tmdb_id"])
 	m.IMDbID = strVal(props["imdb_id"])
 	m.Title = strVal(props["title"])
@@ -412,13 +412,11 @@ func movieNodeToModel(v interface{}) *models.Movie {
 
 func tvNodeToModel(v interface{}) *models.TVShow {
 	t := &models.TVShow{}
-	node, ok := v.(interface {
-		Props() map[string]interface{}
-	})
+	node, ok := v.(dbtype.Node)
 	if !ok {
 		return t
 	}
-	props := node.Props()
+	props := node.Props
 	t.TMDBID = int64Val(props["tmdb_id"])
 	t.Name = strVal(props["name"])
 	t.OriginalName = strVal(props["original_name"])

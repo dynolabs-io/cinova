@@ -1,6 +1,8 @@
 package graph
 
 import (
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j/dbtype"
+
 	"context"
 	"fmt"
 
@@ -164,8 +166,8 @@ func (r *MovieRepository) GetPerson(ctx context.Context, tmdbID int) (*personWit
 	node, _ := rec.Get("p")
 
 	person := models.Person{}
-	if n, ok := node.(interface{ Props() map[string]interface{} }); ok {
-		props := n.Props()
+	if n, ok := node.(dbtype.Node); ok {
+		props := n.Props
 		person.TMDBID = int64Val(props["tmdb_id"])
 		person.Name = strVal(props["name"])
 		person.ProfilePath = strVal(props["profile_path"])
