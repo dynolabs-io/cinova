@@ -7,7 +7,7 @@
  */
 
 import * as SecureStore from 'expo-secure-store';
-import { createAnonymousSession } from './api';
+import { authAnonymous } from './api';
 
 const KEY_SESSION_ID = 'cinova_session_id';
 const KEY_JWT = 'cinova_jwt';
@@ -45,7 +45,8 @@ export async function initSession(): Promise<string> {
   const existingToken = await SecureStore.getItemAsync(KEY_JWT);
   if (!existingToken) {
     try {
-      const { token } = await createAnonymousSession();
+      const res = await authAnonymous(sessionId);
+      const token = res.access_token;
       await SecureStore.setItemAsync(KEY_JWT, token);
     } catch {
       // Fail silently — app will retry on first authenticated request
@@ -68,6 +69,11 @@ export async function getToken(): Promise<string | null> {
 /** Persist a new JWT (called after login / signup / token refresh). */
 export async function saveToken(token: string): Promise<void> {
   await SecureStore.setItemAsync(KEY_JWT, token);
+}
+
+/** Remove JWT only (keeps session UUID). Called on 401 refresh failure. */
+export async function clearToken(): Promise<void> {
+  await SecureStore.deleteItemAsync(KEY_JWT);
 }
 
 /**

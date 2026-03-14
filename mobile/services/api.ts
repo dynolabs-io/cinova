@@ -1,8 +1,5 @@
 /**
- * Cinova API client
- *
- * Axios instance with JWT auth, session ID header, and automatic
- * token refresh on 401.
+ * Cinova API client — all paths match Go backend routes exactly.
  */
 
 import axios, {
@@ -10,227 +7,159 @@ import axios, {
   AxiosRequestConfig,
   InternalAxiosRequestConfig,
 } from 'axios';
-import { getToken, saveToken, getSessionId } from './session';
-import type {
-  Movie,
-  SearchResult,
-  AuthResponse,
-} from '../types';
+import { getToken, saveToken, clearToken, getSessionId } from './session';
+import type { Movie, TVShow, Person, AuthResponse, SearchResult, WatchProvider } from '../types';
 
-const BASE_URL = 'https://api.cinova.openova.io';
+export const BASE_URL = 'https://api.cinova.openova.io';
 
-const apiClient: AxiosInstance = axios.create({
+const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
-  headers: {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  },
+  timeout: 15_000,
+  headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
 });
 
-// ── Request interceptor ──────────────────────────────────────────────────────
-
-apiClient.interceptors.request.use(
+// Request interceptor: attach JWT + Session-ID
+api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     const [token, sessionId] = await Promise.all([getToken(), getSessionId()]);
-
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    if (sessionId) {
-      config.headers['X-Session-ID'] = sessionId;
-    }
-
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (sessionId) config.headers['X-Session-ID'] = sessionId;
     return config;
   },
-  (error) => Promise.reject(error)
+  (err) => Promise.reject(err)
 );
 
-// ── Response interceptor — refresh on 401 ────────────────────────────────────
-
+// Response interceptor: refresh JWT on 401
 let isRefreshing = false;
-let failedQueue: Array<{
-  resolve: (value: string) => void;
-  reject: (reason: unknown) => void;
-}> = [];
+let failedQueue: Array<{ resolve: (t: string) => void; reject: (e: unknown) => void }> = [];
 
 function processQueue(error: unknown, token: string | null = null) {
-  failedQueue.forEach(({ resolve, reject }) => {
-    if (error) {
-      reject(error);
-    } else {
-      resolve(token as string);
-    }
-  });
+  failedQueue.forEach(({ resolve, reject }) => (error ? reject(error) : resolve(token!)));
   failedQueue = [];
 }
 
-apiClient.interceptors.response.use(
-  (response) => response,
+api.interceptors.response.use(
+  (res) => res,
   async (error) => {
-    const originalRequest: AxiosRequestConfig & { _retry?: boolean } =
-      error.config;
-
-    if (error.response?.status !== 401 || originalRequest._retry) {
-      return Promise.reject(error);
-    }
-
+    const req: AxiosRequestConfig & { _retry?: boolean } = error.config;
+    if (error.response?.status !== 401 || req._retry) return Promise.reject(error);
     if (isRefreshing) {
-      return new Promise<string>((resolve, reject) => {
-        failedQueue.push({ resolve, reject });
-      })
-        .then((token) => {
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-          }
-          return apiClient(originalRequest);
-        })
-        .catch((err) => Promise.reject(err));
+      return new Promise<string>((resolve, reject) => failedQueue.push({ resolve, reject }))
+        .then((token) => { if (req.headers) req.headers.Authorization = `Bearer ${token}`; return api(req); });
     }
-
-    originalRequest._retry = true;
+    req._retry = true;
     isRefreshing = true;
-
     try {
-      // Re-create anonymous session if no refresh token available
-      const { createAnonymousSession } = await import('./api');
-      const { token } = await createAnonymousSession();
-      await saveToken(token);
-
-      processQueue(null, token);
-
-      if (originalRequest.headers) {
-        originalRequest.headers.Authorization = `Bearer ${token}`;
-      }
-      return apiClient(originalRequest);
-    } catch (refreshError) {
-      processQueue(refreshError, null);
-      return Promise.reject(refreshError);
+      const sessionId = await getSessionId();
+      const res = await authAnonymous(sessionId ?? undefined);
+      await saveToken(res.access_token);
+      processQueue(null, res.access_token);
+      if (req.headers) req.headers.Authorization = `Bearer ${res.access_token}`;
+      return api(req);
+    } catch (e) {
+      processQueue(e, null);
+      await clearToken();
+      return Promise.reject(e);
     } finally {
       isRefreshing = false;
     }
   }
 );
 
-// ── API functions ─────────────────────────────────────────────────────────────
+// ── Auth ─────────────────────────────────────────────────────────────────────
 
-export async function createAnonymousSession(): Promise<{ token: string; sessionId: string }> {
-  const response = await apiClient.post<{ token: string; sessionId: string }>(
-    '/api/v1/auth/anonymous'
-  );
-  return response.data;
+export async function authAnonymous(deviceId?: string): Promise<AuthResponse> {
+  const { data } = await api.post<AuthResponse>('/api/v1/auth/anonymous', { device_id: deviceId ?? 'unknown' });
+  return data;
 }
 
-export async function signUp(
-  email: string,
-  password: string,
-  sessionId: string
-): Promise<AuthResponse> {
-  const response = await apiClient.post<AuthResponse>('/api/v1/auth/signup', {
-    email,
-    password,
-    sessionId,
-  });
-  return response.data;
+export async function authSignup(email: string, password: string, username: string, sessionUuid?: string): Promise<AuthResponse> {
+  const { data } = await api.post<AuthResponse>('/api/v1/auth/signup', { email, password, username, session_uuid: sessionUuid });
+  return data;
 }
 
-export async function login(
-  email: string,
-  password: string,
-  sessionId: string
-): Promise<AuthResponse> {
-  const response = await apiClient.post<AuthResponse>('/api/v1/auth/login', {
-    email,
-    password,
-    sessionId,
-  });
-  return response.data;
+export async function authLogin(email: string, password: string, sessionUuid?: string): Promise<AuthResponse> {
+  const { data } = await api.post<AuthResponse>('/api/v1/auth/login', { email, password, session_uuid: sessionUuid });
+  return data;
 }
 
-export async function searchMovies(
-  q: string,
-  country: string
-): Promise<SearchResult> {
-  const response = await apiClient.get<SearchResult>('/api/v1/search', {
-    params: { q, country },
-  });
-  return response.data;
+export async function authRefresh(refreshToken: string): Promise<AuthResponse> {
+  const { data } = await api.post<AuthResponse>('/api/v1/auth/refresh', { refresh_token: refreshToken });
+  return data;
 }
 
-export async function getMovie(id: number, country: string): Promise<Movie> {
-  const response = await apiClient.get<Movie>(`/api/v1/movies/${id}`, {
-    params: { country },
-  });
-  return response.data;
+// ── Discovery ─────────────────────────────────────────────────────────────────
+
+export async function getTrending(country = 'US', limit = 20): Promise<Movie[]> {
+  const { data } = await api.get<Movie[]>('/api/v1/trending', { params: { country, limit } });
+  return data;
 }
 
-export async function getTrending(country: string): Promise<Movie[]> {
-  const response = await apiClient.get<Movie[]>('/api/v1/movies/trending', {
-    params: { country },
-  });
-  return response.data;
+export async function getPopular(country = 'US', limit = 20, page = 1): Promise<Movie[]> {
+  const { data } = await api.get<Movie[]>('/api/v1/popular', { params: { country, limit, page } });
+  return data;
 }
 
-export async function getNewOnNetflix(country: string): Promise<Movie[]> {
-  const response = await apiClient.get<Movie[]>('/api/v1/movies/new-on-netflix', {
-    params: { country },
-  });
-  return response.data;
+export async function getDiscoverFeed(country = 'US', page = 1): Promise<Movie[]> {
+  const { data } = await api.get<Movie[]>('/api/v1/discover/reels', { params: { country, page, limit: 20 } });
+  return data;
 }
 
-export async function getTopRated(country: string): Promise<Movie[]> {
-  const response = await apiClient.get<Movie[]>('/api/v1/movies/top-rated', {
-    params: { country },
-  });
-  return response.data;
+export async function getRecommendations(country = 'US', limit = 20): Promise<Movie[]> {
+  const { data } = await api.get<Movie[]>('/api/v1/recommend', { params: { country, limit } });
+  return data;
 }
 
-export async function getRecommendations(country: string): Promise<Movie[]> {
-  const response = await apiClient.get<Movie[]>('/api/v1/movies/recommended', {
-    params: { country },
-  });
-  return response.data;
+// ── Content Detail ────────────────────────────────────────────────────────────
+
+export async function getMovie(id: number, country = 'US'): Promise<Movie> {
+  const { data } = await api.get<Movie>(`/api/v1/movie/${id}`, { params: { country } });
+  return data;
 }
 
-export async function getDiscoverFeed(
-  country: string,
-  page: number = 1
-): Promise<Movie[]> {
-  const response = await apiClient.get<Movie[]>('/api/v1/movies/discover', {
-    params: { country, page, limit: 20 },
-  });
-  return response.data;
+export async function getMovieProviders(id: number, country = 'US'): Promise<WatchProvider[]> {
+  const { data } = await api.get<WatchProvider[]>(`/api/v1/movie/${id}/providers`, { params: { country } });
+  return data;
 }
 
-export async function saveTitle(tmdbId: number): Promise<void> {
-  await apiClient.post('/api/v1/user/watchlist', { tmdbId });
+export async function getTV(id: number, country = 'US'): Promise<TVShow> {
+  const { data } = await api.get<TVShow>(`/api/v1/tv/${id}`, { params: { country } });
+  return data;
 }
 
-export async function unsaveTitle(tmdbId: number): Promise<void> {
-  await apiClient.delete(`/api/v1/user/watchlist/${tmdbId}`);
+export async function getPerson(id: number): Promise<Person> {
+  const { data } = await api.get<Person>(`/api/v1/person/${id}`);
+  return data;
 }
 
-export async function rateTitle(
-  tmdbId: number,
-  score: number
-): Promise<void> {
-  await apiClient.post('/api/v1/user/ratings', { tmdbId, score });
+// ── Search ────────────────────────────────────────────────────────────────────
+
+export async function search(q: string, country = 'US'): Promise<SearchResult> {
+  const { data } = await api.get<SearchResult>('/api/v1/search', { params: { q, country } });
+  return data;
 }
 
-export async function dismissTitle(tmdbId: number): Promise<void> {
-  await apiClient.post('/api/v1/user/dismissed', { tmdbId });
+// ── Interactions (require auth) ───────────────────────────────────────────────
+
+export async function rateTitle(tmdbId: number, mediaType: 'movie' | 'tv', rating: 'like' | 'dislike'): Promise<void> {
+  await api.post('/api/v1/me/rate', { tmdb_id: tmdbId, media_type: mediaType, rating });
 }
 
-export async function getWatchlist(): Promise<Movie[]> {
-  const response = await apiClient.get<Movie[]>('/api/v1/user/watchlist');
-  return response.data;
+export async function saveTitle(tmdbId: number, mediaType: 'movie' | 'tv'): Promise<void> {
+  await api.post('/api/v1/me/save', { tmdb_id: tmdbId, media_type: mediaType });
 }
 
-export async function getPerson(id: number): Promise<import('../types').Person> {
-  const response = await apiClient.get<import('../types').Person>(
-    `/api/v1/people/${id}`
-  );
-  return response.data;
+export async function unsaveTitle(tmdbId: number, mediaType: 'movie' | 'tv'): Promise<void> {
+  await api.delete('/api/v1/me/save', { data: { tmdb_id: tmdbId, media_type: mediaType } });
 }
 
-export default apiClient;
+export async function dismissTitle(tmdbId: number, mediaType: 'movie' | 'tv'): Promise<void> {
+  await api.post('/api/v1/me/dismiss', { tmdb_id: tmdbId, media_type: mediaType });
+}
+
+export async function getWatchlist(page = 1, limit = 20): Promise<Movie[]> {
+  const { data } = await api.get<Movie[]>('/api/v1/me/watchlist', { params: { page, limit } });
+  return data;
+}
+
+export default api;
