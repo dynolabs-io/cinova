@@ -15,6 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Font from 'expo-font';
 import { initSession } from '../services/session';
 import { useAppStore } from '../store/useAppStore';
 import { Colors } from '../constants/theme';
@@ -40,6 +41,16 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function bootstrap() {
+      // Pre-load Feather font before any icon components mount.
+      // Expo Go pre-registers icon fonts in its native binary; a second
+      // registration from @expo/vector-icons throws CTFontManagerError 104
+      // ("already registered"). Loading it here first (catching 104) prevents
+      // the unhandled rejection that would otherwise crash the app.
+      await Font.loadAsync({
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        Feather: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf'),
+      }).catch(() => { /* 104 = already registered by Expo Go — font is usable */ });
+
       try {
         const sessionId = await initSession();
         setSessionId(sessionId);
