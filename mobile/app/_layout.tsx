@@ -15,13 +15,27 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import * as Font from 'expo-font';
-// markLoaded is internal but exported — used to populate the JS cache so
-// Font.isLoaded() returns true even when the native registration threw 104
-// (already registered by Expo Go). Without this, icon components would call
-// Font.loadAsync() in componentDidMount, get error 104, and crash unhandled.
-// @ts-ignore — internal API, stable within expo-font 14.x
-import { markLoaded as fontMarkLoaded } from 'expo-font/build/memory';
+// Patch ExpoFontLoader.loadAsync at module level (synchronously, before any
+// Feather icon component can call componentDidMount). When running in Expo Go,
+// vector-icon fonts are pre-registered in the native binary; a second
+// registration attempt throws CTFontManagerError code 104. By swallowing 104
+// here, loadSingleFontAsync completes normally and expo-font calls markLoaded,
+// so Font.isLoaded() returns true and subsequent icon components skip loading.
+// @ts-ignore — internal path, stable within expo-font 14.x
+import ExpoFontLoader from 'expo-font/build/ExpoFontLoader';
+{
+  const _orig = ExpoFontLoader.loadAsync.bind(ExpoFontLoader);
+  ExpoFontLoader.loadAsync = async (name: string, uri: string) => {
+    try {
+      return await _orig(name, uri);
+    } catch (e: unknown) {
+      // 104 = CTFontManagerErrorAlreadyRegistered — font is present, treat as success
+      const msg = String((e as { message?: string })?.message ?? e);
+      if (msg.includes('104')) return;
+      throw e;
+    }
+  };
+}
 import { initSession } from '../services/session';
 import { useAppStore } from '../store/useAppStore';
 import { Colors } from '../constants/theme';
@@ -47,21 +61,6 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function bootstrap() {
-      // Pre-register Feather font before any icon components mount.
-      // Expo Go pre-registers icon fonts in its native binary; a second
-      // registration from @expo/vector-icons throws CTFontManagerError 104
-      // ("already registered"). We try loading it first; on 104 we manually
-      // call markLoaded so Font.isLoaded() returns true and icon components
-      // skip their loadAsync call in componentDidMount entirely.
-      // Font family name is 'feather' (lowercase) — matches createIconSet() in Feather.js
-      await Font.loadAsync({
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        feather: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf'),
-      }).catch(() => {
-        // 104 = font already registered by Expo Go — mark it loaded in JS cache
-        fontMarkLoaded('feather');
-      });
-
       try {
         const sessionId = await initSession();
         setSessionId(sessionId);
