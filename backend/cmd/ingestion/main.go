@@ -154,45 +154,61 @@ func runDeltaIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClien
 		default:
 		}
 
-		// Update streaming providers for known movies
-		providers, err := tmdbClient.GetWatchProviders(ctx, id, "movie")
+		// Upsert full movie details (creates the node if new, updates if existing)
+		movie, err := enrichMovie(ctx, tmdbClient, id, country)
 		if err != nil {
-			log.Error().Err(err).Int("tmdb_id", id).Msg("failed to get providers")
+			log.Error().Err(err).Int("tmdb_id", id).Msg("failed to enrich movie")
+			errors++
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+
+		if err := repo.UpsertMovie(ctx, movie); err != nil {
+			log.Error().Err(err).Int64("tmdb_id", movie.TMDBID).Msg("failed to upsert movie")
 			errors++
 			continue
 		}
 
-		countryProviders := providers[country]
-		modelProviders := make([]models.Provider, 0, len(countryProviders))
-		for _, p := range countryProviders {
-			modelProviders = append(modelProviders, models.Provider{
-				ProviderID:      int64(p.ProviderID),
-				ProviderName:    p.ProviderName,
-				LogoPath:        p.LogoPath,
-				DisplayPriority: p.DisplayPriority,
-				Type:            p.Type,
-				Country:         country,
-			})
+		// Also upsert streaming providers
+		providers, err := tmdbClient.GetWatchProviders(ctx, id, "movie")
+		if err == nil {
+			countryProviders := providers[country]
+			modelProviders := make([]models.Provider, 0, len(countryProviders))
+			for _, p := range countryProviders {
+				modelProviders = append(modelProviders, models.Provider{
+					ProviderID:      int64(p.ProviderID),
+					ProviderName:    p.ProviderName,
+					LogoPath:        p.LogoPath,
+					DisplayPriority: p.DisplayPriority,
+					Type:            p.Type,
+					Country:         country,
+				})
+			}
+			if upsertErr := repo.UpsertProvider(ctx, id, modelProviders, country); upsertErr != nil {
+				log.Warn().Err(upsertErr).Int("tmdb_id", id).Msg("failed to upsert providers")
+			}
 		}
 
-		if err := repo.UpsertProvider(ctx, id, modelProviders, country); err != nil {
-			log.Error().Err(err).Int("tmdb_id", id).Msg("failed to upsert providers")
-			errors++
-			continue
-		}
-
+		batch = append(batch, *movie)
 		processed++
 
-		if processed%100 == 0 {
-			log.Info().Int("processed", processed).Int("errors", errors).Msg("delta ingestion progress")
+		if processed%20 == 0 {
+			log.Info().Int("processed", processed).Int("errors", errors).Int("total", len(allIDs)).Msg("delta ingestion progress")
 
 			if enrichErr := enrichClient.ProcessMovieBatch(ctx, batch, repo); enrichErr != nil {
-				log.Error().Err(enrichErr).Msg("batch enrichment failed")
+				log.Warn().Err(enrichErr).Msg("batch enrichment failed (non-fatal)")
 			}
 			batch = batch[:0]
 		}
 
-		time.Sleep(25 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond) // respect TMDB rate limit
+	}
+
+	// Final batch enrichment
+	if len(batch) > 0 {
+		if enrichErr := enrichClient.ProcessMovieBatch(ctx, batch, repo); enrichErr != nil {
+			log.Warn().Err(enrichErr).Msg("final batch enrichment failed (non-fatal)")
+		}
 	}
 
 	log.Info().Int("processed", processed).Int("errors", errors).Msg("delta ingestion complete")
