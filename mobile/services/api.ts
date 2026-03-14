@@ -91,23 +91,23 @@ export async function authRefresh(refreshToken: string): Promise<AuthResponse> {
 // ── Discovery ─────────────────────────────────────────────────────────────────
 
 export async function getTrending(country = 'US', limit = 20): Promise<Movie[]> {
-  const { data } = await api.get<Movie[]>('/api/v1/trending', { params: { country, limit } });
-  return data;
+  const { data } = await api.get<{ results: Movie[]; total: number }>('/api/v1/trending', { params: { country, limit } });
+  return data.results ?? [];
 }
 
 export async function getPopular(country = 'US', limit = 20, page = 1): Promise<Movie[]> {
-  const { data } = await api.get<Movie[]>('/api/v1/popular', { params: { country, limit, page } });
-  return data;
+  const { data } = await api.get<{ results: Movie[]; total: number }>('/api/v1/popular', { params: { country, limit, page } });
+  return data.results ?? [];
 }
 
 export async function getDiscoverFeed(country = 'US', page = 1): Promise<Movie[]> {
-  const { data } = await api.get<Movie[]>('/api/v1/discover/reels', { params: { country, page, limit: 20 } });
-  return data;
+  const { data } = await api.get<{ reels: Movie[]; total: number }>('/api/v1/discover/reels', { params: { country, page, limit: 20 } });
+  return data.reels ?? [];
 }
 
 export async function getRecommendations(country = 'US', limit = 20): Promise<Movie[]> {
-  const { data } = await api.get<Movie[]>('/api/v1/recommend', { params: { country, limit } });
-  return data;
+  const { data } = await api.get<{ results: Movie[]; total: number }>('/api/v1/recommend', { params: { country, limit } });
+  return data.results ?? [];
 }
 
 // ── Content Detail ────────────────────────────────────────────────────────────
@@ -118,8 +118,8 @@ export async function getMovie(id: number, country = 'US'): Promise<Movie> {
 }
 
 export async function getMovieProviders(id: number, country = 'US'): Promise<WatchProvider[]> {
-  const { data } = await api.get<WatchProvider[]>(`/api/v1/movie/${id}/providers`, { params: { country } });
-  return data;
+  const { data } = await api.get<{ providers: WatchProvider[]; tmdb_id: number; country: string }>(`/api/v1/movie/${id}/providers`, { params: { country } });
+  return data.providers ?? [];
 }
 
 export async function getTV(id: number, country = 'US'): Promise<TVShow> {
@@ -135,8 +135,14 @@ export async function getPerson(id: number): Promise<Person> {
 // ── Search ────────────────────────────────────────────────────────────────────
 
 export async function search(q: string, country = 'US'): Promise<SearchResult> {
-  const { data } = await api.get<SearchResult>('/api/v1/search', { params: { q, country } });
-  return data;
+  const { data } = await api.get<{ results: (Movie | TVShow)[]; query: string; country: string; total: number }>('/api/v1/search', { params: { q, country } });
+  return {
+    items: data.results ?? [],
+    total: data.total ?? 0,
+    page: 1,
+    hasMore: false,
+    query: data.query ?? q,
+  };
 }
 
 // ── Interactions (require auth) ───────────────────────────────────────────────
@@ -158,8 +164,8 @@ export async function dismissTitle(tmdbId: number, mediaType: 'movie' | 'tv'): P
 }
 
 export async function getWatchlist(page = 1, limit = 20): Promise<Movie[]> {
-  const { data } = await api.get<Movie[]>('/api/v1/me/watchlist', { params: { page, limit } });
-  return data;
+  const { data } = await api.get<{ results: Movie[] | null; total: number }>('/api/v1/me/watchlist', { params: { page, limit } });
+  return data.results ?? [];
 }
 
 /** Alias used by home screen — maps to /api/v1/popular */
