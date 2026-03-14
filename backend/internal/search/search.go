@@ -143,6 +143,8 @@ func (h *Handler) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		// Fall back to simple title search
 		whereClause = fmt.Sprintf("toLower(n.title) CONTAINS toLower('%s')", escapeStr(q))
 		explanation = ""
+	} else {
+		log.Info().Str("query", q).Str("where_clause", whereClause).Str("explanation", explanation).Msg("axon nl2cypher")
 	}
 
 	results, err := h.executeSearch(r.Context(), whereClause, country, defaultLimit)
