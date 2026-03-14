@@ -7,7 +7,14 @@
  */
 
 import * as SecureStore from 'expo-secure-store';
-import { authAnonymous } from './api';
+import axios from 'axios';
+
+const API_BASE = 'https://api.cinova.openova.io';
+
+async function fetchAnonymousToken(deviceId: string): Promise<string> {
+  const res = await axios.post(`${API_BASE}/api/v1/auth/anonymous`, { device_id: deviceId });
+  return res.data.access_token;
+}
 
 const KEY_SESSION_ID = 'cinova_session_id';
 const KEY_JWT = 'cinova_jwt';
@@ -45,8 +52,7 @@ export async function initSession(): Promise<string> {
   const existingToken = await SecureStore.getItemAsync(KEY_JWT);
   if (!existingToken) {
     try {
-      const res = await authAnonymous(sessionId);
-      const token = res.access_token;
+      const token = await fetchAnonymousToken(sessionId);
       await SecureStore.setItemAsync(KEY_JWT, token);
     } catch {
       // Fail silently — app will retry on first authenticated request
