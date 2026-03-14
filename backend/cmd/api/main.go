@@ -100,7 +100,7 @@ func main() {
 	r.Use(middleware.RealIP)
 	r.Use(zerologMiddleware)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(middleware.Timeout(90 * time.Second))
 
 	// Health endpoints (no auth)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -174,7 +174,7 @@ func main() {
 		Addr:         ":" + cfg.Port,
 		Handler:      r,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		WriteTimeout: 90 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 

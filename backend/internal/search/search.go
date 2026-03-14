@@ -22,7 +22,7 @@ import (
 
 const (
 	defaultLimit = 20
-	axonTimeout  = 20 * time.Second
+	axonTimeout  = 60 * time.Second
 
 	// Sonnet 4.6 for NL search — quality matters for user-facing queries
 	searchModel = "claude-sonnet-4-6"
