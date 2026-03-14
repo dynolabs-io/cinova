@@ -32,6 +32,19 @@ function normalizeMedia(item: unknown): unknown {
   // ensure id === tmdbId (both needed by components)
   if (m.tmdbId) m.id = m.tmdbId;
   else if (m.id) m.tmdbId = m.id;
+  // derive year from releaseDate / firstAirDate if missing
+  if (!m.year) {
+    const dateStr = (m.releaseDate ?? m.firstAirDate) as string | undefined;
+    if (dateStr) m.year = parseInt(dateStr.slice(0, 4), 10);
+  }
+  // normalise language field
+  if (!m.language && m.originalLanguage) m.language = m.originalLanguage;
+  // ensure array fields are always arrays (list endpoints omit detail fields)
+  if (!Array.isArray(m.themes)) m.themes = [];
+  if (!Array.isArray(m.moods)) m.moods = [];
+  if (!Array.isArray(m.cast)) m.cast = [];
+  if (!Array.isArray(m.genres)) m.genres = [];
+  if (!Array.isArray(m.providers)) m.providers = [];
   return m;
 }
 

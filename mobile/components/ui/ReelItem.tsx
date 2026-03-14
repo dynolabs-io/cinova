@@ -41,10 +41,10 @@ function backdropUri(path: string | null): string {
   return `${TMDB_IMAGE}${path}`;
 }
 
-async function watchOnProvider(provider: WatchProvider): Promise<void> {
+async function watchOnProvider(provider: WatchProvider, movieId: number): Promise<void> {
   const known = getProviderById(provider.providerId);
   if (known) {
-    const deepLink = known.buildDeepLink(provider.providerId);
+    const deepLink = known.buildDeepLink(movieId);
     const canOpen = await Linking.canOpenURL(deepLink);
     if (canOpen) {
       await Linking.openURL(deepLink);
@@ -76,9 +76,9 @@ export default function ReelItem({
 
   const handleWatch = useCallback(async () => {
     if (primaryProvider) {
-      await watchOnProvider(primaryProvider);
+      await watchOnProvider(primaryProvider, movie.tmdbId);
     }
-  }, [primaryProvider]);
+  }, [primaryProvider, movie.tmdbId]);
 
   return (
     <TouchableOpacity
@@ -118,7 +118,7 @@ export default function ReelItem({
       {/* Right-side action column */}
       <View style={styles.actionColumn}>
         <ActionButton
-          label={isSaved ? '🔖' : '🔖'}
+          label={isSaved ? '✓' : '+'}
           sublabel="Save"
           color={isSaved ? Colors.primary : Colors.textPrimary}
           onPress={() => { hapticSuccess(); onSave?.(movie); }}

@@ -42,18 +42,21 @@ function uuidv4(): string {
  * existing session ID.
  */
 export async function initSession(): Promise<string> {
-  let sessionId = await SecureStore.getItemAsync(KEY_SESSION_ID);
+  let sessionId: string | null = null;
+  try { sessionId = await SecureStore.getItemAsync(KEY_SESSION_ID); } catch { /* web */ }
 
   if (!sessionId) {
     sessionId = uuidv4();
-    await SecureStore.setItemAsync(KEY_SESSION_ID, sessionId);
+    try { await SecureStore.setItemAsync(KEY_SESSION_ID, sessionId); } catch { /* web */ }
   }
 
-  const existingToken = await SecureStore.getItemAsync(KEY_JWT);
+  let existingToken: string | null = null;
+  try { existingToken = await SecureStore.getItemAsync(KEY_JWT); } catch { /* web */ }
+
   if (!existingToken) {
     try {
       const token = await fetchAnonymousToken(sessionId);
-      await SecureStore.setItemAsync(KEY_JWT, token);
+      try { await SecureStore.setItemAsync(KEY_JWT, token); } catch { /* web */ }
     } catch {
       // Fail silently — app will retry on first authenticated request
     }
@@ -64,22 +67,22 @@ export async function initSession(): Promise<string> {
 
 /** Returns the UUID session ID from SecureStore, or null if not initialised. */
 export async function getSessionId(): Promise<string | null> {
-  return SecureStore.getItemAsync(KEY_SESSION_ID);
+  try { return await SecureStore.getItemAsync(KEY_SESSION_ID); } catch { return null; }
 }
 
 /** Returns the current JWT from SecureStore, or null if not present. */
 export async function getToken(): Promise<string | null> {
-  return SecureStore.getItemAsync(KEY_JWT);
+  try { return await SecureStore.getItemAsync(KEY_JWT); } catch { return null; }
 }
 
 /** Persist a new JWT (called after login / signup / token refresh). */
 export async function saveToken(token: string): Promise<void> {
-  await SecureStore.setItemAsync(KEY_JWT, token);
+  try { await SecureStore.setItemAsync(KEY_JWT, token); } catch { /* web fallback */ }
 }
 
 /** Remove JWT only (keeps session UUID). Called on 401 refresh failure. */
 export async function clearToken(): Promise<void> {
-  await SecureStore.deleteItemAsync(KEY_JWT);
+  try { await SecureStore.deleteItemAsync(KEY_JWT); } catch { /* web fallback */ }
 }
 
 /**
@@ -87,8 +90,10 @@ export async function clearToken(): Promise<void> {
  * The session UUID is cleared so the next initSession() generates a fresh one.
  */
 export async function clearSession(): Promise<void> {
-  await Promise.all([
-    SecureStore.deleteItemAsync(KEY_SESSION_ID),
-    SecureStore.deleteItemAsync(KEY_JWT),
-  ]);
+  try {
+    await Promise.all([
+      SecureStore.deleteItemAsync(KEY_SESSION_ID),
+      SecureStore.deleteItemAsync(KEY_JWT),
+    ]);
+  } catch { /* web fallback */ }
 }
