@@ -95,7 +95,7 @@ export default function MovieDetailScreen() {
     mutationFn: () => dismissTitle(movie!.tmdbId),
     onSuccess: () => {
       setIsDismissed(true);
-      router.back();
+      router.canGoBack() ? router.back() : router.replace('/(tabs)');
     },
   });
 
@@ -351,7 +351,7 @@ export default function MovieDetailScreen() {
       {/* Back button — absolute, overlays hero */}
       <TouchableOpacity
         style={[styles.backBtn, { top: insets.top + 10 }]}
-        onPress={() => router.back()}
+        onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}
         activeOpacity={0.85}
       >
         <BlurView intensity={60} tint="dark" style={styles.backBlur}>

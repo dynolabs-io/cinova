@@ -53,12 +53,13 @@ export default function RootLayout() {
       // ("already registered"). We try loading it first; on 104 we manually
       // call markLoaded so Font.isLoaded() returns true and icon components
       // skip their loadAsync call in componentDidMount entirely.
+      // Font family name is 'feather' (lowercase) — matches createIconSet() in Feather.js
       await Font.loadAsync({
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        Feather: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf'),
+        feather: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf'),
       }).catch(() => {
         // 104 = font already registered by Expo Go — mark it loaded in JS cache
-        fontMarkLoaded('Feather');
+        fontMarkLoaded('feather');
       });
 
       try {

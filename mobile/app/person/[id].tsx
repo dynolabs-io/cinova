@@ -172,7 +172,7 @@ export default function PersonDetailScreen() {
       {/* Back button */}
       <TouchableOpacity
         style={[styles.backBtn, { top: insets.top + 10 }]}
-        onPress={() => router.back()}
+        onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}
         activeOpacity={0.85}
       >
         <BlurView intensity={60} tint="dark" style={styles.backBlur}>
