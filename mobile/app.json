@@ -62,13 +62,7 @@
           "backgroundColor": "#0a0a0a"
         }
       ],
-      [
-        "react-native-google-cast",
-        {
-          "receiverAppID": "CC1AD845",
-          "startDiscoveryAfterFirstTapOnCastButton": true
-        }
-      ]
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true
