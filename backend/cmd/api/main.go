@@ -18,6 +18,7 @@ import (
 	"github.com/foundrylab-app/cinova/backend/internal/auth"
 	"github.com/foundrylab-app/cinova/backend/internal/config"
 	"github.com/foundrylab-app/cinova/backend/internal/graph"
+	"github.com/foundrylab-app/cinova/backend/internal/handlers"
 	"github.com/foundrylab-app/cinova/backend/internal/search"
 	"github.com/foundrylab-app/cinova/backend/internal/store"
 )
@@ -67,6 +68,15 @@ func main() {
 	// Auth
 	jwtSvc := auth.NewJWTService(cfg.JWTSecret, cfg.JWTAccessTTLSec, cfg.JWTRefreshTTLSec)
 	authHandler := auth.NewHandler(pg, rdb, jwtSvc)
+
+	// Graph repository
+	movieRepo := graph.NewMovieRepository(neo)
+
+	// Handlers
+	movieHandler := handlers.NewMovieHandler(movieRepo, rdb)
+	interactionHandler := handlers.NewInteractionHandler(movieRepo, pg, rdb)
+	recommendHandler := handlers.NewRecommendHandler(movieRepo, rdb)
+	personHandler := handlers.NewPersonHandler(movieRepo)
 
 	// Search
 	searchHandler := search.NewHandler(neo, rdb, cfg)
@@ -132,10 +142,29 @@ func main() {
 			r.Post("/refresh", authHandler.RefreshHandler)
 		})
 
+		// Public content routes (no auth required)
+		r.Get("/trending", movieHandler.GetTrending)
+		r.Get("/popular", movieHandler.GetPopular)
+		r.Get("/discover/reels", movieHandler.GetReels)
+		r.Get("/movie/{id}", movieHandler.GetMovie)
+		r.Get("/movie/{id}/providers", movieHandler.GetMovieProviders)
+		r.Get("/tv/{id}", movieHandler.GetTV)
+		r.Get("/person/{id}", personHandler.GetPerson)
+
 		// Protected routes (require valid JWT)
 		r.Group(func(r chi.Router) {
 			r.Use(authHandler.ExtractSession)
 			r.Get("/search", searchHandler.SearchHandler)
+			r.Get("/recommend", recommendHandler.GetRecommendations)
+
+			// User interaction routes
+			r.Route("/me", func(r chi.Router) {
+				r.Post("/rate", interactionHandler.Rate)
+				r.Post("/save", interactionHandler.Save)
+				r.Delete("/save", interactionHandler.Unsave)
+				r.Post("/dismiss", interactionHandler.Dismiss)
+				r.Get("/watchlist", interactionHandler.GetWatchlist)
+			})
 		})
 	})
 
