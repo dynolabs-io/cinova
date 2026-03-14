@@ -13,7 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { initSession } from '../services/session';
 import { useAppStore } from '../store/useAppStore';
@@ -34,7 +34,9 @@ const queryClient = new QueryClient({
 });
 
 export default function RootLayout() {
+  const router = useRouter();
   const setSessionId = useAppStore((s) => s.setSessionId);
+  const hasOnboarded = useAppStore((s) => s.hasOnboarded);
 
   useEffect(() => {
     async function bootstrap() {
@@ -45,6 +47,9 @@ export default function RootLayout() {
         // Session init failed — app still works in degraded mode
       } finally {
         await SplashScreen.hideAsync();
+        if (!hasOnboarded) {
+          router.replace('/onboarding');
+        }
       }
     }
     bootstrap();
@@ -62,6 +67,7 @@ export default function RootLayout() {
               animation: 'slide_from_right',
             }}
           >
+            <Stack.Screen name="onboarding" options={{ headerShown: false, animation: 'none' }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen
               name="movie/[id]"

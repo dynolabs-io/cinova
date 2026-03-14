@@ -22,6 +22,7 @@ import CinovaScore from './CinovaScore';
 import StreamingBadge from './StreamingBadge';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import { getProviderById } from '../../constants/providers';
+import { hapticSuccess, hapticMedium, hapticLight } from '../../services/haptics';
 import type { Movie, WatchProvider } from '../../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -120,19 +121,19 @@ export default function ReelItem({
           label={isSaved ? '🔖' : '🔖'}
           sublabel="Save"
           color={isSaved ? Colors.primary : Colors.textPrimary}
-          onPress={() => onSave?.(movie)}
+          onPress={() => { hapticSuccess(); onSave?.(movie); }}
         />
         <ActionButton
           label="★"
           sublabel="Rate"
           color={Colors.scoreMid}
-          onPress={() => onRate?.(movie)}
+          onPress={() => { hapticMedium(); onRate?.(movie); }}
         />
         <ActionButton
           label="✕"
           sublabel="Skip"
           color={Colors.textSecondary}
-          onPress={() => onDismiss?.(movie)}
+          onPress={() => { hapticLight(); onDismiss?.(movie); }}
         />
         {primaryProvider && (
           <ActionButton
