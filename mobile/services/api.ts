@@ -12,11 +12,27 @@ import type { Movie, TVShow, Person, AuthResponse, SearchResult, WatchProvider }
 
 export const BASE_URL = 'https://api.cinova.openova.io';
 
-// Map snake_case backend fields to camelCase frontend types
-function normalizeMedia(item: Record<string, unknown>) {
-  if (!item || typeof item !== 'object') return item;
-  const tmdbId = (item.tmdb_id ?? item.tmdbId ?? item.id) as number;
-  return { ...item, id: tmdbId, tmdbId, cinovaScore: item.cinova_score ?? item.cinovaScore };
+// Recursively converts snake_case keys to camelCase to match frontend types
+function toCamel(s: string): string {
+  return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+function camelizeKeys(obj: unknown): unknown {
+  if (Array.isArray(obj)) return obj.map(camelizeKeys);
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>).map(([k, v]) => [toCamel(k), camelizeKeys(v)])
+    );
+  }
+  return obj;
+}
+
+function normalizeMedia(item: unknown): unknown {
+  const m = camelizeKeys(item) as Record<string, unknown>;
+  // ensure id === tmdbId (both needed by components)
+  if (m.tmdbId) m.id = m.tmdbId;
+  else if (m.id) m.tmdbId = m.id;
+  return m;
 }
 
 const api: AxiosInstance = axios.create({
@@ -131,12 +147,12 @@ export async function getMovieProviders(id: number, country = 'US'): Promise<Wat
 
 export async function getTV(id: number, country = 'US'): Promise<TVShow> {
   const { data } = await api.get<TVShow>(`/api/v1/tv/${id}`, { params: { country } });
-  return data;
+  return normalizeMedia(data) as unknown as TVShow;
 }
 
 export async function getPerson(id: number): Promise<Person> {
   const { data } = await api.get<Person>(`/api/v1/person/${id}`);
-  return data;
+  return camelizeKeys(data) as unknown as Person;
 }
 
 // ── Search ────────────────────────────────────────────────────────────────────
@@ -144,7 +160,7 @@ export async function getPerson(id: number): Promise<Person> {
 export async function search(q: string, country = 'US'): Promise<SearchResult> {
   const { data } = await api.get<{ results: (Movie | TVShow)[]; query: string; country: string; total: number }>('/api/v1/search', { params: { q, country } });
   return {
-    items: data.results ?? [],
+    items: (data.results ?? []).map(normalizeMedia) as (Movie | TVShow)[],
     total: data.total ?? 0,
     page: 1,
     hasMore: false,
