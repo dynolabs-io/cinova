@@ -89,6 +89,16 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id    ON refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_anon_sessions_user_id     ON anonymous_sessions(user_id);
+
+CREATE TABLE IF NOT EXISTS push_tokens (
+    user_id    TEXT        NOT NULL PRIMARY KEY,
+    token      TEXT        NOT NULL,
+    platform   TEXT        NOT NULL DEFAULT 'unknown',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_tokens_token ON push_tokens (token);
 `
 	_, err := s.pool.Exec(ctx, ddl)
 	return err

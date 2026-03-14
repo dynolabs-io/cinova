@@ -32,10 +32,19 @@ func (h *PushTokenHandler) RegisterPushToken(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Accept user ID or fall back to anonymous session ID
 	userID := auth.UserIDFromCtx(r.Context())
+	if userID == "" {
+		userID = auth.SessionIDFromCtx(r.Context())
+	}
 	if userID == "" {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
+	}
+
+	platform := req.Platform
+	if platform == "" {
+		platform = "unknown"
 	}
 
 	// Upsert push token — one token per user (last-write wins)
@@ -43,10 +52,10 @@ func (h *PushTokenHandler) RegisterPushToken(w http.ResponseWriter, r *http.Requ
 		`INSERT INTO push_tokens (user_id, token, platform, updated_at)
 		 VALUES ($1, $2, $3, NOW())
 		 ON CONFLICT (user_id) DO UPDATE
-		   SET token = EXCLUDED.token,
-		       platform = EXCLUDED.platform,
+		   SET token      = EXCLUDED.token,
+		       platform   = EXCLUDED.platform,
 		       updated_at = NOW()`,
-		userID, req.Token, req.Platform,
+		userID, req.Token, platform,
 	)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to upsert push token")
