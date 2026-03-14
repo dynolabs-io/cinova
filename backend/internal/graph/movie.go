@@ -528,3 +528,138 @@ func toProviders(v interface{}) []models.Provider {
 	}
 	return providers
 }
+
+// UpsertTVShow creates or updates a TVShow node and its relationships.
+func (r *MovieRepository) UpsertTVShow(ctx context.Context, show *models.TVShow) error {
+	err := r.driver.RunWriteUnit(ctx, `
+		MERGE (s:TVShow {tmdb_id: $tmdb_id})
+		SET s.name               = $name,
+		    s.original_name      = $original_name,
+		    s.overview           = $overview,
+		    s.first_air_date     = $first_air_date,
+		    s.last_air_date      = $last_air_date,
+		    s.number_of_seasons  = $number_of_seasons,
+		    s.number_of_episodes = $number_of_episodes,
+		    s.vote_average       = $vote_average,
+		    s.vote_count         = $vote_count,
+		    s.popularity         = $popularity,
+		    s.poster_path        = $poster_path,
+		    s.backdrop_path      = $backdrop_path,
+		    s.original_language  = $original_language,
+		    s.status             = $status,
+		    s.cinova_score       = $cinova_score
+	`, map[string]interface{}{
+		"tmdb_id":            show.TMDBID,
+		"name":               show.Name,
+		"original_name":      show.OriginalName,
+		"overview":           show.Overview,
+		"first_air_date":     show.FirstAirDate,
+		"last_air_date":      show.LastAirDate,
+		"number_of_seasons":  show.NumberOfSeasons,
+		"number_of_episodes": show.NumberOfEpisodes,
+		"vote_average":       show.VoteAverage,
+		"vote_count":         show.VoteCount,
+		"popularity":         show.Popularity,
+		"poster_path":        show.PosterPath,
+		"backdrop_path":      show.BackdropPath,
+		"original_language":  show.OriginalLanguage,
+		"status":             show.Status,
+		"cinova_score":       show.CinovaScore,
+	})
+	if err != nil {
+		return fmt.Errorf("UpsertTVShow: %w", err)
+	}
+
+	for _, g := range show.Genres {
+		if err := r.driver.RunWriteUnit(ctx, `
+			MERGE (g:Genre {id: $id}) SET g.name = $name
+			WITH g
+			MATCH (s:TVShow {tmdb_id: $tmdb_id})
+			MERGE (s)-[:IN_GENRE]->(g)
+		`, map[string]interface{}{"id": g.ID, "name": g.Name, "tmdb_id": show.TMDBID}); err != nil {
+			return fmt.Errorf("UpsertTVShow genre %d: %w", g.ID, err)
+		}
+	}
+
+	for _, p := range show.Cast {
+		if err := r.driver.RunWriteUnit(ctx, `
+			MERGE (p:Person {tmdb_id: $tmdb_id})
+			SET p.name = $name, p.profile_path = $profile_path
+			WITH p
+			MATCH (s:TVShow {tmdb_id: $show_tmdb_id})
+			MERGE (p)-[a:ACTED_IN {show_tmdb_id: $show_tmdb_id}]->(s)
+			SET a.character = $role, a.order = $order
+		`, map[string]interface{}{
+			"tmdb_id":      p.TMDBID,
+			"name":         p.Name,
+			"profile_path": p.ProfilePath,
+			"show_tmdb_id": show.TMDBID,
+			"role":         p.Role,
+			"order":        p.Order,
+		}); err != nil {
+			return fmt.Errorf("UpsertTVShow cast person %d: %w", p.TMDBID, err)
+		}
+	}
+
+	for _, d := range show.Creators {
+		if err := r.driver.RunWriteUnit(ctx, `
+			MERGE (p:Person {tmdb_id: $tmdb_id})
+			SET p.name = $name, p.profile_path = $profile_path
+			WITH p
+			MATCH (s:TVShow {tmdb_id: $show_tmdb_id})
+			MERGE (p)-[dir:DIRECTED {show_tmdb_id: $show_tmdb_id}]->(s)
+			SET dir.job = $job
+		`, map[string]interface{}{
+			"tmdb_id":      d.TMDBID,
+			"name":         d.Name,
+			"profile_path": d.ProfilePath,
+			"show_tmdb_id": show.TMDBID,
+			"job":          d.Job,
+		}); err != nil {
+			return fmt.Errorf("UpsertTVShow director %d: %w", d.TMDBID, err)
+		}
+	}
+
+	// Upsert providers (reuse existing UpsertProvider, stored as int(show.TMDBID))
+	if len(show.Providers) > 0 {
+		country := ""
+		if len(show.Providers) > 0 {
+			country = show.Providers[0].Country
+		}
+		for _, prov := range show.Providers {
+			if err := r.driver.RunWriteUnit(ctx, `
+				MERGE (p:Provider {provider_id: $provider_id})
+				SET p.provider_name = $provider_name,
+				    p.logo_path     = $logo_path
+				WITH p
+				MATCH (s:TVShow {tmdb_id: $tmdb_id})
+				MERGE (s)-[a:AVAILABLE_ON {country: $country}]->(p)
+				SET a.type = $type
+			`, map[string]interface{}{
+				"provider_id":   prov.ProviderID,
+				"provider_name": prov.ProviderName,
+				"logo_path":     prov.LogoPath,
+				"tmdb_id":       show.TMDBID,
+				"country":       country,
+				"type":          prov.Type,
+			}); err != nil {
+				return fmt.Errorf("UpsertTVShow provider %d: %w", prov.ProviderID, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// UpsertInfluenceRelationship creates an INFLUENCED_BY relationship between two Person nodes by name.
+func (r *MovieRepository) UpsertInfluenceRelationship(ctx context.Context, directorName, influencerName string) error {
+	return r.driver.RunWriteUnit(ctx, `
+		MERGE (d:Person {name: $director_name})
+		MERGE (i:Person {name: $influencer_name})
+		MERGE (d)-[r:INFLUENCED_BY]->(i)
+		SET r.source = 'wikidata'
+	`, map[string]interface{}{
+		"director_name":  directorName,
+		"influencer_name": influencerName,
+	})
+}

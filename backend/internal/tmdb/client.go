@@ -429,3 +429,69 @@ func (c *Client) get(ctx context.Context, url string, dst interface{}) error {
 	}
 	return nil
 }
+
+// GetTVShowDetails is an alias for GetTVDetails for consistent naming.
+func (c *Client) GetTVShowDetails(ctx context.Context, id int) (*TMDBShow, error) {
+	return c.GetTVDetails(ctx, id)
+}
+
+// GetTrendingTVShows fetches trending TV show IDs for the given page.
+func (c *Client) GetTrendingTVShows(ctx context.Context, page int) ([]int, error) {
+	url := fmt.Sprintf("%s/trending/tv/day?api_key=%s&page=%d", baseURL, c.apiKey, page)
+	var result tmdbTrendingPage
+	if err := c.get(ctx, url, &result); err != nil {
+		return nil, fmt.Errorf("GetTrendingTVShows(page=%d): %w", page, err)
+	}
+	ids := make([]int, 0, len(result.Results))
+	for _, r := range result.Results {
+		ids = append(ids, r.ID)
+	}
+	return ids, nil
+}
+
+// GetBulkTVShowIDs downloads the TMDB daily TV show export and returns all show IDs.
+func (c *Client) GetBulkTVShowIDs(ctx context.Context) ([]int, error) {
+	yesterday := time.Now().UTC().AddDate(0, 0, -1)
+	exportURL := fmt.Sprintf("%s/tv_series_ids_%02d_%02d_%04d.json.gz",
+		exportsURL, yesterday.Month(), yesterday.Day(), yesterday.Year())
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, exportURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build TV bulk request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("TV bulk export download: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("TV bulk export returned status %d", resp.StatusCode)
+	}
+
+	gzr, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("gzip reader: %w", err)
+	}
+	defer gzr.Close()
+
+	var ids []int
+	decoder := json.NewDecoder(gzr)
+	for {
+		var entry struct {
+			ID int `json:"id"`
+		}
+		if err := decoder.Decode(&entry); err != nil {
+			if err == io.EOF {
+				break
+			}
+			continue
+		}
+		if entry.ID > 0 {
+			ids = append(ids, entry.ID)
+		}
+	}
+
+	return ids, nil
+}

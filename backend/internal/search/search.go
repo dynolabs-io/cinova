@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -19,8 +21,29 @@ import (
 )
 
 const (
-	defaultLimit  = 20
-	axonTimeout   = 15 * time.Second
+	defaultLimit = 20
+	axonTimeout  = 20 * time.Second
+
+	// Sonnet 4.6 for NL search — quality matters for user-facing queries
+	searchModel = "claude-sonnet-4-6"
+
+	nl2cypherSystemPrompt = `You are a Cypher query assistant for a movie and TV show graph database.
+
+Schema:
+- Nodes: Movie (title, overview, vote_average, cinova_score, release_year, runtime), TVShow (title, overview, vote_average, cinova_score, first_air_year), Genre (name), Theme (name), Mood (name), Provider (name, provider_name)
+- Relationships: (Movie|TVShow)-[:IN_GENRE]->(Genre), (Movie|TVShow)-[:HAS_THEME]->(Theme), (Movie|TVShow)-[:HAS_MOOD]->(Mood), (Movie|TVShow)-[:AVAILABLE_ON {country}]->(Provider)
+
+The query variable is 'n' (for Movie or TVShow nodes).
+Provider filtering uses: EXISTS { MATCH (n)-[:AVAILABLE_ON {country: $country}]->(p:Provider) WHERE toLower(p.provider_name) CONTAINS '<name>' }
+
+Return a JSON object with:
+- "where_clause": a valid Cypher WHERE fragment (no MATCH/RETURN, just conditions on 'n' and optional EXISTS subqueries)
+- "explanation": a 1-sentence human-readable description of what the query finds
+
+If the query is just a title search, use: toLower(n.title) CONTAINS toLower('<title>')
+For themes/moods, use EXISTS { MATCH (n)-[:HAS_THEME]->(t:Theme) WHERE toLower(t.name) CONTAINS '<theme>' }
+
+Return ONLY valid JSON, no markdown, no code blocks.`
 )
 
 // Handler handles natural-language search requests.
@@ -43,16 +66,32 @@ func NewHandler(neo *graph.Driver, redis *store.RedisStore, cfg *config.Config) 
 	}
 }
 
-// axonRequest is the payload sent to the Axon NL→Cypher endpoint.
-type axonRequest struct {
-	Query   string `json:"query"`
-	Country string `json:"country"`
-}
-
-// axonResponse is the response from Axon's translation endpoint.
-type axonResponse struct {
+// nl2cypherResponse is the structured response from Axon's NL→Cypher translation.
+type nl2cypherResponse struct {
 	WhereClause string `json:"where_clause"`
 	Explanation string `json:"explanation,omitempty"`
+}
+
+// chatMessage is a single message in an OpenAI-compatible chat request.
+type chatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// chatRequest is the OpenAI-compatible /v1/chat/completions request body.
+type chatRequest struct {
+	Model     string        `json:"model"`
+	Messages  []chatMessage `json:"messages"`
+	MaxTokens int           `json:"max_tokens"`
+}
+
+// chatResponse is the OpenAI-compatible /v1/chat/completions response.
+type chatResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
 }
 
 // SearchHandler handles GET /api/v1/search?q=&country=
@@ -142,15 +181,26 @@ func (h *Handler) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// translateQuery calls the Axon HTTP API to convert a natural language query
-// into a Cypher WHERE clause.
+// translateQuery calls Axon's /v1/chat/completions to convert a natural language
+// query into a Cypher WHERE clause.
 func (h *Handler) translateQuery(ctx context.Context, query, country string) (whereClause, explanation string, err error) {
-	payload, err := json.Marshal(axonRequest{Query: query, Country: country})
-	if err != nil {
-		return "", "", fmt.Errorf("marshal axon request: %w", err)
+	userContent := fmt.Sprintf("Query: %q\nCountry: %s\n\nReturn a JSON object with where_clause and explanation.", query, country)
+
+	reqBody := chatRequest{
+		Model: searchModel,
+		Messages: []chatMessage{
+			{Role: "system", Content: nl2cypherSystemPrompt},
+			{Role: "user", Content: userContent},
+		},
+		MaxTokens: 512,
 	}
 
-	endpoint, err := url.JoinPath(h.cfg.AxonURL, "/nl2cypher")
+	payload, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", "", fmt.Errorf("marshal chat request: %w", err)
+	}
+
+	endpoint, err := url.JoinPath(h.cfg.AxonURL, "/v1/chat/completions")
 	if err != nil {
 		return "", "", fmt.Errorf("build axon url: %w", err)
 	}
@@ -171,15 +221,35 @@ func (h *Handler) translateQuery(ctx context.Context, query, country string) (wh
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("axon returned status %d", resp.StatusCode)
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", "", fmt.Errorf("axon returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
 
-	var axonResp axonResponse
-	if err := json.NewDecoder(resp.Body).Decode(&axonResp); err != nil {
-		return "", "", fmt.Errorf("decode axon response: %w", err)
+	var chatResp chatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
+		return "", "", fmt.Errorf("decode chat response: %w", err)
+	}
+	if len(chatResp.Choices) == 0 {
+		return "", "", fmt.Errorf("empty choices in chat response")
 	}
 
-	return axonResp.WhereClause, axonResp.Explanation, nil
+	content := chatResp.Choices[0].Message.Content
+
+	// Strip markdown code blocks if model added them
+	content = strings.TrimPrefix(content, "```json")
+	content = strings.TrimPrefix(content, "```")
+	content = strings.TrimSuffix(content, "```")
+	content = strings.TrimSpace(content)
+
+	var nl2cResp nl2cypherResponse
+	if err := json.Unmarshal([]byte(content), &nl2cResp); err != nil {
+		return "", "", fmt.Errorf("parse nl2cypher response: %w (raw: %.200s)", err, content)
+	}
+	if nl2cResp.WhereClause == "" {
+		return "", "", fmt.Errorf("empty where_clause in response")
+	}
+
+	return nl2cResp.WhereClause, nl2cResp.Explanation, nil
 }
 
 // executeSearch runs the translated Cypher WHERE clause against Neo4j and

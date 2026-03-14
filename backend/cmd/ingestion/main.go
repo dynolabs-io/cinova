@@ -4,10 +4,13 @@ import (
 	"context"
 	"flag"
 	"os"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/time/rate"
 
 	"github.com/foundrylab-app/cinova/backend/internal/config"
 	"github.com/foundrylab-app/cinova/backend/internal/enrichment"
@@ -15,11 +18,21 @@ import (
 	"github.com/foundrylab-app/cinova/backend/internal/models"
 	"github.com/foundrylab-app/cinova/backend/internal/scoring"
 	"github.com/foundrylab-app/cinova/backend/internal/tmdb"
+	"github.com/foundrylab-app/cinova/backend/internal/wikidata"
+)
+
+const (
+	workers       = 3   // concurrent TMDB fetch workers
+	tmdbRatePerSec = 4  // 4 req/s = 40 req/10s (TMDB free tier limit)
+	enrichBatch   = 30  // movies per Axon call
+	logEvery      = 1000 // progress log interval
 )
 
 func main() {
-	mode := flag.String("mode", "delta", "ingestion mode: full or delta")
-	country := flag.String("country", "US", "ISO 3166-1 alpha-2 country code for streaming providers")
+	mode      := flag.String("mode", "delta", "ingestion mode: full or delta")
+	mediaType := flag.String("media-type", "all", "media type: movie, tvshow, or all")
+	country   := flag.String("country", "US", "ISO 3166-1 alpha-2 country code for streaming providers")
+	minVotes  := flag.Int("min-votes", 100, "minimum vote_count to include (quality filter)")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -46,17 +59,31 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to ensure neo4j schema")
 	}
 
-	tmdbClient := tmdb.NewClient(cfg.TMDBAPIKey)
+	tmdbClient   := tmdb.NewClient(cfg.TMDBAPIKey)
 	enrichClient := enrichment.NewClient(cfg.AxonURL, cfg.AxonAPIKey)
-	movieRepo := graph.NewMovieRepository(neo)
+	movieRepo    := graph.NewMovieRepository(neo)
+	wikiClient   := wikidata.NewClient()
 
-	log.Info().Str("mode", *mode).Str("country", *country).Msg("starting ingestion")
+	log.Info().Str("mode", *mode).Str("media_type", *mediaType).Str("country", *country).Int("min_votes", *minVotes).Msg("starting ingestion")
+
+	// Rate limiter shared across all workers
+	limiter := rate.NewLimiter(rate.Limit(tmdbRatePerSec), tmdbRatePerSec)
 
 	switch *mode {
 	case "full":
-		runFullIngestion(ctx, tmdbClient, enrichClient, movieRepo, *country)
+		if *mediaType == "movie" || *mediaType == "all" {
+			runFullIngestion(ctx, tmdbClient, enrichClient, movieRepo, wikiClient, *country, *minVotes, limiter)
+		}
+		if *mediaType == "tvshow" || *mediaType == "all" {
+			runFullTVIngestion(ctx, tmdbClient, enrichClient, movieRepo, *country, *minVotes, limiter)
+		}
 	case "delta":
-		runDeltaIngestion(ctx, tmdbClient, enrichClient, movieRepo, *country)
+		if *mediaType == "movie" || *mediaType == "all" {
+			runDeltaIngestion(ctx, tmdbClient, enrichClient, movieRepo, wikiClient, *country, limiter)
+		}
+		if *mediaType == "tvshow" || *mediaType == "all" {
+			runDeltaTVIngestion(ctx, tmdbClient, enrichClient, movieRepo, *country, limiter)
+		}
 	default:
 		log.Fatal().Str("mode", *mode).Msg("unknown mode; use full or delta")
 	}
@@ -64,7 +91,9 @@ func main() {
 	log.Info().Msg("ingestion complete")
 }
 
-func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient *enrichment.Client, repo *graph.MovieRepository, country string) {
+// ── Full Movie Ingestion ───────────────────────────────────────────────────────
+
+func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient *enrichment.Client, repo *graph.MovieRepository, wikiClient *wikidata.Client, country string, minVotes int, limiter *rate.Limiter) {
 	log.Info().Msg("fetching bulk movie ID export from TMDB")
 
 	ids, err := tmdbClient.GetBulkMovieIDs(ctx)
@@ -72,64 +101,223 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 		log.Fatal().Err(err).Msg("failed to fetch bulk movie IDs")
 	}
 
-	log.Info().Int("total", len(ids)).Msg("bulk ID export fetched")
+	log.Info().Int("total_ids", len(ids)).Int("min_votes", minVotes).Msg("bulk ID export fetched")
 
-	processed := 0
-	errors := 0
-	batch := make([]models.Movie, 0, 100)
+	var (
+		processed  atomic.Int64
+		skipped    atomic.Int64
+		errors     atomic.Int64
+		mu         sync.Mutex
+		batch      = make([]models.Movie, 0, enrichBatch)
+		start      = time.Now()
+	)
+
+	sem := make(chan struct{}, workers)
+	var wg sync.WaitGroup
 
 	for _, id := range ids {
 		select {
 		case <-ctx.Done():
-			log.Warn().Msg("context cancelled, stopping ingestion")
+			log.Warn().Msg("context cancelled, stopping")
+			wg.Wait()
 			return
 		default:
 		}
 
-		movie, err := enrichMovie(ctx, tmdbClient, id, country)
-		if err != nil {
-			log.Error().Err(err).Int("tmdb_id", id).Msg("failed to enrich movie")
-			errors++
-			continue
-		}
+		sem <- struct{}{}
+		wg.Add(1)
 
-		if err := repo.UpsertMovie(ctx, movie); err != nil {
-			log.Error().Err(err).Int64("tmdb_id", movie.TMDBID).Msg("failed to upsert movie")
-			errors++
-			continue
-		}
+		go func(movieID int) {
+			defer func() { <-sem; wg.Done() }()
 
-		batch = append(batch, *movie)
-		processed++
-
-		if processed%100 == 0 {
-			log.Info().Int("processed", processed).Int("errors", errors).Int("total", len(ids)).Msg("ingestion progress")
-
-			// Enrich batch with AI themes and moods
-			if enrichErr := enrichClient.ProcessMovieBatch(ctx, batch, repo); enrichErr != nil {
-				log.Error().Err(enrichErr).Msg("batch enrichment failed")
+			if err := limiter.Wait(ctx); err != nil {
+				return
 			}
-			batch = batch[:0]
-		}
 
-		// Respect TMDB rate limit: ~40 req/s
-		time.Sleep(25 * time.Millisecond)
+			movie, err := fetchMovie(ctx, tmdbClient, movieID, country)
+			if err != nil {
+				log.Error().Err(err).Int("tmdb_id", movieID).Msg("fetch failed")
+				errors.Add(1)
+				return
+			}
+
+			if int(movie.VoteCount) < minVotes {
+				skipped.Add(1)
+				return
+			}
+
+			if err := repo.UpsertMovie(ctx, movie); err != nil {
+				log.Error().Err(err).Int64("tmdb_id", movie.TMDBID).Msg("upsert failed")
+				errors.Add(1)
+				return
+			}
+
+			// Wire Wikidata director influences
+			n := processed.Add(1)
+			mu.Lock()
+			batch = append(batch, *movie)
+			currentBatch := batch
+			if len(batch) >= enrichBatch {
+				batch = make([]models.Movie, 0, enrichBatch)
+			} else {
+				currentBatch = nil
+			}
+			mu.Unlock()
+
+			if currentBatch != nil {
+				if enrichErr := enrichClient.ProcessMovieBatch(ctx, currentBatch, repo); enrichErr != nil {
+					log.Warn().Err(enrichErr).Msg("batch enrichment failed")
+				}
+			}
+
+			if n%int64(logEvery) == 0 {
+				log.Info().
+					Int64("processed", n).
+					Int64("skipped", skipped.Load()).
+					Int64("errors", errors.Load()).
+					Int("total", len(ids)).
+					Str("elapsed", time.Since(start).Round(time.Second).String()).
+					Msg("ingestion progress")
+			}
+		}(id)
 	}
 
-	// Process remaining batch
-	if len(batch) > 0 {
-		if enrichErr := enrichClient.ProcessMovieBatch(ctx, batch, repo); enrichErr != nil {
-			log.Error().Err(enrichErr).Msg("final batch enrichment failed")
+	wg.Wait()
+
+	// Flush remaining batch
+	mu.Lock()
+	remaining := batch
+	mu.Unlock()
+	if len(remaining) > 0 {
+		if err := enrichClient.ProcessMovieBatch(ctx, remaining, repo); err != nil {
+			log.Warn().Err(err).Msg("final batch enrichment failed")
 		}
 	}
 
-	log.Info().Int("processed", processed).Int("errors", errors).Msg("full ingestion complete")
+	log.Info().
+		Int64("processed", processed.Load()).
+		Int64("skipped", skipped.Load()).
+		Int64("errors", errors.Load()).
+		Str("elapsed", time.Since(start).Round(time.Second).String()).
+		Msg("full movie ingestion complete")
+
+	// Wire Wikidata director influences (post-ingestion, run once)
+	runWikidataInfluences(ctx, repo, wikiClient)
 }
 
-func runDeltaIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient *enrichment.Client, repo *graph.MovieRepository, country string) {
-	log.Info().Msg("fetching movies changed in last 24h")
+// ── Full TV Ingestion ──────────────────────────────────────────────────────────
 
-	// Fetch up to 5 pages of trending (used as delta proxy since TMDB changes API requires v4)
+func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient *enrichment.Client, repo *graph.MovieRepository, country string, minVotes int, limiter *rate.Limiter) {
+	log.Info().Msg("fetching bulk TV show ID export from TMDB")
+
+	ids, err := tmdbClient.GetBulkTVShowIDs(ctx)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to fetch bulk TV IDs")
+	}
+
+	log.Info().Int("total_ids", len(ids)).Int("min_votes", minVotes).Msg("TV bulk ID export fetched")
+
+	var (
+		processed atomic.Int64
+		skipped   atomic.Int64
+		errors    atomic.Int64
+		mu        sync.Mutex
+		batch     = make([]models.TVShow, 0, enrichBatch)
+		start     = time.Now()
+	)
+
+	sem := make(chan struct{}, workers)
+	var wg sync.WaitGroup
+
+	for _, id := range ids {
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			return
+		default:
+		}
+
+		sem <- struct{}{}
+		wg.Add(1)
+
+		go func(showID int) {
+			defer func() { <-sem; wg.Done() }()
+
+			if err := limiter.Wait(ctx); err != nil {
+				return
+			}
+
+			show, err := fetchTVShow(ctx, tmdbClient, showID, country)
+			if err != nil {
+				log.Error().Err(err).Int("tmdb_id", showID).Msg("TV fetch failed")
+				errors.Add(1)
+				return
+			}
+
+			if int(show.VoteCount) < minVotes {
+				skipped.Add(1)
+				return
+			}
+
+			if err := repo.UpsertTVShow(ctx, show); err != nil {
+				log.Error().Err(err).Int64("tmdb_id", show.TMDBID).Msg("TV upsert failed")
+				errors.Add(1)
+				return
+			}
+
+			n := processed.Add(1)
+			mu.Lock()
+			batch = append(batch, *show)
+			currentBatch := batch
+			if len(batch) >= enrichBatch {
+				batch = make([]models.TVShow, 0, enrichBatch)
+			} else {
+				currentBatch = nil
+			}
+			mu.Unlock()
+
+			if currentBatch != nil {
+				if enrichErr := enrichClient.ProcessTVBatch(ctx, currentBatch, repo); enrichErr != nil {
+					log.Warn().Err(enrichErr).Msg("TV batch enrichment failed")
+				}
+			}
+
+			if n%int64(logEvery) == 0 {
+				log.Info().
+					Int64("processed", n).
+					Int64("skipped", skipped.Load()).
+					Int64("errors", errors.Load()).
+					Int("total", len(ids)).
+					Str("elapsed", time.Since(start).Round(time.Second).String()).
+					Msg("TV ingestion progress")
+			}
+		}(id)
+	}
+
+	wg.Wait()
+
+	mu.Lock()
+	remaining := batch
+	mu.Unlock()
+	if len(remaining) > 0 {
+		if err := enrichClient.ProcessTVBatch(ctx, remaining, repo); err != nil {
+			log.Warn().Err(err).Msg("final TV batch enrichment failed")
+		}
+	}
+
+	log.Info().
+		Int64("processed", processed.Load()).
+		Int64("skipped", skipped.Load()).
+		Int64("errors", errors.Load()).
+		Str("elapsed", time.Since(start).Round(time.Second).String()).
+		Msg("full TV ingestion complete")
+}
+
+// ── Delta Movie Ingestion ──────────────────────────────────────────────────────
+
+func runDeltaIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient *enrichment.Client, repo *graph.MovieRepository, wikiClient *wikidata.Client, country string, limiter *rate.Limiter) {
+	log.Info().Msg("fetching trending movies (delta)")
+
 	allIDs := make([]int, 0, 500)
 	for page := 1; page <= 5; page++ {
 		ids, err := tmdbClient.GetTrendingMovies(ctx, page)
@@ -142,80 +330,179 @@ func runDeltaIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClien
 
 	log.Info().Int("titles", len(allIDs)).Msg("delta IDs collected")
 
-	processed := 0
-	errors := 0
-	batch := make([]models.Movie, 0, 100)
+	var (
+		processed atomic.Int64
+		errors    atomic.Int64
+		mu        sync.Mutex
+		batch     = make([]models.Movie, 0, enrichBatch)
+		start     = time.Now()
+	)
+
+	sem := make(chan struct{}, workers)
+	var wg sync.WaitGroup
 
 	for _, id := range allIDs {
 		select {
 		case <-ctx.Done():
-			log.Warn().Msg("context cancelled")
+			wg.Wait()
 			return
 		default:
 		}
 
-		// Upsert full movie details (creates the node if new, updates if existing)
-		movie, err := enrichMovie(ctx, tmdbClient, id, country)
-		if err != nil {
-			log.Error().Err(err).Int("tmdb_id", id).Msg("failed to enrich movie")
-			errors++
-			time.Sleep(50 * time.Millisecond)
-			continue
-		}
+		sem <- struct{}{}
+		wg.Add(1)
 
-		if err := repo.UpsertMovie(ctx, movie); err != nil {
-			log.Error().Err(err).Int64("tmdb_id", movie.TMDBID).Msg("failed to upsert movie")
-			errors++
-			continue
-		}
+		go func(movieID int) {
+			defer func() { <-sem; wg.Done() }()
 
-		// Also upsert streaming providers
-		providers, err := tmdbClient.GetWatchProviders(ctx, id, "movie")
-		if err == nil {
-			countryProviders := providers[country]
-			modelProviders := make([]models.Provider, 0, len(countryProviders))
-			for _, p := range countryProviders {
-				modelProviders = append(modelProviders, models.Provider{
-					ProviderID:      int64(p.ProviderID),
-					ProviderName:    p.ProviderName,
-					LogoPath:        p.LogoPath,
-					DisplayPriority: p.DisplayPriority,
-					Type:            p.Type,
-					Country:         country,
-				})
+			if err := limiter.Wait(ctx); err != nil {
+				return
 			}
-			if upsertErr := repo.UpsertProvider(ctx, id, modelProviders, country); upsertErr != nil {
-				log.Warn().Err(upsertErr).Int("tmdb_id", id).Msg("failed to upsert providers")
+
+			movie, err := fetchMovie(ctx, tmdbClient, movieID, country)
+			if err != nil {
+				log.Error().Err(err).Int("tmdb_id", movieID).Msg("fetch failed")
+				errors.Add(1)
+				return
 			}
-		}
 
-		batch = append(batch, *movie)
-		processed++
-
-		if processed%20 == 0 {
-			log.Info().Int("processed", processed).Int("errors", errors).Int("total", len(allIDs)).Msg("delta ingestion progress")
-
-			if enrichErr := enrichClient.ProcessMovieBatch(ctx, batch, repo); enrichErr != nil {
-				log.Warn().Err(enrichErr).Msg("batch enrichment failed (non-fatal)")
+			if err := repo.UpsertMovie(ctx, movie); err != nil {
+				log.Error().Err(err).Int64("tmdb_id", movie.TMDBID).Msg("upsert failed")
+				errors.Add(1)
+				return
 			}
-			batch = batch[:0]
-		}
 
-		time.Sleep(50 * time.Millisecond) // respect TMDB rate limit
+			processed.Add(1)
+			mu.Lock()
+			batch = append(batch, *movie)
+			currentBatch := batch
+			if len(batch) >= enrichBatch {
+				batch = make([]models.Movie, 0, enrichBatch)
+			} else {
+				currentBatch = nil
+			}
+			mu.Unlock()
+
+			if currentBatch != nil {
+				if enrichErr := enrichClient.ProcessMovieBatch(ctx, currentBatch, repo); enrichErr != nil {
+					log.Warn().Err(enrichErr).Msg("batch enrichment failed")
+				}
+			}
+		}(id)
 	}
 
-	// Final batch enrichment
-	if len(batch) > 0 {
-		if enrichErr := enrichClient.ProcessMovieBatch(ctx, batch, repo); enrichErr != nil {
-			log.Warn().Err(enrichErr).Msg("final batch enrichment failed (non-fatal)")
-		}
+	wg.Wait()
+
+	mu.Lock()
+	remaining := batch
+	mu.Unlock()
+	if len(remaining) > 0 {
+		enrichClient.ProcessMovieBatch(ctx, remaining, repo)
 	}
 
-	log.Info().Int("processed", processed).Int("errors", errors).Msg("delta ingestion complete")
+	log.Info().
+		Int64("processed", processed.Load()).
+		Int64("errors", errors.Load()).
+		Str("elapsed", time.Since(start).Round(time.Second).String()).
+		Msg("delta movie ingestion complete")
 }
 
-// enrichMovie fetches full TMDB details and computes the Cinova score.
-func enrichMovie(ctx context.Context, client *tmdb.Client, id int, country string) (*models.Movie, error) {
+// ── Delta TV Ingestion ─────────────────────────────────────────────────────────
+
+func runDeltaTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient *enrichment.Client, repo *graph.MovieRepository, country string, limiter *rate.Limiter) {
+	log.Info().Msg("fetching trending TV shows (delta)")
+
+	allIDs := make([]int, 0, 500)
+	for page := 1; page <= 5; page++ {
+		ids, err := tmdbClient.GetTrendingTVShows(ctx, page)
+		if err != nil {
+			log.Error().Err(err).Int("page", page).Msg("failed to fetch trending TV page")
+			break
+		}
+		allIDs = append(allIDs, ids...)
+	}
+
+	log.Info().Int("titles", len(allIDs)).Msg("delta TV IDs collected")
+
+	var (
+		processed atomic.Int64
+		errors    atomic.Int64
+		mu        sync.Mutex
+		batch     = make([]models.TVShow, 0, enrichBatch)
+		start     = time.Now()
+	)
+
+	sem := make(chan struct{}, workers)
+	var wg sync.WaitGroup
+
+	for _, id := range allIDs {
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			return
+		default:
+		}
+
+		sem <- struct{}{}
+		wg.Add(1)
+
+		go func(showID int) {
+			defer func() { <-sem; wg.Done() }()
+
+			if err := limiter.Wait(ctx); err != nil {
+				return
+			}
+
+			show, err := fetchTVShow(ctx, tmdbClient, showID, country)
+			if err != nil {
+				log.Error().Err(err).Int("tmdb_id", showID).Msg("TV fetch failed")
+				errors.Add(1)
+				return
+			}
+
+			if err := repo.UpsertTVShow(ctx, show); err != nil {
+				log.Error().Err(err).Int64("tmdb_id", show.TMDBID).Msg("TV upsert failed")
+				errors.Add(1)
+				return
+			}
+
+			processed.Add(1)
+			mu.Lock()
+			batch = append(batch, *show)
+			currentBatch := batch
+			if len(batch) >= enrichBatch {
+				batch = make([]models.TVShow, 0, enrichBatch)
+			} else {
+				currentBatch = nil
+			}
+			mu.Unlock()
+
+			if currentBatch != nil {
+				enrichClient.ProcessTVBatch(ctx, currentBatch, repo)
+			}
+		}(id)
+	}
+
+	wg.Wait()
+
+	mu.Lock()
+	remaining := batch
+	mu.Unlock()
+	if len(remaining) > 0 {
+		enrichClient.ProcessTVBatch(ctx, remaining, repo)
+	}
+
+	log.Info().
+		Int64("processed", processed.Load()).
+		Int64("errors", errors.Load()).
+		Str("elapsed", time.Since(start).Round(time.Second).String()).
+		Msg("delta TV ingestion complete")
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+// fetchMovie fetches full TMDB movie details + providers, computes CinovaScore.
+func fetchMovie(ctx context.Context, client *tmdb.Client, id int, country string) (*models.Movie, error) {
 	details, err := client.GetMovieDetails(ctx, id)
 	if err != nil {
 		return nil, err
@@ -224,5 +511,75 @@ func enrichMovie(ctx context.Context, client *tmdb.Client, id int, country strin
 	movie := details.ToModel()
 	movie.CinovaScore = scoring.ComputeCinovaScore(movie.VoteAverage, int(movie.VoteCount), movie.Popularity/1000)
 
+	providers, err := client.GetWatchProviders(ctx, id, "movie")
+	if err == nil {
+		countryProviders := providers[country]
+		movie.Providers = make([]models.Provider, 0, len(countryProviders))
+		for _, p := range countryProviders {
+			movie.Providers = append(movie.Providers, models.Provider{
+				ProviderID:      int64(p.ProviderID),
+				ProviderName:    p.ProviderName,
+				LogoPath:        p.LogoPath,
+				DisplayPriority: p.DisplayPriority,
+				Type:            p.Type,
+				Country:         country,
+			})
+		}
+	}
+
 	return movie, nil
+}
+
+// fetchTVShow fetches full TMDB TV show details + providers, computes CinovaScore.
+func fetchTVShow(ctx context.Context, client *tmdb.Client, id int, country string) (*models.TVShow, error) {
+	details, err := client.GetTVShowDetails(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	show := details.ToModel()
+	show.CinovaScore = scoring.ComputeCinovaScore(show.VoteAverage, int(show.VoteCount), show.Popularity/1000)
+
+	providers, err := client.GetWatchProviders(ctx, id, "tv")
+	if err == nil {
+		countryProviders := providers[country]
+		show.Providers = make([]models.Provider, 0, len(countryProviders))
+		for _, p := range countryProviders {
+			show.Providers = append(show.Providers, models.Provider{
+				ProviderID:      int64(p.ProviderID),
+				ProviderName:    p.ProviderName,
+				LogoPath:        p.LogoPath,
+				DisplayPriority: p.DisplayPriority,
+				Type:            p.Type,
+				Country:         country,
+			})
+		}
+	}
+
+	return show, nil
+}
+
+// runWikidataInfluences fetches all director influence pairs from Wikidata and
+// upserts INFLUENCED_BY relationships in Neo4j. Called once after full ingestion.
+func runWikidataInfluences(ctx context.Context, repo *graph.MovieRepository, wikiClient *wikidata.Client) {
+	log.Info().Msg("fetching director influence graph from Wikidata")
+
+	influences, err := wikiClient.GetDirectorInfluencesWithLabels(ctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("Wikidata influence fetch failed (non-fatal)")
+		return
+	}
+
+	log.Info().Int("pairs", len(influences)).Msg("Wikidata influences fetched")
+
+	upserted := 0
+	for _, inf := range influences {
+		if err := repo.UpsertInfluenceRelationship(ctx, inf.DirectorName, inf.InfluencerName); err != nil {
+			log.Debug().Err(err).Str("director", inf.DirectorName).Msg("upsert influence failed")
+			continue
+		}
+		upserted++
+	}
+
+	log.Info().Int("upserted", upserted).Msg("Wikidata influence graph wired")
 }

@@ -178,3 +178,42 @@ func extractQID(v sparqlValue) string {
 func extractLiteral(v sparqlValue) string {
 	return v.Value
 }
+
+// InfluenceWithLabels represents a director-influencer pair with human-readable names.
+type InfluenceWithLabels struct {
+	DirectorName  string
+	InfluencerName string
+}
+
+// GetDirectorInfluencesWithLabels returns director influence pairs with human-readable names.
+// Fetches up to 10k pairs. Used during full ingestion to wire INFLUENCED_BY edges.
+func (c *Client) GetDirectorInfluencesWithLabels(ctx context.Context) ([]InfluenceWithLabels, error) {
+	sparql := `
+SELECT ?directorLabel ?influencerLabel WHERE {
+  ?director wdt:P31 wd:Q5 ;
+            wdt:P106 wd:Q2526255 ;
+            wdt:P737 ?influencer .
+  ?influencer wdt:P106 wd:Q2526255 .
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }
+}
+LIMIT 10000
+`
+	rows, err := c.query(ctx, sparql)
+	if err != nil {
+		return nil, fmt.Errorf("GetDirectorInfluencesWithLabels: %w", err)
+	}
+
+	results := make([]InfluenceWithLabels, 0, len(rows))
+	for _, row := range rows {
+		dirName := extractLiteral(row["directorLabel"])
+		infName := extractLiteral(row["influencerLabel"])
+		if dirName == "" || infName == "" {
+			continue
+		}
+		results = append(results, InfluenceWithLabels{
+			DirectorName:   dirName,
+			InfluencerName: infName,
+		})
+	}
+	return results, nil
+}
