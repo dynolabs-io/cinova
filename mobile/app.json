@@ -18,17 +18,11 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "io.openova.cinova",
-      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSCameraUsageDescription": "Cinova does not use the camera.",
         "NSMicrophoneUsageDescription": "Cinova does not use the microphone.",
         "NSLocationWhenInUseUsageDescription": "Cinova uses your location to show content available in your region.",
         "UIBackgroundModes": ["audio", "fetch"]
-      },
-      "config": {
-        "googleCast": {
-          "receiverAppID": "CC1AD845"
-        }
       }
     },
     "android": {
@@ -41,8 +35,7 @@
         "INTERNET",
         "ACCESS_NETWORK_STATE",
         "ACCESS_WIFI_STATE"
-      ],
-      "googleServicesFile": "./google-services.json"
+      ]
     },
     "web": {
       "bundler": "metro",
