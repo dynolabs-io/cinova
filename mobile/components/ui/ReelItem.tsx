@@ -146,7 +146,7 @@ export default function ReelItem({
       </View>
 
       {/* Bottom content */}
-      <View style={styles.bottomContent} pointerEvents="box-none">
+      <View style={[styles.bottomContent, { pointerEvents: 'box-none' }]}>
         {/* Streaming badges row */}
         {movie.providers.length > 0 && (
           <View style={styles.providerRow}>
