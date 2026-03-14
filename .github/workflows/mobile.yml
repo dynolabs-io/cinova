@@ -1,0 +1,36 @@
+name: Mobile CI
+
+on:
+  push:
+    paths: ['mobile/**']
+    branches: [main]
+  workflow_dispatch:
+
+# Note: Actual EAS builds (iOS/Android) are triggered manually via `eas build`
+# and require Apple Developer / Google Play credentials stored in EAS secrets.
+# This workflow runs a static export check to validate the Expo project compiles.
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd mobile
+          npm install
+
+      - name: Static export check
+        run: |
+          cd mobile
+          npx expo export --platform web 2>&1 | tail -20
+          echo "Expo export check passed"

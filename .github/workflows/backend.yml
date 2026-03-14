@@ -1,0 +1,133 @@
+name: Build & Deploy Backend
+
+on:
+  push:
+    paths: ['backend/**']
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  API_IMAGE: ghcr.io/foundrylab-app/cinova/api
+  INGESTION_IMAGE: ghcr.io/foundrylab-app/cinova/ingestion
+
+jobs:
+  build-api:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      sha_short: ${{ steps.vars.outputs.sha_short }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set short SHA
+        id: vars
+        run: echo "sha_short=$(echo $GITHUB_SHA | head -c 7)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go 1.23
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: backend/go.sum
+
+      - name: Build API binary
+        run: |
+          cd backend
+          go build ./cmd/api/...
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.API_IMAGE }}:${{ steps.vars.outputs.sha_short }}
+            ${{ env.API_IMAGE }}:latest
+
+  build-ingestion:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      sha_short: ${{ steps.vars.outputs.sha_short }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set short SHA
+        id: vars
+        run: echo "sha_short=$(echo $GITHUB_SHA | head -c 7)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go 1.23
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: backend/go.sum
+
+      - name: Build ingestion binary
+        run: |
+          cd backend
+          go build ./cmd/ingestion/...
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ingestion image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile.ingestion
+          push: true
+          tags: |
+            ${{ env.INGESTION_IMAGE }}:${{ steps.vars.outputs.sha_short }}
+            ${{ env.INGESTION_IMAGE }}:latest
+
+  deploy:
+    needs: [build-api, build-ingestion]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout openova-private (manifests repo)
+        uses: actions/checkout@v4
+        with:
+          repository: openova-io/openova-private
+          token: ${{ secrets.OPENOVA_PRIVATE_PAT }}
+          path: openova-private
+
+      - name: Update API manifest with new SHA
+        env:
+          SHA_SHORT: ${{ needs.build-api.outputs.sha_short }}
+        run: |
+          MANIFEST="openova-private/clusters/contabo-mkt/apps/cinova/services/api.yaml"
+          sed -i "s|image: ${API_IMAGE}:.*|image: ${API_IMAGE}:${SHA_SHORT}|" "$MANIFEST"
+          echo "Updated API manifest to SHA ${SHA_SHORT}:"
+          grep "image:" "$MANIFEST"
+
+      - name: Commit and push manifest updates
+        env:
+          SHA_SHORT: ${{ needs.build-api.outputs.sha_short }}
+        run: |
+          cd openova-private
+          git config user.name "cinova-bot"
+          git config user.email "bot@foundrylab.app"
+          git add clusters/contabo-mkt/apps/cinova/
+          git diff --staged --quiet && echo "No changes to commit" && exit 0
+          git commit -m "deploy: update cinova images to ${SHA_SHORT}"
+          git push

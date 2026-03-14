@@ -1,0 +1,173 @@
+/**
+ * Cinova — Core TypeScript types
+ */
+
+export interface Movie {
+  id: number;
+  tmdbId: number;
+  title: string;
+  originalTitle: string;
+  overview: string;
+  tagline?: string;
+  backdropPath: string | null;
+  posterPath: string | null;
+  releaseDate: string;
+  year: number;
+  runtime: number | null;
+  language: string;
+  genres: Genre[];
+  themes: Theme[];
+  moods: Mood[];
+  cinovaScore: number | null;
+  voteAverage: number;
+  voteCount: number;
+  popularity: number;
+  providers: WatchProvider[];
+  cast: CastMember[];
+  trailer?: Trailer;
+  aiDescription?: string;
+}
+
+export interface TVShow {
+  id: number;
+  tmdbId: number;
+  name: string;
+  originalName: string;
+  overview: string;
+  tagline?: string;
+  backdropPath: string | null;
+  posterPath: string | null;
+  firstAirDate: string;
+  year: number;
+  episodeRuntime: number[];
+  language: string;
+  genres: Genre[];
+  themes: Theme[];
+  moods: Mood[];
+  cinovaScore: number | null;
+  voteAverage: number;
+  voteCount: number;
+  popularity: number;
+  providers: WatchProvider[];
+  seasons: number;
+  aiDescription?: string;
+}
+
+export interface Genre {
+  id: number;
+  name: string;
+}
+
+export interface Theme {
+  id: number;
+  name: string;
+}
+
+export interface Mood {
+  id: number;
+  name: string;
+}
+
+export interface WatchProvider {
+  providerId: number;
+  providerName: string;
+  logoPath: string | null;
+  displayPriority: number;
+  link: string;
+}
+
+export interface CastMember {
+  id: number;
+  name: string;
+  character: string;
+  profilePath: string | null;
+  order: number;
+}
+
+export interface Person {
+  id: number;
+  tmdbId: number;
+  name: string;
+  biography: string;
+  birthday: string | null;
+  deathday: string | null;
+  placeOfBirth: string | null;
+  profilePath: string | null;
+  knownForDepartment: string;
+  nationality: string | null;
+  popularity: number;
+  knownFor: Movie[];
+  filmography: FilmographyEntry[];
+}
+
+export interface FilmographyEntry {
+  id: number;
+  tmdbId: number;
+  title: string;
+  posterPath: string | null;
+  releaseDate: string;
+  year: number;
+  character?: string;
+  job?: string;
+  mediaType: 'movie' | 'tv';
+}
+
+export interface Provider {
+  id: number;
+  name: string;
+  logoPath: string;
+  color: string;
+}
+
+export interface SearchResult {
+  items: (Movie | TVShow)[];
+  total: number;
+  page: number;
+  hasMore: boolean;
+  query: string;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  displayName?: string;
+  avatarUrl?: string;
+  createdAt: string;
+  country: string;
+  isPremium: boolean;
+  stats: UserStats;
+}
+
+export interface UserStats {
+  saved: number;
+  rated: number;
+  dismissed: number;
+}
+
+export interface AuthResponse {
+  token: string;
+  refreshToken: string;
+  sessionId: string;
+  user: User;
+  expiresAt: string;
+}
+
+export interface CinovaScoreData {
+  score: number;
+  breakdown: {
+    quality: number;
+    relevance: number;
+    availability: number;
+  };
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface Trailer {
+  key: string;
+  site: 'YouTube' | 'Vimeo';
+  name: string;
+  type: string;
+  official: boolean;
+}
+
+export type MediaType = 'movie' | 'tv';
