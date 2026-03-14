@@ -36,17 +36,17 @@
     "react-native-screens": "~4.4.0",
     "@react-native-async-storage/async-storage": "^2.1.0",
     "expo-constants": "~17.0.0",
-    "expo-haptics": "~14.0.0",
-    "expo-notifications": "~0.29.0",
-    "expo-device": "~7.0.0",
-    "@react-native-community/netinfo": "^11.4.1"
+    "expo-haptics": "~15.0.8",
+    "expo-notifications": "~0.32.16",
+    "expo-device": "~8.0.10",
+    "@react-native-community/netinfo": "11.4.1"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
-    "@types/react": "~18.3.12",
-    "typescript": "~5.8.0",
+    "@types/react": "~19.1.10",
+    "typescript": "~5.9.2",
     "eslint": "^8.57.0",
-    "eslint-config-expo": "~8.0.0",
+    "eslint-config-expo": "~10.0.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0"
   },
