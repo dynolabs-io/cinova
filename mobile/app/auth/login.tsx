@@ -49,11 +49,11 @@ export default function LoginScreen() {
       const response = await login(email.trim().toLowerCase(), password, sessionId ?? '');
 
       // Persist token securely
-      await saveToken(response.token);
+      await saveToken(response.access_token);
 
-      // Update store — session ID from server may differ after merge
-      setUser(response.user);
-      setSessionId(response.sessionId);
+      // Update store
+      setUser({ id: response.user_id, email: email.trim().toLowerCase(), country: 'US', isPremium: false, createdAt: '', stats: { saved: 0, rated: 0, dismissed: 0 } });
+      setSessionId(sessionId ?? '');
 
       router.replace('/(tabs)');
     } catch (err: unknown) {

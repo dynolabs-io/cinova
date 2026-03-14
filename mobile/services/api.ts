@@ -170,11 +170,21 @@ export async function search(q: string, country = 'US'): Promise<SearchResult> {
 
 // ── Interactions (require auth) ───────────────────────────────────────────────
 
-export async function rateTitle(tmdbId: number, mediaType: 'movie' | 'tv', rating: 'like' | 'dislike'): Promise<void> {
+// rating accepts 'like'|'dislike' or a numeric score (≥6 = like, <6 = dislike)
+export async function rateTitle(tmdbId: number, ratingOrMediaType: 'like' | 'dislike' | 'movie' | 'tv' | number = 'like', ratingArg?: 'like' | 'dislike' | number): Promise<void> {
+  let mediaType: 'movie' | 'tv' = 'movie';
+  let rating: 'like' | 'dislike' = 'like';
+  if (ratingOrMediaType === 'movie' || ratingOrMediaType === 'tv') {
+    mediaType = ratingOrMediaType;
+    const r = ratingArg ?? 'like';
+    rating = typeof r === 'number' ? (r >= 6 ? 'like' : 'dislike') : r;
+  } else {
+    rating = typeof ratingOrMediaType === 'number' ? (ratingOrMediaType >= 6 ? 'like' : 'dislike') : ratingOrMediaType as 'like' | 'dislike';
+  }
   await api.post('/api/v1/me/rate', { tmdb_id: tmdbId, media_type: mediaType, rating });
 }
 
-export async function saveTitle(tmdbId: number, mediaType: 'movie' | 'tv'): Promise<void> {
+export async function saveTitle(tmdbId: number, mediaType: 'movie' | 'tv' = 'movie'): Promise<void> {
   await api.post('/api/v1/me/save', { tmdb_id: tmdbId, media_type: mediaType });
 }
 
@@ -182,7 +192,7 @@ export async function unsaveTitle(tmdbId: number, mediaType: 'movie' | 'tv' = 'm
   await api.delete('/api/v1/me/save', { data: { tmdb_id: tmdbId, media_type: mediaType } });
 }
 
-export async function dismissTitle(tmdbId: number, mediaType: 'movie' | 'tv'): Promise<void> {
+export async function dismissTitle(tmdbId: number, mediaType: 'movie' | 'tv' = 'movie'): Promise<void> {
   await api.post('/api/v1/me/dismiss', { tmdb_id: tmdbId, media_type: mediaType });
 }
 
@@ -205,5 +215,9 @@ export async function getTopRated(country = 'US', limit = 20): Promise<Movie[]> 
 export async function searchMovies(q: string, country = 'US'): Promise<SearchResult> {
   return search(q, country);
 }
+
+/** Aliases matching screen import names */
+export const login = authLogin;
+export const signUp = authSignup;
 
 export default api;

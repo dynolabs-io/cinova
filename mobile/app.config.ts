@@ -30,7 +30,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     package: 'io.openova.cinova',
     versionCode: 1,
-    googleServicesFile: './google-services.json',
     permissions: [
       'RECEIVE_BOOT_COMPLETED',
       'VIBRATE',
@@ -50,7 +49,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         icon: './assets/notification-icon.png',
         color: '#6C5CE7',
-        sounds: ['./assets/notification.wav'],
       },
     ],
   ],
