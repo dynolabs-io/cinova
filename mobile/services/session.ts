@@ -42,26 +42,32 @@ function uuidv4(): string {
  * existing session ID.
  */
 export async function initSession(): Promise<string> {
+  console.log('[CINOVA] initSession: start');
   let sessionId: string | null = null;
-  try { sessionId = await SecureStore.getItemAsync(KEY_SESSION_ID); } catch { /* web */ }
+  try { sessionId = await SecureStore.getItemAsync(KEY_SESSION_ID); } catch (e) { console.log('[CINOVA] initSession: SecureStore.get sessionId threw', String(e)); }
 
   if (!sessionId) {
     sessionId = uuidv4();
     try { await SecureStore.setItemAsync(KEY_SESSION_ID, sessionId); } catch { /* web */ }
   }
+  console.log('[CINOVA] initSession: sessionId=', sessionId?.slice(0, 8));
 
   let existingToken: string | null = null;
-  try { existingToken = await SecureStore.getItemAsync(KEY_JWT); } catch { /* web */ }
+  try { existingToken = await SecureStore.getItemAsync(KEY_JWT); } catch (e) { console.log('[CINOVA] initSession: SecureStore.get JWT threw', String(e)); }
+  console.log('[CINOVA] initSession: existingToken=', existingToken ? 'yes' : 'no');
 
   if (!existingToken) {
     try {
+      console.log('[CINOVA] initSession: fetching anonymous token...');
       const token = await fetchAnonymousToken(sessionId);
+      console.log('[CINOVA] initSession: got token', token ? 'yes' : 'no');
       try { await SecureStore.setItemAsync(KEY_JWT, token); } catch { /* web */ }
-    } catch {
-      // Fail silently — app will retry on first authenticated request
+    } catch (e) {
+      console.log('[CINOVA] initSession: fetchAnonymousToken threw', String(e));
     }
   }
 
+  console.log('[CINOVA] initSession: done');
   return sessionId;
 }
 

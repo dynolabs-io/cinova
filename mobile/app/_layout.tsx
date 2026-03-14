@@ -40,13 +40,16 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function bootstrap() {
+      console.log('[CINOVA] bootstrap: start, hasOnboarded=', hasOnboarded);
       try {
         const sessionId = await initSession();
         setSessionId(sessionId);
-      } catch {
-        // Session init failed — app still works in degraded mode
+        console.log('[CINOVA] bootstrap: session ready');
+      } catch (e) {
+        console.log('[CINOVA] bootstrap: initSession threw', String(e));
       } finally {
         await SplashScreen.hideAsync();
+        console.log('[CINOVA] bootstrap: splash hidden, routing to', hasOnboarded ? '(tabs)' : 'onboarding');
         if (!hasOnboarded) {
           router.replace('/onboarding');
         }

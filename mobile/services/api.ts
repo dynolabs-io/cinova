@@ -57,6 +57,7 @@ const api: AxiosInstance = axios.create({
 // Request interceptor: attach JWT + Session-ID
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
+    console.log('[CINOVA] api:request', config.method, config.url);
     const [token, sessionId] = await Promise.all([getToken(), getSessionId()]);
     if (token) config.headers.Authorization = `Bearer ${token}`;
     if (sessionId) config.headers['X-Session-ID'] = sessionId;
