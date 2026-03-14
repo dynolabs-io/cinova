@@ -1,0 +1,33 @@
+{
+  "name": "Cinova",
+  "subtitle": "AI Movie & TV Discovery",
+  "description": "Cinova is the AI-powered movie and TV show discovery app that learns what you love and surfaces hidden gems before everyone else knows about them.\n\nDiscover content with a TikTok-style vertical feed. Swipe through movies, save what you want to watch, and let our AI find your next obsession.\n\nFeatures:\n• AI-powered recommendations using your taste profile\n• CinovaScore — proprietary quality rating that goes beyond star ratings\n• TikTok-style Discover feed with full-screen trailers\n• Natural language search: \"dark thrillers like Parasite\"\n• Streaming availability for Netflix, Disney+, Apple TV+, and more\n• Track your watchlist across all streaming services\n• Anonymous-first: use without signing up\n\nFrom the makers of OpenOva — technology that actually works for you.",
+  "keywords": [
+    "movies",
+    "tv shows",
+    "streaming",
+    "recommendations",
+    "watchlist",
+    "AI",
+    "film",
+    "series",
+    "discovery",
+    "netflix",
+    "disney+",
+    "apple tv+"
+  ],
+  "supportUrl": "https://cinova.app/support",
+  "marketingUrl": "https://cinova.app",
+  "privacyPolicyUrl": "https://cinova.app/privacy",
+  "categories": {
+    "ios": ["ENTERTAINMENT", "UTILITIES"],
+    "android": "ENTERTAINMENT"
+  },
+  "contentRating": {
+    "ios": "12+",
+    "android": "Teen"
+  },
+  "appStoreId": "",
+  "bundleId": "io.openova.cinova",
+  "androidPackage": "io.openova.cinova"
+}
