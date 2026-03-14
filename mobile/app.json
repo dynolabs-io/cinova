@@ -17,7 +17,7 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.foundrylab.cinova",
+      "bundleIdentifier": "io.openova.cinova",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSCameraUsageDescription": "Cinova does not use the camera.",
@@ -36,7 +36,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0a0a0a"
       },
-      "package": "app.foundrylab.cinova",
+      "package": "io.openova.cinova",
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE",
