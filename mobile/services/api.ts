@@ -30,8 +30,10 @@ function camelizeKeys(obj: unknown): unknown {
 function normalizeMedia(item: unknown): unknown {
   const m = camelizeKeys(item) as Record<string, unknown>;
   // ensure id === tmdbId (both needed by components)
-  if (m.tmdbId) m.id = m.tmdbId;
-  else if (m.id) m.tmdbId = m.id;
+  if (m.tmdbId) { m.id = m.tmdbId; }
+  else if (m.id) { m.tmdbId = m.id; }
+  // guard: if still missing, set a sentinel so keyExtractors never see undefined
+  if (!m.id && !m.tmdbId) { m.id = 0; m.tmdbId = 0; }
   // derive year from releaseDate / firstAirDate if missing
   if (!m.year) {
     const dateStr = (m.releaseDate ?? m.firstAirDate) as string | undefined;

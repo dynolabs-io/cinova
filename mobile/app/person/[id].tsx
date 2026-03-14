@@ -144,7 +144,7 @@ export default function PersonDetailScreen() {
               <Text style={styles.sectionTitle}>Known For</Text>
               <FlatList
                 data={person.knownFor}
-                keyExtractor={(item) => String(item.id)}
+                keyExtractor={(item, index) => String(item.tmdbId ?? item.id ?? index)}
                 renderItem={({ item }) => <MovieCard movie={item} size="md" />}
                 horizontal
                 showsHorizontalScrollIndicator={false}

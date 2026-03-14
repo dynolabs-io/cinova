@@ -322,7 +322,7 @@ export default function MovieDetailScreen() {
               <Text style={styles.sectionTitle}>Cast</Text>
               <FlatList
                 data={movie.cast.slice(0, 15)}
-                keyExtractor={(item) => String(item.id)}
+                keyExtractor={(item, index) => String(item.tmdbId ?? item.id ?? index)}
                 renderItem={({ item }) => <CastCard member={item} />}
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -337,7 +337,7 @@ export default function MovieDetailScreen() {
               <Text style={styles.sectionTitle}>More Like This</Text>
               <FlatList
                 data={similar.slice(0, 10)}
-                keyExtractor={(item) => String(item.id)}
+                keyExtractor={(item, index) => String(item.tmdbId ?? item.id ?? index)}
                 renderItem={({ item }) => <MovieCard movie={item} size="md" />}
                 horizontal
                 showsHorizontalScrollIndicator={false}

@@ -130,7 +130,7 @@ export default function DiscoverScreen() {
       <FlatList
         data={movies}
         renderItem={renderItem}
-        keyExtractor={(item) => String(item.id)}
+        keyExtractor={(item, index) => String(item.tmdbId ?? item.id ?? index)}
         pagingEnabled
         showsVerticalScrollIndicator={false}
         snapToInterval={SCREEN_HEIGHT}

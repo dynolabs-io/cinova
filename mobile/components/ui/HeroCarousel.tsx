@@ -100,7 +100,7 @@ export default function HeroCarousel({ movies, onSave }: HeroCarouselProps) {
         ref={flatListRef}
         data={movies}
         renderItem={renderItem}
-        keyExtractor={(item) => String(item.id)}
+        keyExtractor={(item, index) => String(item.tmdbId ?? item.id ?? index)}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}

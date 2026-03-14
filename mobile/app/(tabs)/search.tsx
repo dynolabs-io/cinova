@@ -188,7 +188,7 @@ export default function SearchScreen() {
           ) : hasResults ? (
             <FlatList
               data={movies}
-              keyExtractor={(item) => String(item.id)}
+              keyExtractor={(item, index) => String(item.tmdbId ?? item.id ?? index)}
               renderItem={({ item }) => (
                 <View style={styles.lgCard}>
                   <MovieCard movie={item} size="lg" />

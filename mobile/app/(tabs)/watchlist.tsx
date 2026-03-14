@@ -136,7 +136,7 @@ export default function WatchlistScreen() {
       ) : (
         <FlatList
           data={filtered}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={(item, index) => String(item.tmdbId ?? item.id ?? index)}
           renderItem={renderItem}
           numColumns={2}
           contentContainerStyle={styles.grid}
