@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	neo4j "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/rs/zerolog/log"
 
 	"github.com/foundrylab-app/cinova/backend/internal/auth"
@@ -288,20 +289,16 @@ func (h *Handler) executeSearch(ctx context.Context, whereClause, country string
 			continue
 		}
 
-		// Determine if Movie or TVShow from node labels
-		type labeller interface {
-			Labels() []string
-			Props() map[string]interface{}
-		}
-		ln, isLabeller := node.(labeller)
-		if !isLabeller {
+		// Neo4j Go driver v5 returns neo4j.Node with Labels and Props as struct fields
+		ln, isNode := node.(neo4j.Node)
+		if !isNode {
 			continue
 		}
 
-		props := ln.Props()
+		props := ln.Props
 		mediaType := "movie"
 		title := ""
-		for _, label := range ln.Labels() {
+		for _, label := range ln.Labels {
 			if label == "TVShow" {
 				mediaType = "tv"
 				break
