@@ -5,6 +5,7 @@
  *  - StatusBar dark (light text on dark background)
  *  - SafeAreaProvider
  *  - QueryClientProvider (react-query)
+ *  - Load Feather font before splash hides (prevents "?" icons)
  *  - Anonymous session initialisation on first mount
  */
 
@@ -15,39 +16,16 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-// ── Font loading fixes ────────────────────────────────────────────────────────
-//
-// Problem 1: CTFontManagerError 104 in Expo Go
-//   Expo Go pre-registers vector-icon fonts in the native binary.  A second
-//   registration attempt throws code 104 ("already registered"). Swallow it
-//   so loadSingleFontAsync completes and expo-font calls markLoaded().
-//
-// Problem 2: Icons show "?" on first render
-//   @expo/vector-icons checks Font.isLoaded() synchronously on first render.
-//   Even after the async load succeeds, the component may not re-render.
-//   Fix: call markLoaded() for every vector-icon font at module level so that
-//   Font.isLoaded() returns true immediately — before any icon renders.
-//   In Expo Go these fonts ARE natively available (pre-bundled), so the glyphs
-//   will render correctly. In production the fonts load normally via loadAsync.
-//
-// @ts-ignore — internal paths, stable within expo-font 14.x
+import * as Font from 'expo-font';
+import { Feather } from '@expo/vector-icons';
+// Patch ExpoFontLoader.loadAsync to swallow CTFontManagerError 104.
+// In Expo Go the vector-icon fonts are pre-registered in the host binary;
+// a second registration attempt throws code 104 ("already registered").
+// By swallowing ALL errors here, Font.loadAsync() completes normally and
+// Font.isLoaded() returns true, so icons render on first paint.
+// @ts-ignore — internal path, stable within expo-font 14.x
 import ExpoFontLoader from 'expo-font/build/ExpoFontLoader';
-// @ts-ignore
-import { markLoaded } from 'expo-font/build/memory';
 {
-  // Mark all @expo/vector-icons fonts as loaded upfront so icon components
-  // never see isLoaded()=false on first render.
-  const vectorIconFonts = [
-    'feather', 'ionicons', 'material-icons', 'material-community',
-    'font-awesome', 'font-awesome-5', 'ant-design', 'entypo',
-    'evilicons', 'foundation', 'octicons', 'simple-line-icons', 'zocial',
-  ];
-  vectorIconFonts.forEach((name) => {
-    try { markLoaded(name); } catch { /* ignore */ }
-  });
-
-  // Also patch loadAsync to swallow duplicate-registration errors (104) so
-  // subsequent explicit loadAsync calls don't throw.
   const _orig = ExpoFontLoader.loadAsync.bind(ExpoFontLoader);
   ExpoFontLoader.loadAsync = async (name: string, uri: string) => {
     try {
@@ -61,7 +39,7 @@ import { initSession } from '../services/session';
 import { useAppStore } from '../store/useAppStore';
 import { Colors } from '../constants/theme';
 
-// Keep splash visible until session is ready
+// Keep splash visible until fonts + session are ready
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient({
@@ -82,6 +60,15 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function bootstrap() {
+      // Load Feather font BEFORE hiding splash so tab icons are ready on
+      // first render. The ExpoFontLoader patch above swallows the 104 error
+      // in Expo Go, so this always resolves successfully.
+      try {
+        await Font.loadAsync(Feather.font);
+      } catch {
+        // Ignore — patch already handles this
+      }
+
       try {
         const sessionId = await initSession();
         setSessionId(sessionId);

@@ -1,8 +1,15 @@
 /**
  * HeroCarousel — Auto-scrolling full-width hero banner
  *
- * Displays trending movies with backdrop images, gradient overlay,
- * movie info, and two CTA buttons. Auto-advances every 5 seconds.
+ * Layout:
+ *   ┌─────────────────────────────────┐  ← HERO_HEIGHT (image + title overlay)
+ *   │  backdrop image                 │
+ *   │  gradient → title / pills       │
+ *   └─────────────────────────────────┘
+ *   ┌─────────────────────────────────┐  ← controls panel (dark bg)
+ *   │  [▶ Watch Now]  [＋ Save]       │
+ *   │        ● ○ ○ ○  (dots)          │
+ *   └─────────────────────────────────┘
  */
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
@@ -22,7 +29,7 @@ import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants/th
 import type { Movie } from '../../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const HERO_HEIGHT = SCREEN_HEIGHT * 0.62;
+const HERO_HEIGHT = SCREEN_HEIGHT * 0.55;
 const TMDB_IMAGE = 'https://image.tmdb.org/t/p/w1280';
 const AUTO_SCROLL_INTERVAL = 5000;
 
@@ -78,14 +85,9 @@ export default function HeroCarousel({ movies, onSave }: HeroCarouselProps) {
     if (movies.length > 1) startAutoScroll();
   };
 
-  const renderItem = ({ item, index }: { item: Movie; index: number }) => (
-    <HeroItem
-      movie={item}
-      currentIndex={currentIndex}
-      totalCount={movies.length}
-      onWatchNow={() => router.push(`/movie/${item.id}`)}
-      onSave={() => onSave?.(item)}
-    />
+  const renderItem = useCallback(
+    ({ item }: { item: Movie }) => <HeroItem movie={item} />,
+    []
   );
 
   const getItemLayout = (_: unknown, index: number) => ({
@@ -96,41 +98,73 @@ export default function HeroCarousel({ movies, onSave }: HeroCarouselProps) {
 
   if (!movies.length) return null;
 
-  return (
-    <View style={styles.container}>
-      <FlatList
-        ref={flatListRef}
-        data={movies}
-        renderItem={renderItem}
-        keyExtractor={(item, index) => String(item.tmdbId ?? item.id ?? index)}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-        onScrollBeginDrag={handleScrollBeginDrag}
-        onScrollEndDrag={handleScrollEndDrag}
-        getItemLayout={getItemLayout}
-        initialNumToRender={2}
-        maxToRenderPerBatch={3}
-        removeClippedSubviews
-      />
+  const currentMovie = movies[currentIndex];
 
+  return (
+    <View>
+      {/* ── Image strip ──────────────────────────────────────────────────── */}
+      <View style={styles.imageSection}>
+        <FlatList
+          ref={flatListRef}
+          data={movies}
+          renderItem={renderItem}
+          keyExtractor={(item, index) => String(item.tmdbId ?? item.id ?? index)}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
+          onScrollBeginDrag={handleScrollBeginDrag}
+          onScrollEndDrag={handleScrollEndDrag}
+          getItemLayout={getItemLayout}
+          initialNumToRender={2}
+          maxToRenderPerBatch={3}
+          removeClippedSubviews
+        />
+      </View>
+
+      {/* ── Controls panel (below image) ─────────────────────────────────── */}
+      <View style={styles.controls}>
+        <View style={styles.buttons}>
+          <TouchableOpacity
+            style={styles.btnWatchNow}
+            onPress={() => router.push(`/movie/${currentMovie.id}`)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.btnWatchNowText}>▶  Watch Now</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.btnSave}
+            onPress={() => onSave?.(currentMovie)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.btnSaveText}>＋ Save</Text>
+          </TouchableOpacity>
+        </View>
+
+        {movies.length > 1 && (
+          <View style={styles.dots}>
+            {movies.map((_, i) => (
+              <View
+                key={i}
+                style={[styles.dot, i === currentIndex ? styles.dotActive : styles.dotInactive]}
+              />
+            ))}
+          </View>
+        )}
+      </View>
     </View>
   );
 }
 
-// ── Individual hero item ──────────────────────────────────────────────────────
+// ── Individual hero item (image + title overlay only) ─────────────────────────
 
 interface HeroItemProps {
   movie: Movie;
-  currentIndex: number;
-  totalCount: number;
-  onWatchNow: () => void;
-  onSave: () => void;
 }
 
-function HeroItem({ movie, currentIndex, totalCount, onWatchNow, onSave }: HeroItemProps) {
+function HeroItem({ movie }: HeroItemProps) {
   const genreLabel = movie.genres.slice(0, 2).map((g) => g.name).join(' · ');
 
   return (
@@ -143,15 +177,13 @@ function HeroItem({ movie, currentIndex, totalCount, onWatchNow, onSave }: HeroI
         placeholder={{ blurhash: 'L00000fQfQfQfQfQfQfQfQfQfQfQ' }}
       />
 
-      {/* Gradient overlay */}
       <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.9)', Colors.background]}
-        locations={[0, 0.4, 0.75, 1]}
+        colors={['transparent', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.85)', Colors.background]}
+        locations={[0, 0.45, 0.8, 1]}
         style={styles.gradient}
       />
 
-      {/* Content */}
-      <View style={styles.content}>
+      <View style={styles.overlay}>
         {movie.tagline ? (
           <Text style={styles.tagline} numberOfLines={1}>
             {movie.tagline}
@@ -177,43 +209,13 @@ function HeroItem({ movie, currentIndex, totalCount, onWatchNow, onSave }: HeroI
             </View>
           ) : null}
         </View>
-
-        <View style={styles.buttons}>
-          <TouchableOpacity
-            style={styles.btnWatchNow}
-            onPress={onWatchNow}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.btnWatchNowText}>▶  Watch Now</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.btnSave}
-            onPress={onSave}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.btnSaveText}>＋ Save</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Pagination dots — below buttons, inside content flow */}
-        {totalCount > 1 && (
-          <View style={styles.dots}>
-            {Array.from({ length: totalCount }).map((_, i) => (
-              <View
-                key={i}
-                style={[styles.dot, i === currentIndex ? styles.dotActive : styles.dotInactive]}
-              />
-            ))}
-          </View>
-        )}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  imageSection: {
     width: SCREEN_WIDTH,
     height: HERO_HEIGHT,
   },
@@ -233,15 +235,15 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: HERO_HEIGHT * 0.75,
+    height: HERO_HEIGHT * 0.7,
   },
-  content: {
+  overlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     paddingHorizontal: Spacing[4],
-    paddingBottom: Spacing[4],
+    paddingBottom: Spacing[3],
   },
   tagline: {
     color: Colors.textSecondary,
@@ -257,13 +259,12 @@ const styles = StyleSheet.create({
     fontWeight: Typography.black,
     letterSpacing: Typography.tighter,
     lineHeight: Typography['3xl'] * Typography.tight,
-    marginBottom: Spacing[3],
+    marginBottom: Spacing[2],
   },
   pills: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing[1.5],
-    marginBottom: Spacing[4],
   },
   pill: {
     backgroundColor: Colors.overlayLight,
@@ -277,6 +278,14 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: Typography.xs,
     fontWeight: Typography.medium,
+  },
+  // ── Controls panel ──────────────────────────────────────────────────────────
+  controls: {
+    backgroundColor: Colors.background,
+    paddingHorizontal: Spacing[4],
+    paddingTop: Spacing[3],
+    paddingBottom: Spacing[2],
+    gap: Spacing[3],
   },
   buttons: {
     flexDirection: 'row',
@@ -313,7 +322,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: Spacing[1.5],
-    marginTop: Spacing[3],
   },
   dot: {
     borderRadius: Radius.full,
