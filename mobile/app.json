@@ -18,6 +18,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.foundrylab.cinova",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSCameraUsageDescription": "Cinova does not use the camera.",
         "NSMicrophoneUsageDescription": "Cinova does not use the microphone.",
@@ -77,7 +78,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "your-eas-project-id"
+        "projectId": "YOUR_EAS_PROJECT_ID"
       }
     }
   }

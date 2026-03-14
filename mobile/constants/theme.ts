@@ -71,6 +71,11 @@ export const Typography = {
   '4xl': 40,
   '5xl': 48,
 
+  // Aliases used by auth screens and UI components
+  xxl: 24,
+  xxxl: 32,
+  display: 40,
+
   // Font weights (React Native uses string values)
   thin: '100' as const,
   light: '300' as const,
