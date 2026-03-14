@@ -307,21 +307,22 @@ const styles = StyleSheet.create({
   },
   dots: {
     position: 'absolute',
-    bottom: Spacing[3],
+    bottom: Spacing[20],
     alignSelf: 'center',
     flexDirection: 'row',
-    gap: Spacing[1],
+    gap: Spacing[1.5],
   },
   dot: {
-    height: 3,
     borderRadius: Radius.full,
   },
   dotActive: {
-    width: 20,
+    width: 8,
+    height: 8,
     backgroundColor: Colors.primary,
   },
   dotInactive: {
     width: 6,
+    height: 6,
     backgroundColor: Colors.textMuted,
   },
 });

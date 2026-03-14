@@ -15,9 +15,9 @@ export const Colors = {
   overlayLight: 'rgba(0,0,0,0.4)',
 
   // Brand
-  primary: '#E50914',         // Cinematic red
-  primaryDark: '#B20710',
-  primaryLight: '#FF1F2C',
+  primary: '#3B82F6',         // OpenOva blue
+  primaryDark: '#2563EB',
+  primaryLight: '#60A5FA',
 
   // Score colors
   scoreHigh: '#21D07A',       // Green — 80+
@@ -36,7 +36,7 @@ export const Colors = {
 
   // Tab bar
   tabBarBackground: '#0f0f0f',
-  tabBarActive: '#E50914',
+  tabBarActive: '#3B82F6',
   tabBarInactive: '#6B6B6B',
 
   // Gradient stops
@@ -158,7 +158,7 @@ export const Shadows = {
     elevation: 12,
   },
   glow: {
-    shadowColor: '#E50914',
+    shadowColor: '#3B82F6',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
     shadowRadius: 12,
