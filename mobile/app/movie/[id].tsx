@@ -31,6 +31,7 @@ import CinovaScore from '../../components/ui/CinovaScore';
 import MovieCard from '../../components/ui/MovieCard';
 import StreamingBadge from '../../components/ui/StreamingBadge';
 import { getMovie, saveTitle, rateTitle, dismissTitle, getRecommendations } from '../../services/api';
+import { shareMovie } from '../../services/sharing';
 import { useAppStore } from '../../store/useAppStore';
 import {
   Colors,
@@ -212,6 +213,12 @@ export default function MovieDetailScreen() {
             label={userRating ? `${userRating}/10` : 'Rate'}
             active={userRating != null}
             onPress={handleRate}
+          />
+          <ActionBtn
+            icon="↑"
+            label="Share"
+            active={false}
+            onPress={() => movie && shareMovie(movie)}
           />
           <ActionBtn
             icon="✕"

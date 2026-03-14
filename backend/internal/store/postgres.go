@@ -45,6 +45,11 @@ func (s *PostgresStore) Close() {
 	s.pool.Close()
 }
 
+// Pool returns the underlying pgxpool.Pool for raw SQL execution.
+func (s *PostgresStore) Pool() *pgxpool.Pool {
+	return s.pool
+}
+
 // Ping checks database connectivity.
 func (s *PostgresStore) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)

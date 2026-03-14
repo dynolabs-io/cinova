@@ -149,7 +149,7 @@ export async function saveTitle(tmdbId: number, mediaType: 'movie' | 'tv'): Prom
   await api.post('/api/v1/me/save', { tmdb_id: tmdbId, media_type: mediaType });
 }
 
-export async function unsaveTitle(tmdbId: number, mediaType: 'movie' | 'tv'): Promise<void> {
+export async function unsaveTitle(tmdbId: number, mediaType: 'movie' | 'tv' = 'movie'): Promise<void> {
   await api.delete('/api/v1/me/save', { data: { tmdb_id: tmdbId, media_type: mediaType } });
 }
 
@@ -160,6 +160,21 @@ export async function dismissTitle(tmdbId: number, mediaType: 'movie' | 'tv'): P
 export async function getWatchlist(page = 1, limit = 20): Promise<Movie[]> {
   const { data } = await api.get<Movie[]>('/api/v1/me/watchlist', { params: { page, limit } });
   return data;
+}
+
+/** Alias used by home screen — maps to /api/v1/popular */
+export async function getNewOnNetflix(country = 'US', limit = 20): Promise<Movie[]> {
+  return getPopular(country, limit);
+}
+
+/** Alias used by home screen — maps to /api/v1/trending */
+export async function getTopRated(country = 'US', limit = 20): Promise<Movie[]> {
+  return getTrending(country, limit);
+}
+
+/** Alias used by search screen */
+export async function searchMovies(q: string, country = 'US'): Promise<SearchResult> {
+  return search(q, country);
 }
 
 export default api;
