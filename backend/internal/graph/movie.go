@@ -190,12 +190,13 @@ func (r *MovieRepository) GetTrending(ctx context.Context, country string, limit
 		ORDER BY m.cinova_score DESC, m.popularity DESC
 		LIMIT $limit
 		OPTIONAL MATCH (m)-[:IN_GENRE]->(g:Genre)
-		OPTIONAL MATCH (m)-[:AVAILABLE_ON {country: $country}]->(prov:Provider)
+		OPTIONAL MATCH (m)-[avail:AVAILABLE_ON {country: $country}]->(prov:Provider)
 		RETURN m,
 		       collect(DISTINCT {id: g.id, name: g.name})              AS genres,
 		       collect(DISTINCT {provider_id: prov.provider_id,
 		                          provider_name: prov.provider_name,
-		                          logo_path: prov.logo_path})            AS providers
+		                          logo_path: prov.logo_path,
+		                          type: avail.type})                     AS providers
 	`, map[string]interface{}{"country": country, "limit": limit})
 	if err != nil {
 		return nil, fmt.Errorf("GetTrending query: %w", err)
@@ -702,6 +703,7 @@ func toProviders(v interface{}) []models.Provider {
 			ProviderID:   int64Val(m["provider_id"]),
 			ProviderName: strVal(m["provider_name"]),
 			LogoPath:     strVal(m["logo_path"]),
+			Type:         strVal(m["type"]),
 		})
 	}
 	return providers
@@ -806,30 +808,15 @@ func (r *MovieRepository) UpsertTVShow(ctx context.Context, show *models.TVShow)
 		}
 	}
 
-	// Upsert providers (reuse existing UpsertProvider, stored as int(show.TMDBID))
+	// Upsert providers grouped by country (UpsertProvider handles Movie and TVShow nodes)
 	if len(show.Providers) > 0 {
-		country := ""
-		if len(show.Providers) > 0 {
-			country = show.Providers[0].Country
+		byCountry := make(map[string][]models.Provider)
+		for _, p := range show.Providers {
+			byCountry[p.Country] = append(byCountry[p.Country], p)
 		}
-		for _, prov := range show.Providers {
-			if err := r.driver.RunWriteUnit(ctx, `
-				MERGE (p:Provider {provider_id: $provider_id})
-				SET p.provider_name = $provider_name,
-				    p.logo_path     = $logo_path
-				WITH p
-				MATCH (s:TVShow {tmdb_id: $tmdb_id})
-				MERGE (s)-[a:AVAILABLE_ON {country: $country}]->(p)
-				SET a.type = $type
-			`, map[string]interface{}{
-				"provider_id":   prov.ProviderID,
-				"provider_name": prov.ProviderName,
-				"logo_path":     prov.LogoPath,
-				"tmdb_id":       show.TMDBID,
-				"country":       country,
-				"type":          prov.Type,
-			}); err != nil {
-				return fmt.Errorf("UpsertTVShow provider %d: %w", prov.ProviderID, err)
+		for country, provs := range byCountry {
+			if err := r.UpsertProvider(ctx, int(show.TMDBID), provs, country); err != nil {
+				return fmt.Errorf("UpsertTVShow providers: %w", err)
 			}
 		}
 	}
