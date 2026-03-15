@@ -239,9 +239,15 @@ func (c *Client) enrichBatch(ctx context.Context, movies []models.Movie, repo *g
 				}
 			}
 		}
-		if item.CinovaSynopsis != "" && mediaType == "movie" {
-			if err := repo.UpdateMovieEnrichmentText(ctx, item.TMDBID, "", item.CinovaSynopsis); err != nil {
-				log.Warn().Err(err).Int64("tmdb_id", item.TMDBID).Msg("update synopsis failed")
+		if item.CinovaSynopsis != "" {
+			if mediaType == "movie" {
+				if err := repo.UpdateMovieEnrichmentText(ctx, item.TMDBID, "", item.CinovaSynopsis); err != nil {
+					log.Warn().Err(err).Int64("tmdb_id", item.TMDBID).Msg("update movie synopsis failed")
+				}
+			} else {
+				if err := repo.UpdateTVShowEnrichmentText(ctx, item.TMDBID, item.CinovaSynopsis); err != nil {
+					log.Warn().Err(err).Int64("tmdb_id", item.TMDBID).Msg("update tvshow synopsis failed")
+				}
 			}
 		}
 	}

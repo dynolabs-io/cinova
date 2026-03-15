@@ -243,8 +243,8 @@ func (r *MovieRepository) UpsertMovie(ctx context.Context, movie *models.Movie) 
 		    m.collection_name      = $collection_name,
 		    m.adult                = $adult,
 		    m.cinova_score         = $cinova_score,
-		    m.plot_summary         = $plot_summary,
-		    m.cinova_synopsis      = $cinova_synopsis
+		    m.plot_summary         = CASE WHEN $plot_summary <> '' THEN $plot_summary ELSE coalesce(m.plot_summary, '') END,
+		    m.cinova_synopsis      = CASE WHEN $cinova_synopsis <> '' THEN $cinova_synopsis ELSE coalesce(m.cinova_synopsis, '') END
 	`, map[string]interface{}{
 		"tmdb_id":             movie.TMDBID,
 		"imdb_id":             movie.IMDbID,
@@ -871,6 +871,17 @@ func (r *MovieRepository) UpdateMovieEnrichmentText(ctx context.Context, tmdbID 
 	`, map[string]interface{}{
 		"tmdb_id":        tmdbID,
 		"plot_summary":   plotSummary,
+		"cinova_synopsis": cinovaSynopsis,
+	})
+}
+
+// UpdateTVShowEnrichmentText writes AI-generated cinova_synopsis back to a TVShow node.
+func (r *MovieRepository) UpdateTVShowEnrichmentText(ctx context.Context, tmdbID int64, cinovaSynopsis string) error {
+	return r.driver.RunWriteUnit(ctx, `
+		MATCH (s:TVShow {tmdb_id: $tmdb_id})
+		SET s.cinova_synopsis = $cinova_synopsis
+	`, map[string]interface{}{
+		"tmdb_id":         tmdbID,
 		"cinova_synopsis": cinovaSynopsis,
 	})
 }
