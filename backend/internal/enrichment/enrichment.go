@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	axonBatchTimeout = 120 * time.Second
-	batchSize        = 20 // smaller batch — Sonnet 4.6 generates more tokens per item
+	axonBatchTimeout = 300 * time.Second
+	batchSize        = 10 // smaller batch — Sonnet 4.6 generates more tokens per item
 
 	// Sonnet 4.6 — superior semantic understanding for enrichment quality
 	enrichmentModel = "claude-sonnet-4-6"
