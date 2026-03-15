@@ -75,11 +75,22 @@ func main() {
 
 	switch *mode {
 	case "full":
+		// Phase 1: ingest ALL media first (movies then TV), no enrichment yet.
+		// This ensures TV shows are stored even if enrichment takes hours.
 		if *mediaType == "movie" || *mediaType == "all" {
 			runFullIngestion(ctx, tmdbClient, enrichClient, movieRepo, wikiClient, *country, *minVotes, *minPopularity, limiter)
 		}
 		if *mediaType == "tvshow" || *mediaType == "all" {
 			runFullTVIngestion(ctx, tmdbClient, wikiClient, enrichClient, movieRepo, *country, *minVotes, *minPopularity, limiter)
+		}
+		// Phase 2: enrich ALL stored media with Claude (themes, moods, synopsis, editorial).
+		// Ordered by popularity — most-watched titles enriched first.
+		log.Info().Msg("phase 2 — enriching all stored movies and TV shows")
+		if *mediaType == "movie" || *mediaType == "all" {
+			runEnrichOnly(ctx, enrichClient, movieRepo)
+		}
+		if *mediaType == "tvshow" || *mediaType == "all" {
+			runEnrichOnlyTV(ctx, enrichClient, movieRepo)
 		}
 	case "delta":
 		if *mediaType == "movie" || *mediaType == "all" {
@@ -211,11 +222,6 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 		log.Info().Msg("graph prestige scores updated")
 	}
 
-	// ── Phase 2: Enrich all movies with full context ────────────────────────────
-	// Movies are now in Neo4j with plot_summary populated. Claude receives
-	// title + tagline + overview + keywords + plot_summary for every item.
-	log.Info().Msg("phase 2 — enriching all movies (themes, moods, synopsis)")
-	runEnrichOnly(ctx, enrichClient, repo)
 }
 
 // ── Full TV Ingestion ──────────────────────────────────────────────────────────
@@ -299,9 +305,6 @@ func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClient
 		Str("elapsed", time.Since(start).Round(time.Second).String()).
 		Msg("phase 1 complete — all TV shows stored in Neo4j")
 
-	// ── Phase 2: Enrich all TV shows with full context ─────────────────────────
-	log.Info().Msg("phase 2 — enriching all TV shows (themes, moods, synopsis)")
-	runEnrichOnlyTV(ctx, enrichClient, repo)
 }
 
 // ── Delta Movie Ingestion ──────────────────────────────────────────────────────
