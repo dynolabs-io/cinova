@@ -246,7 +246,7 @@ func (c *Client) enrichBatch(ctx context.Context, movies []models.Movie, repo *g
 		}
 	}
 
-	log.Debug().Int("batch_size", len(inputs)).Int("enriched", len(enrichResp.Results)).Msg("batch enriched")
+	log.Debug().Int("batch_size", len(inputs)).Int("enriched", len(items)).Msg("batch enriched")
 	return nil
 }
 
