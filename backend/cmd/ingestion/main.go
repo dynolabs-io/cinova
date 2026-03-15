@@ -92,8 +92,10 @@ func main() {
 		if *mediaType == "tvshow" || *mediaType == "all" {
 			runEnrichOnlyTV(ctx, enrichClient, movieRepo)
 		}
+	case "plot-recovery":
+		runPlotRecovery(ctx, wikiClient, movieRepo)
 	default:
-		log.Fatal().Str("mode", *mode).Msg("unknown mode; use full, delta, or enrich-only")
+		log.Fatal().Str("mode", *mode).Msg("unknown mode; use full, delta, enrich-only, or plot-recovery")
 	}
 
 	log.Info().Msg("ingestion complete")
@@ -804,4 +806,64 @@ func runEnrichOnlyTV(ctx context.Context, enrichClient *enrichment.Client, repo 
 	}
 
 	log.Info().Int("total", total).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("TV enrich-only complete")
+}
+
+// runPlotRecovery fetches Wikipedia plot summaries for Movie nodes that have a
+// wikidata_id but no plot_summary. Processes in popularity order.
+func runPlotRecovery(ctx context.Context, wikiClient *wikidata.Client, repo *graph.MovieRepository) {
+	const batchSize = 50
+	log.Info().Msg("starting plot-recovery pass")
+
+	var (
+		total       int
+		skipped     int
+		start       = time.Now()
+	)
+
+	for {
+		movies, err := repo.GetMoviesWithoutPlot(ctx, batchSize)
+		if err != nil {
+			log.Error().Err(err).Msg("GetMoviesWithoutPlot failed")
+			return
+		}
+		if len(movies) == 0 {
+			break
+		}
+
+		for _, m := range movies {
+			if m.WikidataID == "" {
+				skipped++
+				continue
+			}
+
+			plotCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+			plot, plotErr := wikiClient.GetWikipediaPlot(plotCtx, m.WikidataID)
+			cancel()
+
+			if plotErr != nil || plot == "" {
+				// Mark as attempted with a sentinel so we don't retry forever
+				_ = repo.UpdateMoviePlotSummary(ctx, m.TMDBID, "__no_plot__")
+				skipped++
+				log.Debug().Int64("tmdb_id", m.TMDBID).Str("wikidata_id", m.WikidataID).Err(plotErr).Msg("no plot found")
+				continue
+			}
+
+			if err := repo.UpdateMoviePlotSummary(ctx, m.TMDBID, plot); err != nil {
+				log.Warn().Err(err).Int64("tmdb_id", m.TMDBID).Msg("UpdateMoviePlotSummary failed")
+				continue
+			}
+			total++
+			log.Debug().Int64("tmdb_id", m.TMDBID).Str("title", m.Title).Int("chars", len(plot)).Msg("plot saved")
+		}
+
+		log.Info().Int("saved", total).Int("skipped", skipped).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("plot-recovery progress")
+
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+	}
+
+	log.Info().Int("total", total).Int("skipped", skipped).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("plot-recovery complete")
 }

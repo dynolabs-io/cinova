@@ -1088,6 +1088,41 @@ func (r *MovieRepository) GetMoviesWithoutSynopsis(ctx context.Context, limit in
 	return movies, nil
 }
 
+// GetMoviesWithoutPlot returns up to limit Movie nodes that have a wikidata_id
+// but no plot_summary (excluding the __no_plot__ sentinel), ordered by popularity desc.
+func (r *MovieRepository) GetMoviesWithoutPlot(ctx context.Context, limit int) ([]models.Movie, error) {
+	records, err := r.driver.RunQuery(ctx, `
+		MATCH (m:Movie)
+		WHERE m.wikidata_id IS NOT NULL AND m.wikidata_id <> ''
+		  AND (m.plot_summary IS NULL OR m.plot_summary = '')
+		RETURN m
+		ORDER BY m.popularity DESC
+		LIMIT $limit
+	`, map[string]interface{}{"limit": limit})
+	if err != nil {
+		return nil, fmt.Errorf("GetMoviesWithoutPlot: %w", err)
+	}
+	movies := make([]models.Movie, 0, len(records))
+	for _, rec := range records {
+		raw, _ := rec.Get("m")
+		if m := movieNodeToModel(raw); m != nil {
+			movies = append(movies, *m)
+		}
+	}
+	return movies, nil
+}
+
+// UpdateMoviePlotSummary writes a Wikipedia plot summary back to a Movie node.
+func (r *MovieRepository) UpdateMoviePlotSummary(ctx context.Context, tmdbID int64, plotSummary string) error {
+	return r.driver.RunWriteUnit(ctx, `
+		MATCH (m:Movie {tmdb_id: $tmdb_id})
+		SET m.plot_summary = $plot_summary
+	`, map[string]interface{}{
+		"tmdb_id":      tmdbID,
+		"plot_summary": plotSummary,
+	})
+}
+
 // GetTVShowsWithoutSynopsis returns up to limit TVShow nodes that lack a cinova_synopsis.
 func (r *MovieRepository) GetTVShowsWithoutSynopsis(ctx context.Context, limit int) ([]models.TVShow, error) {
 	records, err := r.driver.RunQuery(ctx, `
