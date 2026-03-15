@@ -387,6 +387,20 @@ func (r *MovieRepository) UpsertMovie(ctx context.Context, movie *models.Movie) 
 		}
 	}
 
+	// Upsert streaming providers
+	if len(movie.Providers) > 0 {
+		// Group by country — usually all providers share the same country in ingestion
+		byCountry := make(map[string][]models.Provider)
+		for _, p := range movie.Providers {
+			byCountry[p.Country] = append(byCountry[p.Country], p)
+		}
+		for country, provs := range byCountry {
+			if err := r.UpsertProvider(ctx, int(movie.TMDBID), provs, country); err != nil {
+				return fmt.Errorf("UpsertMovie providers: %w", err)
+			}
+		}
+	}
+
 	return nil
 }
 
