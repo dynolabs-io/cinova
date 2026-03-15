@@ -723,9 +723,9 @@ func runEnrichOnly(ctx context.Context, enrichClient *enrichment.Client, repo *g
 	log.Info().Msg("starting enrich-only pass for movies without synopsis")
 
 	var (
-		offset    int
-		total     int
-		start     = time.Now()
+		total      int
+		consecutive int // consecutive failures (potential infinite-loop guard)
+		start      = time.Now()
 	)
 
 	for {
@@ -739,13 +739,17 @@ func runEnrichOnly(ctx context.Context, enrichClient *enrichment.Client, repo *g
 		}
 
 		if err := enrichClient.ProcessMovieBatch(ctx, movies, repo); err != nil {
-			log.Warn().Err(err).Int("offset", offset).Msg("enrich-only movie batch failed")
+			consecutive++
+			log.Warn().Err(err).Int("consecutive_failures", consecutive).Msg("enrich-only movie batch failed")
+			if consecutive >= 10 {
+				log.Error().Msg("10 consecutive enrichment failures — aborting enrich-only pass")
+				return
+			}
+		} else {
+			consecutive = 0
+			total += len(movies)
+			log.Info().Int("enriched_so_far", total).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("enrich-only progress")
 		}
-
-		total += len(movies)
-		offset += len(movies)
-
-		log.Info().Int("enriched_so_far", total).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("enrich-only progress")
 
 		select {
 		case <-ctx.Done():
@@ -762,9 +766,9 @@ func runEnrichOnlyTV(ctx context.Context, enrichClient *enrichment.Client, repo 
 	log.Info().Msg("starting enrich-only pass for TV shows without synopsis")
 
 	var (
-		offset int
-		total  int
-		start  = time.Now()
+		total      int
+		consecutive int
+		start      = time.Now()
 	)
 
 	for {
@@ -778,13 +782,17 @@ func runEnrichOnlyTV(ctx context.Context, enrichClient *enrichment.Client, repo 
 		}
 
 		if err := enrichClient.ProcessTVBatch(ctx, shows, repo); err != nil {
-			log.Warn().Err(err).Int("offset", offset).Msg("enrich-only TV batch failed")
+			consecutive++
+			log.Warn().Err(err).Int("consecutive_failures", consecutive).Msg("enrich-only TV batch failed")
+			if consecutive >= 10 {
+				log.Error().Msg("10 consecutive TV enrichment failures — aborting")
+				return
+			}
+		} else {
+			consecutive = 0
+			total += len(shows)
+			log.Info().Int("enriched_so_far", total).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("TV enrich-only progress")
 		}
-
-		total += len(shows)
-		offset += len(shows)
-
-		log.Info().Int("enriched_so_far", total).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("TV enrich-only progress")
 
 		select {
 		case <-ctx.Done():
