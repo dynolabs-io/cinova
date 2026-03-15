@@ -1088,6 +1088,69 @@ func (r *MovieRepository) GetMoviesWithoutSynopsis(ctx context.Context, limit in
 	return movies, nil
 }
 
+// QualityReport is returned by SampleQuality and summarises field completeness.
+type QualityReport struct {
+	Sampled        int
+	MissingTitle   int
+	MissingOverview int
+	ZeroCinovaScore int
+	MissingProviders int
+	MissingPlot    int // has wikidata_id but no plot_summary
+	MissingSynopsis int
+	MissingThemes  int
+	MissingMoods   int
+	// Computed
+	PassRate float64 // 0–1
+}
+
+// SampleQuality pulls the N most-recently-upserted Movie nodes and checks field
+// completeness. It counts failures per field and computes an overall pass rate.
+// A "failure" is any field that should be populated but is empty/zero.
+func (r *MovieRepository) SampleQuality(ctx context.Context, n int) (*QualityReport, error) {
+	records, err := r.driver.RunQuery(ctx, `
+		MATCH (m:Movie)
+		WITH m ORDER BY m.tmdb_id DESC LIMIT $n
+		OPTIONAL MATCH (m)-[:HAS_THEME]->(th:Theme)
+		OPTIONAL MATCH (m)-[:HAS_MOOD]->(mo:Mood)
+		OPTIONAL MATCH (m)-[:AVAILABLE_ON {country: 'US'}]->(prov:Provider)
+		RETURN m,
+		       count(DISTINCT th) AS theme_count,
+		       count(DISTINCT mo) AS mood_count,
+		       count(DISTINCT prov) AS provider_count
+	`, map[string]interface{}{"n": n})
+	if err != nil {
+		return nil, fmt.Errorf("SampleQuality: %w", err)
+	}
+
+	rep := &QualityReport{Sampled: len(records)}
+	failures := 0
+	checks := 0
+
+	for _, rec := range records {
+		raw, _ := rec.Get("m")
+		m := movieNodeToModel(raw)
+		themeCount := int(int64Val(func() interface{} { v, _ := rec.Get("theme_count"); return v }()))
+		moodCount := int(int64Val(func() interface{} { v, _ := rec.Get("mood_count"); return v }()))
+		providerCount := int(int64Val(func() interface{} { v, _ := rec.Get("provider_count"); return v }()))
+
+		checks += 7 // fields checked per movie
+
+		if m.Title == "" { rep.MissingTitle++; failures++ }
+		if m.Overview == "" { rep.MissingOverview++; failures++ }
+		if m.CinovaScore == 0 { rep.ZeroCinovaScore++; failures++ }
+		if providerCount == 0 { rep.MissingProviders++; failures++ }
+		if m.WikidataID != "" && m.PlotSummary == "" { rep.MissingPlot++; failures++ }
+		if m.CinovaSynopsis == "" { rep.MissingSynopsis++; failures++ }
+		if themeCount == 0 { rep.MissingThemes++; failures++ }
+		if moodCount == 0 { rep.MissingMoods++; failures++ }
+	}
+
+	if checks > 0 {
+		rep.PassRate = 1.0 - float64(failures)/float64(checks)
+	}
+	return rep, nil
+}
+
 // GetMoviesWithoutPlot returns up to limit Movie nodes that have a wikidata_id
 // but no plot_summary (excluding the __no_plot__ sentinel), ordered by popularity desc.
 func (r *MovieRepository) GetMoviesWithoutPlot(ctx context.Context, limit int) ([]models.Movie, error) {

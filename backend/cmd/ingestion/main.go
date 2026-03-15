@@ -22,10 +22,13 @@ import (
 )
 
 const (
-	workers       = 3   // concurrent TMDB fetch workers
-	tmdbRatePerSec = 4  // 4 req/s = 40 req/10s (TMDB free tier limit)
-	enrichBatch   = 30  // movies per Axon call
-	logEvery      = 1000 // progress log interval
+	workers        = 3    // concurrent TMDB fetch workers
+	tmdbRatePerSec = 4    // 4 req/s = 40 req/10s (TMDB free tier limit)
+	enrichBatch    = 30   // movies per Axon call
+	logEvery       = 1000 // progress log interval
+	qualityEvery   = 100  // run quality check every N items
+	qualitySample  = 10   // number of records to sample per check
+	qualityMinPass = 0.70 // minimum pass rate — below this logs ERROR
 )
 
 func main() {
@@ -179,10 +182,16 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 					Str("elapsed", time.Since(start).Round(time.Second).String()).
 					Msg("ingestion progress")
 			}
+			if n%int64(qualityEvery) == 0 {
+				runQualityCheck(ctx, repo, "phase1-ingest", n)
+			}
 		}(id)
 	}
 
 	wg.Wait()
+
+	// Final quality check after phase 1
+	runQualityCheck(ctx, repo, "phase1-final", processed.Load())
 
 	log.Info().
 		Int64("processed", processed.Load()).
@@ -650,6 +659,9 @@ func runEnrichOnly(ctx context.Context, enrichClient *enrichment.Client, repo *g
 			consecutive = 0
 			total += len(movies)
 			log.Info().Int("enriched_so_far", total).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("enrich-only progress")
+			if total%qualityEvery == 0 {
+				runQualityCheck(ctx, repo, "phase2-enrich", int64(total))
+			}
 		}
 
 		select {
@@ -659,6 +671,8 @@ func runEnrichOnly(ctx context.Context, enrichClient *enrichment.Client, repo *g
 		}
 	}
 
+	// Final quality check after enrichment
+	runQualityCheck(ctx, repo, "phase2-final", int64(total))
 	log.Info().Int("total", total).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("movie enrich-only complete")
 }
 
@@ -763,4 +777,40 @@ func runPlotRecovery(ctx context.Context, wikiClient *wikidata.Client, repo *gra
 	}
 
 	log.Info().Int("total", total).Int("skipped", skipped).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("plot-recovery complete")
+}
+
+// runQualityCheck samples recently ingested Movie nodes and logs a structured
+// quality report. Called every qualityEvery items during ingest and enrich phases.
+// Returns false if pass rate is below qualityMinPass (caller should log ERROR).
+func runQualityCheck(ctx context.Context, repo *graph.MovieRepository, phase string, n int64) bool {
+	rep, err := repo.SampleQuality(ctx, qualitySample)
+	if err != nil {
+		log.Warn().Err(err).Str("phase", phase).Msg("quality check failed")
+		return true // non-fatal
+	}
+	if rep.Sampled == 0 {
+		return true
+	}
+
+	event := log.Info()
+	if rep.PassRate < qualityMinPass {
+		event = log.Error()
+	}
+
+	event.
+		Str("phase", phase).
+		Int64("at_n", n).
+		Int("sampled", rep.Sampled).
+		Float64("pass_rate", rep.PassRate).
+		Int("missing_title", rep.MissingTitle).
+		Int("missing_overview", rep.MissingOverview).
+		Int("zero_cinova_score", rep.ZeroCinovaScore).
+		Int("missing_providers", rep.MissingProviders).
+		Int("missing_plot", rep.MissingPlot).
+		Int("missing_synopsis", rep.MissingSynopsis).
+		Int("missing_themes", rep.MissingThemes).
+		Int("missing_moods", rep.MissingMoods).
+		Msg("QUALITY CHECK")
+
+	return rep.PassRate >= qualityMinPass
 }
