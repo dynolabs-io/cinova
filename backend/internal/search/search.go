@@ -262,13 +262,13 @@ func (h *Handler) executeSearch(ctx context.Context, whereClause, country string
 		MATCH (n)
 		WHERE (n:Movie OR n:TVShow) AND (%s)
 		OPTIONAL MATCH (n)-[:IN_GENRE]->(g:Genre)
-		OPTIONAL MATCH (n)-[:AVAILABLE_ON {country: $country}]->(prov:Provider)
+		OPTIONAL MATCH (n)-[avail:AVAILABLE_ON {country: $country}]->(prov:Provider)
 		WITH n,
 		     collect(DISTINCT {id: g.id, name: g.name})              AS genres,
 		     collect(DISTINCT {provider_id: prov.provider_id,
 		                        provider_name: prov.provider_name,
 		                        logo_path: prov.logo_path,
-		                        type: prov.type})                     AS providers
+		                        type: avail.type})                    AS providers
 		RETURN n, genres, providers
 		ORDER BY n.cinova_score DESC, n.popularity DESC
 		LIMIT $limit
