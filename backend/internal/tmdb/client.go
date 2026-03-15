@@ -182,6 +182,15 @@ func (t *TMDBMovie) ToModel() *models.Movie {
 	return m
 }
 
+// ProvidersForCountry extracts streaming providers for a country from the
+// append_to_response=watch/providers data embedded in this movie response.
+func (t *TMDBMovie) ProvidersForCountry(country string) []models.Provider {
+	if t.WatchProviders == nil {
+		return nil
+	}
+	return extractProviders(t.WatchProviders.Results, country)
+}
+
 // TMDBShow is the full TV show details response from TMDB.
 type TMDBShow struct {
 	ID               int              `json:"id"`
@@ -262,6 +271,34 @@ func (t *TMDBShow) ToModel() *models.TVShow {
 	}
 
 	return show
+}
+
+// ProvidersForCountry extracts streaming providers for a country from the
+// append_to_response=watch/providers data embedded in this show response.
+func (t *TMDBShow) ProvidersForCountry(country string) []models.Provider {
+	if t.WatchProviders == nil {
+		return nil
+	}
+	return extractProviders(t.WatchProviders.Results, country)
+}
+
+// extractProviders converts a tmdbWatchRoot results map entry to []models.Provider.
+func extractProviders(results map[string]tmdbCountryProviders, country string) []models.Provider {
+	cp, ok := results[country]
+	if !ok {
+		return nil
+	}
+	out := make([]models.Provider, 0, len(cp.Flatrate)+len(cp.Rent)+len(cp.Buy))
+	for _, p := range cp.Flatrate {
+		out = append(out, models.Provider{ProviderID: int64(p.ProviderID), ProviderName: p.ProviderName, LogoPath: p.LogoPath, DisplayPriority: p.DisplayPriority, Type: "flatrate", Country: country})
+	}
+	for _, p := range cp.Rent {
+		out = append(out, models.Provider{ProviderID: int64(p.ProviderID), ProviderName: p.ProviderName, LogoPath: p.LogoPath, DisplayPriority: p.DisplayPriority, Type: "rent", Country: country})
+	}
+	for _, p := range cp.Buy {
+		out = append(out, models.Provider{ProviderID: int64(p.ProviderID), ProviderName: p.ProviderName, LogoPath: p.LogoPath, DisplayPriority: p.DisplayPriority, Type: "buy", Country: country})
+	}
+	return out
 }
 
 // TMDBProvider represents a single streaming provider in TMDB's watch/providers response.

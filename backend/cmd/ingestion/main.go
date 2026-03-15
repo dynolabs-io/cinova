@@ -624,21 +624,8 @@ func fetchMovie(ctx context.Context, tmdbClient *tmdb.Client, wikiClient *wikida
 
 	movie.CinovaScore = scoring.ComputeFullScore(params, scoring.DefaultWeights())
 
-	providers, err := tmdbClient.GetWatchProviders(ctx, id, "movie")
-	if err == nil {
-		countryProviders := providers[country]
-		movie.Providers = make([]models.Provider, 0, len(countryProviders))
-		for _, p := range countryProviders {
-			movie.Providers = append(movie.Providers, models.Provider{
-				ProviderID:      int64(p.ProviderID),
-				ProviderName:    p.ProviderName,
-				LogoPath:        p.LogoPath,
-				DisplayPriority: p.DisplayPriority,
-				Type:            p.Type,
-				Country:         country,
-			})
-		}
-	}
+	// Extract watch providers from already-fetched details — no extra API call needed.
+	movie.Providers = details.ProvidersForCountry(country)
 
 	return movie, nil
 }
@@ -668,21 +655,8 @@ func fetchTVShow(ctx context.Context, tmdbClient *tmdb.Client, wikiClient *wikid
 
 	show.CinovaScore = scoring.ComputeFullScore(params, scoring.DefaultWeights())
 
-	providers, err := tmdbClient.GetWatchProviders(ctx, id, "tv")
-	if err == nil {
-		countryProviders := providers[country]
-		show.Providers = make([]models.Provider, 0, len(countryProviders))
-		for _, p := range countryProviders {
-			show.Providers = append(show.Providers, models.Provider{
-				ProviderID:      int64(p.ProviderID),
-				ProviderName:    p.ProviderName,
-				LogoPath:        p.LogoPath,
-				DisplayPriority: p.DisplayPriority,
-				Type:            p.Type,
-				Country:         country,
-			})
-		}
-	}
+	// Extract watch providers from already-fetched details — no extra API call.
+	show.Providers = details.ProvidersForCountry(country)
 
 	return show, nil
 }
