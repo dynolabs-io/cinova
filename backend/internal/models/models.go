@@ -47,6 +47,7 @@ type Movie struct {
 // TVShow represents a TV series node in the graph database.
 type TVShow struct {
 	TMDBID           int64      `json:"tmdb_id"`
+	WikidataID       string     `json:"wikidata_id,omitempty"`
 	Name             string     `json:"name"`
 	OriginalName     string     `json:"original_name,omitempty"`
 	Tagline          string     `json:"tagline,omitempty"`
