@@ -18,12 +18,13 @@ func (r *MovieRepository) GetPopular(ctx context.Context, country string, limit,
 		SKIP $offset
 		LIMIT $limit
 		OPTIONAL MATCH (m)-[:IN_GENRE]->(g:Genre)
-		OPTIONAL MATCH (m)-[:AVAILABLE_ON {country: $country}]->(prov:Provider)
+		OPTIONAL MATCH (m)-[avail:AVAILABLE_ON {country: $country}]->(prov:Provider)
 		RETURN m,
 		       collect(DISTINCT {id: g.id, name: g.name})              AS genres,
 		       collect(DISTINCT {provider_id: prov.provider_id,
 		                          provider_name: prov.provider_name,
-		                          logo_path: prov.logo_path})            AS providers
+		                          logo_path: prov.logo_path,
+		                          type: avail.type})                    AS providers
 	`, map[string]interface{}{"country": country, "limit": limit, "offset": offset})
 	if err != nil {
 		return nil, fmt.Errorf("GetPopular query: %w", err)
@@ -56,13 +57,13 @@ func (r *MovieRepository) GetReels(ctx context.Context, country string, limit in
 		ORDER BY m.cinova_score DESC, m.popularity DESC
 		LIMIT $limit
 		OPTIONAL MATCH (m)-[:IN_GENRE]->(g:Genre)
-		OPTIONAL MATCH (m)-[:AVAILABLE_ON {country: $country}]->(prov:Provider)
+		OPTIONAL MATCH (m)-[avail:AVAILABLE_ON {country: $country}]->(prov:Provider)
 		RETURN m,
 		       collect(DISTINCT {id: g.id, name: g.name})              AS genres,
 		       collect(DISTINCT {provider_id: prov.provider_id,
 		                          provider_name: prov.provider_name,
 		                          logo_path: prov.logo_path,
-		                          type: prov.type})                     AS providers
+		                          type: avail.type})                    AS providers
 	`, map[string]interface{}{"country": country, "limit": limit})
 	if err != nil {
 		return nil, fmt.Errorf("GetReels query: %w", err)
@@ -96,13 +97,13 @@ func (r *MovieRepository) GetRecommendations(ctx context.Context, ownerID, owner
 		ORDER BY rec.cinova_score DESC
 		LIMIT $limit
 		OPTIONAL MATCH (rec)-[:IN_GENRE]->(g2:Genre)
-		OPTIONAL MATCH (rec)-[:AVAILABLE_ON {country: $country}]->(prov:Provider)
+		OPTIONAL MATCH (rec)-[avail:AVAILABLE_ON {country: $country}]->(prov:Provider)
 		RETURN rec AS m,
 		       collect(DISTINCT {id: g2.id, name: g2.name})            AS genres,
 		       collect(DISTINCT {provider_id: prov.provider_id,
 		                          provider_name: prov.provider_name,
 		                          logo_path: prov.logo_path,
-		                          type: prov.type})                     AS providers
+		                          type: avail.type})                    AS providers
 	`, ownerType)
 
 	records, err := r.driver.RunQuery(ctx, cypher, map[string]interface{}{

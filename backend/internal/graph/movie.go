@@ -505,7 +505,7 @@ func (r *MovieRepository) UpsertMood(ctx context.Context, tmdbID int, name strin
 // ---- Node conversion helpers ----
 
 func movieNodeToModel(v interface{}) *models.Movie {
-	m := &models.Movie{}
+	m := &models.Movie{MediaType: "movie"}
 	node, ok := v.(dbtype.Node)
 	if !ok {
 		return m
@@ -549,13 +549,14 @@ func movieNodeToModel(v interface{}) *models.Movie {
 }
 
 func tvNodeToModel(v interface{}) *models.TVShow {
-	t := &models.TVShow{}
+	t := &models.TVShow{MediaType: "tv"}
 	node, ok := v.(dbtype.Node)
 	if !ok {
 		return t
 	}
 	props := node.Props
 	t.TMDBID = int64Val(props["tmdb_id"])
+	t.WikidataID = strVal(props["wikidata_id"])
 	t.Name = strVal(props["name"])
 	t.OriginalName = strVal(props["original_name"])
 	t.Tagline = strVal(props["tagline"])

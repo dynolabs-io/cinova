@@ -7,6 +7,7 @@ import "time"
 // Movie represents a movie node in the graph database.
 type Movie struct {
 	TMDBID             int64      `json:"tmdb_id"`
+	MediaType          string     `json:"media_type"`
 	IMDbID             string     `json:"imdb_id,omitempty"`
 	WikidataID         string     `json:"wikidata_id,omitempty"`
 	Title              string     `json:"title"`
@@ -47,6 +48,7 @@ type Movie struct {
 // TVShow represents a TV series node in the graph database.
 type TVShow struct {
 	TMDBID           int64      `json:"tmdb_id"`
+	MediaType        string     `json:"media_type"`
 	WikidataID       string     `json:"wikidata_id,omitempty"`
 	Name             string     `json:"name"`
 	OriginalName     string     `json:"original_name,omitempty"`
