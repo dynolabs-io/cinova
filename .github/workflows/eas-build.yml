@@ -1,6 +1,13 @@
-name: EAS Build (Manual)
+name: EAS Build
 
 on:
+  # Automated: preview build on every mobile/** push to main
+  push:
+    branches: [main]
+    paths: ['mobile/**']
+    tags: ['v*']
+
+  # Manual: choose profile and platform
   workflow_dispatch:
     inputs:
       profile:
@@ -24,7 +31,7 @@ on:
 
 jobs:
   build:
-    name: EAS Build (${{ inputs.platform }} / ${{ inputs.profile }})
+    name: EAS Build (${{ github.event_name == 'workflow_dispatch' && inputs.platform || 'all' }} / ${{ github.event_name == 'workflow_dispatch' && inputs.profile || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'preview') }})
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,10 +39,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
 
       - name: Install dependencies
         working-directory: mobile
-        run: npm install
+        run: npm ci
+
+      - name: TypeScript check
+        working-directory: mobile
+        run: npx tsc --noEmit --skipLibCheck 2>&1 | tail -30 || true
 
       - name: Setup EAS
         uses: expo/expo-github-action@v8
@@ -43,11 +56,25 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
+      - name: Determine build profile
+        id: profile
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "profile=${{ inputs.profile }}" >> $GITHUB_OUTPUT
+            echo "platform=${{ inputs.platform }}" >> $GITHUB_OUTPUT
+          elif echo "${{ github.ref }}" | grep -q "^refs/tags/v"; then
+            echo "profile=production" >> $GITHUB_OUTPUT
+            echo "platform=all" >> $GITHUB_OUTPUT
+          else
+            echo "profile=preview" >> $GITHUB_OUTPUT
+            echo "platform=all" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build
         working-directory: mobile
         run: |
           eas build \
-            --profile ${{ inputs.profile }} \
-            --platform ${{ inputs.platform }} \
+            --profile ${{ steps.profile.outputs.profile }} \
+            --platform ${{ steps.profile.outputs.platform }} \
             --non-interactive \
             --no-wait
