@@ -120,10 +120,13 @@ jobs:
           echo "Updated API manifest to SHA ${SHA_SHORT}:"
           grep "image:" "$API_MANIFEST"
 
-          INGESTION_MANIFEST="openova-private/clusters/contabo-mkt/apps/cinova/cronjobs/ingestion.yaml"
-          sed -i "s|image: ${INGESTION_IMAGE}:.*|image: ${INGESTION_IMAGE}:${SHA_SHORT}|" "$INGESTION_MANIFEST"
-          echo "Updated ingestion manifest to SHA ${SHA_SHORT}:"
-          grep "image:" "$INGESTION_MANIFEST"
+          for INGESTION_MANIFEST in \
+            "openova-private/clusters/contabo-mkt/apps/cinova/cronjobs/ingestion.yaml" \
+            "openova-private/clusters/contabo-mkt/apps/cinova/cronjobs/ingestion-full.yaml"; do
+            sed -i "s|image: ${INGESTION_IMAGE}:.*|image: ${INGESTION_IMAGE}:${SHA_SHORT}|" "$INGESTION_MANIFEST"
+            echo "Updated $(basename $INGESTION_MANIFEST) to SHA ${SHA_SHORT}:"
+            grep "image:" "$INGESTION_MANIFEST"
+          done
 
       - name: Commit and push manifest updates
         env:
