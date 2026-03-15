@@ -245,7 +245,8 @@ func (r *MovieRepository) UpsertMovie(ctx context.Context, movie *models.Movie) 
 		    m.adult                = $adult,
 		    m.cinova_score         = $cinova_score,
 		    m.plot_summary         = CASE WHEN $plot_summary <> '' THEN $plot_summary ELSE coalesce(m.plot_summary, '') END,
-		    m.cinova_synopsis      = CASE WHEN $cinova_synopsis <> '' THEN $cinova_synopsis ELSE coalesce(m.cinova_synopsis, '') END
+		    m.cinova_synopsis      = CASE WHEN $cinova_synopsis <> '' THEN $cinova_synopsis ELSE coalesce(m.cinova_synopsis, '') END,
+		    m.cinova_editorial     = CASE WHEN $cinova_editorial <> '' THEN $cinova_editorial ELSE coalesce(m.cinova_editorial, '') END
 	`, map[string]interface{}{
 		"tmdb_id":             movie.TMDBID,
 		"imdb_id":             movie.IMDbID,
@@ -273,6 +274,7 @@ func (r *MovieRepository) UpsertMovie(ctx context.Context, movie *models.Movie) 
 		"cinova_score":        movie.CinovaScore,
 		"plot_summary":        movie.PlotSummary,
 		"cinova_synopsis":     movie.CinovaSynopsis,
+		"cinova_editorial":    movie.CinovaEditorial,
 	})
 	if err != nil {
 		return fmt.Errorf("UpsertMovie: %w", err)
@@ -536,6 +538,7 @@ func movieNodeToModel(v interface{}) *models.Movie {
 	m.CinovaScore = float64Val(props["cinova_score"])
 	m.PlotSummary = strVal(props["plot_summary"])
 	m.CinovaSynopsis = strVal(props["cinova_synopsis"])
+	m.CinovaEditorial = strVal(props["cinova_editorial"])
 	if sl, ok := props["spoken_languages"]; ok && sl != nil {
 		if list, ok := sl.([]interface{}); ok {
 			for _, item := range list {
@@ -575,6 +578,7 @@ func tvNodeToModel(v interface{}) *models.TVShow {
 	t.CinovaScore = float64Val(props["cinova_score"])
 	t.PlotSummary = strVal(props["plot_summary"])
 	t.CinovaSynopsis = strVal(props["cinova_synopsis"])
+	t.CinovaEditorial = strVal(props["cinova_editorial"])
 	return t
 }
 
@@ -732,7 +736,8 @@ func (r *MovieRepository) UpsertTVShow(ctx context.Context, show *models.TVShow)
 		    s.status             = $status,
 		    s.cinova_score       = $cinova_score,
 		    s.plot_summary       = CASE WHEN $plot_summary <> '' THEN $plot_summary ELSE coalesce(s.plot_summary, '') END,
-		    s.cinova_synopsis    = CASE WHEN $cinova_synopsis <> '' THEN $cinova_synopsis ELSE coalesce(s.cinova_synopsis, '') END
+		    s.cinova_synopsis    = CASE WHEN $cinova_synopsis <> '' THEN $cinova_synopsis ELSE coalesce(s.cinova_synopsis, '') END,
+		    s.cinova_editorial   = CASE WHEN $cinova_editorial <> '' THEN $cinova_editorial ELSE coalesce(s.cinova_editorial, '') END
 	`, map[string]interface{}{
 		"tmdb_id":            show.TMDBID,
 		"name":               show.Name,
@@ -754,6 +759,7 @@ func (r *MovieRepository) UpsertTVShow(ctx context.Context, show *models.TVShow)
 		"cinova_score":       show.CinovaScore,
 		"plot_summary":       show.PlotSummary,
 		"cinova_synopsis":    show.CinovaSynopsis,
+		"cinova_editorial":   show.CinovaEditorial,
 	})
 	if err != nil {
 		return fmt.Errorf("UpsertTVShow: %w", err)
@@ -855,28 +861,31 @@ func (r *MovieRepository) UpsertMovieAward(ctx context.Context, tmdbID int64, aw
 	})
 }
 
-// UpdateMovieEnrichmentText writes AI-generated plot_summary and cinova_synopsis
-// back to a Movie node after the enrichment pass.
-func (r *MovieRepository) UpdateMovieEnrichmentText(ctx context.Context, tmdbID int64, plotSummary, cinovaSynopsis string) error {
+// UpdateMovieEnrichmentText writes Claude-generated cinova_synopsis and cinova_editorial
+// back to a Movie node. plot_summary is written during Phase 1 ingest and is NOT touched here.
+func (r *MovieRepository) UpdateMovieEnrichmentText(ctx context.Context, tmdbID int64, cinovaSynopsis, cinovaEditorial string) error {
 	return r.driver.RunWriteUnit(ctx, `
 		MATCH (m:Movie {tmdb_id: $tmdb_id})
-		SET m.plot_summary    = $plot_summary,
-		    m.cinova_synopsis = $cinova_synopsis
+		SET m.cinova_synopsis  = $cinova_synopsis,
+		    m.cinova_editorial = $cinova_editorial
 	`, map[string]interface{}{
-		"tmdb_id":        tmdbID,
-		"plot_summary":   plotSummary,
-		"cinova_synopsis": cinovaSynopsis,
+		"tmdb_id":          tmdbID,
+		"cinova_synopsis":  cinovaSynopsis,
+		"cinova_editorial": cinovaEditorial,
 	})
 }
 
-// UpdateTVShowEnrichmentText writes AI-generated cinova_synopsis back to a TVShow node.
-func (r *MovieRepository) UpdateTVShowEnrichmentText(ctx context.Context, tmdbID int64, cinovaSynopsis string) error {
+// UpdateTVShowEnrichmentText writes Claude-generated cinova_synopsis and cinova_editorial
+// back to a TVShow node.
+func (r *MovieRepository) UpdateTVShowEnrichmentText(ctx context.Context, tmdbID int64, cinovaSynopsis, cinovaEditorial string) error {
 	return r.driver.RunWriteUnit(ctx, `
 		MATCH (s:TVShow {tmdb_id: $tmdb_id})
-		SET s.cinova_synopsis = $cinova_synopsis
+		SET s.cinova_synopsis  = $cinova_synopsis,
+		    s.cinova_editorial = $cinova_editorial
 	`, map[string]interface{}{
-		"tmdb_id":         tmdbID,
-		"cinova_synopsis": cinovaSynopsis,
+		"tmdb_id":          tmdbID,
+		"cinova_synopsis":  cinovaSynopsis,
+		"cinova_editorial": cinovaEditorial,
 	})
 }
 
@@ -1095,10 +1104,11 @@ type QualityReport struct {
 	MissingOverview int
 	ZeroCinovaScore int
 	MissingProviders int
-	MissingPlot    int // has wikidata_id but no plot_summary
-	MissingSynopsis int
-	MissingThemes  int
-	MissingMoods   int
+	MissingPlot     int // has wikidata_id but no plot_summary
+	MissingSynopsis  int
+	MissingEditorial int
+	MissingThemes   int
+	MissingMoods    int
 	// Computed
 	PassRate float64 // 0–1
 }
@@ -1133,7 +1143,7 @@ func (r *MovieRepository) SampleQuality(ctx context.Context, n int) (*QualityRep
 		moodCount := int(int64Val(func() interface{} { v, _ := rec.Get("mood_count"); return v }()))
 		providerCount := int(int64Val(func() interface{} { v, _ := rec.Get("provider_count"); return v }()))
 
-		checks += 7 // fields checked per movie
+		checks += 8 // fields checked per movie
 
 		if m.Title == "" { rep.MissingTitle++; failures++ }
 		if m.Overview == "" { rep.MissingOverview++; failures++ }
@@ -1141,6 +1151,7 @@ func (r *MovieRepository) SampleQuality(ctx context.Context, n int) (*QualityRep
 		if providerCount == 0 { rep.MissingProviders++; failures++ }
 		if m.WikidataID != "" && m.PlotSummary == "" { rep.MissingPlot++; failures++ }
 		if m.CinovaSynopsis == "" { rep.MissingSynopsis++; failures++ }
+		if m.CinovaEditorial == "" { rep.MissingEditorial++; failures++ }
 		if themeCount == 0 { rep.MissingThemes++; failures++ }
 		if moodCount == 0 { rep.MissingMoods++; failures++ }
 	}

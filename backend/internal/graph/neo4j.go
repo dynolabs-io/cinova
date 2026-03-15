@@ -107,6 +107,9 @@ func (d *Driver) EnsureSchema(ctx context.Context) error {
 		`CREATE INDEX tv_popularity      IF NOT EXISTS FOR (t:TVShow)  ON (t.popularity)`,
 		`CREATE INDEX movie_score        IF NOT EXISTS FOR (m:Movie)   ON (m.cinova_score)`,
 		`CREATE INDEX tv_score           IF NOT EXISTS FOR (t:TVShow)  ON (t.cinova_score)`,
+		// Vector indexes for semantic similarity search on editorial embeddings (Phase 3)
+		"CREATE VECTOR INDEX movie_editorial_vec IF NOT EXISTS FOR (m:Movie)  ON (m.editorial_embedding) OPTIONS {indexConfig: {`vector.dimensions`: 1536, `vector.similarity_function`: 'cosine'}}",
+		"CREATE VECTOR INDEX tv_editorial_vec    IF NOT EXISTS FOR (t:TVShow) ON (t.editorial_embedding) OPTIONS {indexConfig: {`vector.dimensions`: 1536, `vector.similarity_function`: 'cosine'}}",
 	}
 
 	session := d.driver.NewSession(ctx, neo4j.SessionConfig{

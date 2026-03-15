@@ -808,6 +808,7 @@ func runQualityCheck(ctx context.Context, repo *graph.MovieRepository, phase str
 		Int("missing_providers", rep.MissingProviders).
 		Int("missing_plot", rep.MissingPlot).
 		Int("missing_synopsis", rep.MissingSynopsis).
+		Int("missing_editorial", rep.MissingEditorial).
 		Int("missing_themes", rep.MissingThemes).
 		Int("missing_moods", rep.MissingMoods).
 		Msg("QUALITY CHECK")

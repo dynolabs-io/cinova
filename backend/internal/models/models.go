@@ -43,6 +43,7 @@ type Movie struct {
 	Awards             []Award    `json:"awards,omitempty"`
 	PlotSummary        string     `json:"plot_summary,omitempty"`
 	CinovaSynopsis     string     `json:"cinova_synopsis,omitempty"`
+	CinovaEditorial    string     `json:"cinova_editorial,omitempty"`
 }
 
 // TVShow represents a TV series node in the graph database.
@@ -75,6 +76,7 @@ type TVShow struct {
 	Providers        []Provider `json:"providers,omitempty"`
 	PlotSummary      string     `json:"plot_summary,omitempty"`
 	CinovaSynopsis   string     `json:"cinova_synopsis,omitempty"`
+	CinovaEditorial  string     `json:"cinova_editorial,omitempty"`
 }
 
 // Person represents an actor, director, or other crew member.

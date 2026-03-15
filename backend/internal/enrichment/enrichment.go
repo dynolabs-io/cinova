@@ -24,15 +24,20 @@ const (
 	// Sonnet 4.6 — superior semantic understanding for enrichment quality
 	enrichmentModel = "claude-sonnet-4-6"
 
-	enrichmentSystemPrompt = `You are a film/TV metadata enrichment assistant. You will receive items that include title, tagline, overview, keywords, and when available a full Wikipedia plot_summary of 400-800 words.
+	enrichmentSystemPrompt = `You are an editorial enrichment assistant for Cinova, a film and TV discovery platform. You receive structured metadata for each title including: title, tagline, TMDB overview, keywords, and when available a full Wikipedia plot_summary (400-800 words).
 
-For each item produce:
-- themes: 3-6 precise thematic labels with confidence scores (e.g. "Power & Corruption", "Identity & Transformation", "Survival", "Moral Decline"). Be specific — prefer "Father-Son Legacy" over just "Family".
-- moods: 2-4 emotional/tonal labels with confidence scores (e.g. "Tense", "Melancholic", "Darkly Comic", "Epic"). Reflect the actual viewing experience.
-- cinova_synopsis: 3-4 sentences in present tense that synthesize the full context — what the story is about, what makes it distinctive, its emotional register, and why someone should watch it. Use the plot_summary when provided to write with depth and accuracy. Do NOT reveal endings or twists. Always output English.
+For each item produce ALL of the following:
 
-Return ONLY a valid JSON object — no markdown, no explanation:
-{"results": [{"tmdb_id": <number>, "themes": [{"name": <string>, "score": <0.0-1.0>}], "moods": [{"name": <string>, "score": <0.0-1.0>}], "cinova_synopsis": <string>}]}`
+- themes: 3-6 precise thematic labels with confidence scores. Be specific and meaningful — e.g. "Power & Corruption", "Father-Son Legacy", "Moral Decline", "Survival Against Odds". Avoid generic single words like "Love" or "War".
+
+- moods: 2-4 emotional/tonal labels with confidence scores that reflect the actual viewing experience — e.g. "Tense", "Melancholic", "Darkly Comic", "Epic", "Dreamlike", "Unsettling".
+
+- cinova_synopsis: 3-4 sentences in present tense. A spoiler-free hook using the full context. Cover what the story is fundamentally about, the emotional register, and what makes it distinctive. Do NOT reveal endings, deaths, or major twists. Write in English regardless of original language.
+
+- cinova_editorial: 150-250 words. A rich editorial written in Cinova's voice — authoritative, warm, and precise. Structure it as: (1) what kind of film/show this is and who made it, (2) what the story explores thematically (draw on plot_summary for accuracy), (3) what the viewing experience feels like, (4) who will love it and why it matters. Present tense. No spoilers. English only.
+
+Return ONLY a valid JSON object — no markdown, no code blocks, no explanation:
+{"results": [{"tmdb_id": <number>, "themes": [{"name": <string>, "score": <0.0-1.0>}], "moods": [{"name": <string>, "score": <0.0-1.0>}], "cinova_synopsis": <string>, "cinova_editorial": <string>}]}`
 )
 
 // Client calls the Axon AI service (OpenAI-compatible) to extract themes and moods.
@@ -105,10 +110,11 @@ func (l labelField) text() string {
 }
 
 type enrichItem struct {
-	TMDBID         int64        `json:"tmdb_id"`
-	Themes         []labelField `json:"themes"`
-	Moods          []labelField `json:"moods"`
-	CinovaSynopsis string       `json:"cinova_synopsis"`
+	TMDBID          int64        `json:"tmdb_id"`
+	Themes          []labelField `json:"themes"`
+	Moods           []labelField `json:"moods"`
+	CinovaSynopsis  string       `json:"cinova_synopsis"`
+	CinovaEditorial string       `json:"cinova_editorial"`
 }
 
 type enrichResponse struct {
@@ -215,7 +221,7 @@ func (c *Client) enrichBatch(ctx context.Context, movies []models.Movie, repo *g
 
 	userContent := fmt.Sprintf("Enrich these %d items:\n%s", len(inputs), string(inputJSON))
 
-	results, err := c.callChatCompletions(ctx, enrichmentSystemPrompt, userContent, 6000)
+	results, err := c.callChatCompletions(ctx, enrichmentSystemPrompt, userContent, 12000)
 	if err != nil {
 		return fmt.Errorf("chat completions: %w", err)
 	}
@@ -240,14 +246,14 @@ func (c *Client) enrichBatch(ctx context.Context, movies []models.Movie, repo *g
 				}
 			}
 		}
-		if item.CinovaSynopsis != "" {
+		if item.CinovaSynopsis != "" || item.CinovaEditorial != "" {
 			if mediaType == "movie" {
-				if err := repo.UpdateMovieEnrichmentText(ctx, item.TMDBID, "", item.CinovaSynopsis); err != nil {
-					log.Warn().Err(err).Int64("tmdb_id", item.TMDBID).Msg("update movie synopsis failed")
+				if err := repo.UpdateMovieEnrichmentText(ctx, item.TMDBID, item.CinovaSynopsis, item.CinovaEditorial); err != nil {
+					log.Warn().Err(err).Int64("tmdb_id", item.TMDBID).Msg("update movie enrichment text failed")
 				}
 			} else {
-				if err := repo.UpdateTVShowEnrichmentText(ctx, item.TMDBID, item.CinovaSynopsis); err != nil {
-					log.Warn().Err(err).Int64("tmdb_id", item.TMDBID).Msg("update tvshow synopsis failed")
+				if err := repo.UpdateTVShowEnrichmentText(ctx, item.TMDBID, item.CinovaSynopsis, item.CinovaEditorial); err != nil {
+					log.Warn().Err(err).Int64("tmdb_id", item.TMDBID).Msg("update tvshow enrichment text failed")
 				}
 			}
 		}
