@@ -713,6 +713,7 @@ func (r *MovieRepository) UpsertTVShow(ctx context.Context, show *models.TVShow)
 		MERGE (s:TVShow {tmdb_id: $tmdb_id})
 		SET s.name               = $name,
 		    s.original_name      = $original_name,
+		    s.wikidata_id        = $wikidata_id,
 		    s.tagline            = $tagline,
 		    s.overview           = $overview,
 		    s.first_air_date     = $first_air_date,
@@ -726,11 +727,14 @@ func (r *MovieRepository) UpsertTVShow(ctx context.Context, show *models.TVShow)
 		    s.backdrop_path      = $backdrop_path,
 		    s.original_language  = $original_language,
 		    s.status             = $status,
-		    s.cinova_score       = $cinova_score
+		    s.cinova_score       = $cinova_score,
+		    s.plot_summary       = CASE WHEN $plot_summary <> '' THEN $plot_summary ELSE coalesce(s.plot_summary, '') END,
+		    s.cinova_synopsis    = CASE WHEN $cinova_synopsis <> '' THEN $cinova_synopsis ELSE coalesce(s.cinova_synopsis, '') END
 	`, map[string]interface{}{
 		"tmdb_id":            show.TMDBID,
 		"name":               show.Name,
 		"original_name":      show.OriginalName,
+		"wikidata_id":        show.WikidataID,
 		"tagline":            show.Tagline,
 		"overview":           show.Overview,
 		"first_air_date":     show.FirstAirDate,
@@ -745,6 +749,8 @@ func (r *MovieRepository) UpsertTVShow(ctx context.Context, show *models.TVShow)
 		"original_language":  show.OriginalLanguage,
 		"status":             show.Status,
 		"cinova_score":       show.CinovaScore,
+		"plot_summary":       show.PlotSummary,
+		"cinova_synopsis":    show.CinovaSynopsis,
 	})
 	if err != nil {
 		return fmt.Errorf("UpsertTVShow: %w", err)

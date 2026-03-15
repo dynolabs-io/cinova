@@ -66,13 +66,20 @@ type TMDBMovie struct {
 	Videos              *tmdbVideosRoot       `json:"videos,omitempty"`
 	WatchProviders      *tmdbWatchRoot        `json:"watch/providers,omitempty"`
 	Similar             *tmdbMoviePage        `json:"similar,omitempty"`
+	ExternalIDs         *tmdbExternalIDs      `json:"external_ids,omitempty"`
 }
 
 // ToModel converts a TMDBMovie to a models.Movie.
 func (t *TMDBMovie) ToModel() *models.Movie {
+	wikidataID := ""
+	if t.ExternalIDs != nil {
+		wikidataID = t.ExternalIDs.WikidataID
+	}
+
 	m := &models.Movie{
 		TMDBID:           int64(t.ID),
 		IMDbID:           t.IMDbID,
+		WikidataID:       wikidataID,
 		Title:            t.Title,
 		OriginalTitle:    t.OriginalTitle,
 		Tagline:          t.Tagline,
@@ -215,12 +222,19 @@ type TMDBShow struct {
 	Keywords         *tmdbTVKeywords  `json:"keywords,omitempty"`
 	Videos           *tmdbVideosRoot  `json:"videos,omitempty"`
 	WatchProviders   *tmdbWatchRoot   `json:"watch/providers,omitempty"`
+	ExternalIDs      *tmdbExternalIDs `json:"external_ids,omitempty"`
 }
 
 // ToModel converts a TMDBShow to a models.TVShow.
 func (t *TMDBShow) ToModel() *models.TVShow {
+	tvWikidataID := ""
+	if t.ExternalIDs != nil {
+		tvWikidataID = t.ExternalIDs.WikidataID
+	}
+
 	show := &models.TVShow{
 		TMDBID:           int64(t.ID),
+		WikidataID:       tvWikidataID,
 		Name:             t.Name,
 		OriginalName:     t.OriginalName,
 		Tagline:          t.Tagline,
@@ -363,6 +377,11 @@ type tmdbCollection struct {
 	Name string `json:"name"`
 }
 
+type tmdbExternalIDs struct {
+	WikidataID string `json:"wikidata_id"`
+	IMDbID     string `json:"imdb_id"`
+}
+
 type tmdbLanguage struct {
 	Iso6391 string `json:"iso_639_1"`
 	Name    string `json:"english_name"`
@@ -434,7 +453,7 @@ type tmdbBulkEntry struct {
 
 // GetMovieDetails fetches full movie details with credits, keywords, watch/providers, similar, release_dates, and videos.
 func (c *Client) GetMovieDetails(ctx context.Context, id int) (*TMDBMovie, error) {
-	url := fmt.Sprintf("%s/movie/%d?api_key=%s&append_to_response=credits,keywords,watch/providers,similar,release_dates,videos", baseURL, id, c.apiKey)
+	url := fmt.Sprintf("%s/movie/%d?api_key=%s&append_to_response=credits,keywords,watch/providers,similar,release_dates,videos,external_ids", baseURL, id, c.apiKey)
 	var result TMDBMovie
 	if err := c.get(ctx, url, &result); err != nil {
 		return nil, fmt.Errorf("GetMovieDetails(%d): %w", id, err)
@@ -444,7 +463,7 @@ func (c *Client) GetMovieDetails(ctx context.Context, id int) (*TMDBMovie, error
 
 // GetTVDetails fetches full TV show details with credits, keywords, watch/providers, and videos.
 func (c *Client) GetTVDetails(ctx context.Context, id int) (*TMDBShow, error) {
-	url := fmt.Sprintf("%s/tv/%d?api_key=%s&append_to_response=credits,keywords,watch/providers,videos", baseURL, id, c.apiKey)
+	url := fmt.Sprintf("%s/tv/%d?api_key=%s&append_to_response=credits,keywords,watch/providers,videos,external_ids", baseURL, id, c.apiKey)
 	var result TMDBShow
 	if err := c.get(ctx, url, &result); err != nil {
 		return nil, fmt.Errorf("GetTVDetails(%d): %w", id, err)

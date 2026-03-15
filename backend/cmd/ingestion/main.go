@@ -648,10 +648,38 @@ func fetchTVShow(ctx context.Context, tmdbClient *tmdb.Client, wikiClient *wikid
 		GraphPrestige: 0,
 	}
 
-	// Wikidata enrichment for TV shows that have a wikidata_id
-	// (Currently stored in external_ids but TVShow model needs wikidata_id — skip if empty)
-	// Wikipedia plot + awards use same 3-query approach as movies
-	_ = wikiClient // reserved for future TV wikidata_id field
+	if show.WikidataID != "" {
+		enrichCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		enrichData, enrichErr := wikiClient.GetMovieEnrichment(enrichCtx, show.WikidataID)
+		cancel()
+
+		if enrichErr == nil && enrichData != nil {
+			var criticSignals []float64
+			if enrichData.RTScore >= 0 {
+				criticSignals = append(criticSignals, enrichData.RTScore)
+			}
+			if enrichData.MetaScore >= 0 {
+				criticSignals = append(criticSignals, enrichData.MetaScore)
+			}
+			if enrichData.IMDbScore >= 0 {
+				criticSignals = append(criticSignals, enrichData.IMDbScore)
+			}
+			if len(criticSignals) > 0 {
+				sum := 0.0
+				for _, s := range criticSignals {
+					sum += s
+				}
+				params.CriticScore = sum / float64(len(criticSignals))
+			}
+		}
+
+		plotCtx, plotCancel := context.WithTimeout(ctx, 20*time.Second)
+		plot, plotErr := wikiClient.GetWikipediaPlot(plotCtx, show.WikidataID)
+		plotCancel()
+		if plotErr == nil && plot != "" {
+			show.PlotSummary = plot
+		}
+	}
 
 	show.CinovaScore = scoring.ComputeFullScore(params, scoring.DefaultWeights())
 
