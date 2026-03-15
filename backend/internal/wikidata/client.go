@@ -20,6 +20,18 @@ const (
 	userAgent      = "Cinova/1.0 (https://cinova.app; cinova@foundrylab.app) Go/1.23"
 )
 
+// Pre-compiled regexes for stripWikiMarkup — compiled once at init, not per call.
+var (
+	reRefBlock    = regexp.MustCompile(`(?s)<ref[^>]*>.*?</ref>`)
+	reRefSelf     = regexp.MustCompile(`<ref[^/]*/>`)
+	reTemplate    = regexp.MustCompile(`\{\{[^{}]*\}\}`)
+	reFileLink    = regexp.MustCompile(`\[\[(?:File|Image|Datei|Fichier):[^\]]*\]\]`)
+	reLinkText    = regexp.MustCompile(`\[\[[^\]|]*\|([^\]]*)\]\]`)
+	reLinkPlain   = regexp.MustCompile(`\[\[([^\]]*)\]\]`)
+	reHTMLTag     = regexp.MustCompile(`<[^>]+>`)
+	reMultiNL     = regexp.MustCompile(`\n{3,}`)
+)
+
 // Client is a SPARQL client for the Wikidata query service.
 type Client struct {
 	httpClient *http.Client
@@ -470,23 +482,22 @@ func (c *Client) getWikipediaSection(ctx context.Context, title, lang string, se
 // stripWikiMarkup removes the noisiest wiki markup so the text is cleaner for Sonnet.
 // Removes {{templates}}, [[File:...]], ref tags, and reduces [[link|text]] → text.
 func stripWikiMarkup(s string) string {
-	// Remove ref tags and their content
-	s = regexp.MustCompile(`(?s)<ref[^>]*>.*?</ref>`).ReplaceAllString(s, "")
-	s = regexp.MustCompile(`<ref[^/]*/>`).ReplaceAllString(s, "")
-	// Remove {{templates}} (non-nested approximation)
-	for strings.Contains(s, "{{") {
-		s = regexp.MustCompile(`\{\{[^{}]*\}\}`).ReplaceAllString(s, "")
+	s = reRefBlock.ReplaceAllString(s, "")
+	s = reRefSelf.ReplaceAllString(s, "")
+	// Remove {{templates}} iteratively for nesting, with infinite-loop guard.
+	// If a pass makes no progress (malformed markup), stop to avoid spinning.
+	for i := 0; i < 20 && strings.Contains(s, "{{"); i++ {
+		next := reTemplate.ReplaceAllString(s, "")
+		if next == s {
+			break // no innermost template matched; avoid infinite loop
+		}
+		s = next
 	}
-	// Remove [[File:...]] and [[Image:...]] links
-	s = regexp.MustCompile(`\[\[(?:File|Image|Datei|Fichier):[^\]]*\]\]`).ReplaceAllString(s, "")
-	// [[link|display text]] → display text
-	s = regexp.MustCompile(`\[\[[^\]|]*\|([^\]]*)\]\]`).ReplaceAllString(s, "$1")
-	// [[link]] → link
-	s = regexp.MustCompile(`\[\[([^\]]*)\]\]`).ReplaceAllString(s, "$1")
-	// Remove HTML tags
-	s = regexp.MustCompile(`<[^>]+>`).ReplaceAllString(s, "")
-	// Collapse whitespace
-	s = regexp.MustCompile(`\n{3,}`).ReplaceAllString(s, "\n\n")
+	s = reFileLink.ReplaceAllString(s, "")
+	s = reLinkText.ReplaceAllString(s, "$1")
+	s = reLinkPlain.ReplaceAllString(s, "$1")
+	s = reHTMLTag.ReplaceAllString(s, "")
+	s = reMultiNL.ReplaceAllString(s, "\n\n")
 	return strings.TrimSpace(s)
 }
 
