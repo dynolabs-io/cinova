@@ -18,19 +18,21 @@ import (
 )
 
 const (
-	axonBatchTimeout = 90 * time.Second
-	batchSize        = 30
+	axonBatchTimeout = 120 * time.Second
+	batchSize        = 20 // smaller batch — Sonnet 4.6 generates more tokens per item
 
-	// Haiku 4.5 — fast and cheap for bulk enrichment
-	enrichmentModel = "claude-haiku-4-5-20251001"
+	// Sonnet 4.6 — superior semantic understanding for enrichment quality
+	enrichmentModel = "claude-sonnet-4-6"
 
 	enrichmentSystemPrompt = `You are a film/TV metadata enrichment assistant.
-For each item in the input array, extract:
-- themes: 2-5 broad thematic labels (e.g. "Redemption", "Friendship", "War", "Survival")
-- moods: 2-4 emotional/tonal labels (e.g. "Tense", "Heartwarming", "Dark", "Funny", "Uplifting")
+For each item in the input array, produce:
+- themes: 2-5 broad thematic labels (e.g. "Redemption", "Identity", "Power & Corruption", "Survival")
+- moods: 2-4 emotional/tonal labels (e.g. "Tense", "Melancholic", "Darkly Comic", "Uplifting")
+- cinova_synopsis: a 2-sentence spoiler-free hook that would make someone want to watch it.
+  Write in present tense. Do NOT reveal plot twists or the ending. Always output English regardless of input language.
 
 Return ONLY a valid JSON object with this exact structure:
-{"results": [{"tmdb_id": <number>, "themes": [{"name": <string>, "score": <0.0-1.0>}], "moods": [{"name": <string>, "score": <0.0-1.0>}]}]}`
+{"results": [{"tmdb_id": <number>, "themes": [{"name": <string>, "score": <0.0-1.0>}], "moods": [{"name": <string>, "score": <0.0-1.0>}], "cinova_synopsis": <string>}]}`
 )
 
 // Client calls the Axon AI service (OpenAI-compatible) to extract themes and moods.
@@ -98,6 +100,7 @@ type enrichItem struct {
 		Name  string  `json:"name"`
 		Score float64 `json:"score"`
 	} `json:"moods"`
+	CinovaSynopsis string `json:"cinova_synopsis"`
 }
 
 type enrichResponse struct {
@@ -105,9 +108,14 @@ type enrichResponse struct {
 }
 
 // batchInput is a single item sent to the model.
+// Include as much context as available — Sonnet uses all of it for richer output.
 type batchInput struct {
-	TMDBID   int64  `json:"tmdb_id"`
-	Overview string `json:"overview"`
+	TMDBID      int64    `json:"tmdb_id"`
+	Title       string   `json:"title"`
+	Tagline     string   `json:"tagline,omitempty"`
+	Overview    string   `json:"overview"`
+	Keywords    []string `json:"keywords,omitempty"`
+	PlotSummary string   `json:"plot_summary,omitempty"`
 }
 
 // ProcessMovieBatch enriches a batch of movies with AI-extracted themes and moods,
@@ -140,7 +148,10 @@ func (c *Client) ProcessTVBatch(ctx context.Context, shows []models.TVShow, repo
 	for _, s := range shows {
 		movies = append(movies, models.Movie{
 			TMDBID:   s.TMDBID,
+			Title:    s.Name,
+			Tagline:  s.Tagline,
 			Overview: s.Overview,
+			Keywords: s.Keywords,
 		})
 	}
 	for i := 0; i < len(movies); i += batchSize {
@@ -171,7 +182,18 @@ func (c *Client) enrichBatch(ctx context.Context, movies []models.Movie, repo *g
 		if m.Overview == "" {
 			continue
 		}
-		inputs = append(inputs, batchInput{TMDBID: m.TMDBID, Overview: m.Overview})
+		kwNames := make([]string, 0, len(m.Keywords))
+		for _, kw := range m.Keywords {
+			kwNames = append(kwNames, kw.Name)
+		}
+		inputs = append(inputs, batchInput{
+			TMDBID:      m.TMDBID,
+			Title:       m.Title,
+			Tagline:     m.Tagline,
+			Overview:    m.Overview,
+			Keywords:    kwNames,
+			PlotSummary: m.PlotSummary,
+		})
 	}
 	if len(inputs) == 0 {
 		return nil
@@ -182,9 +204,9 @@ func (c *Client) enrichBatch(ctx context.Context, movies []models.Movie, repo *g
 		return fmt.Errorf("marshal batch input: %w", err)
 	}
 
-	userContent := fmt.Sprintf("Extract themes and moods for these %d items:\n%s", len(inputs), string(inputJSON))
+	userContent := fmt.Sprintf("Enrich these %d items:\n%s", len(inputs), string(inputJSON))
 
-	results, err := c.callChatCompletions(ctx, enrichmentSystemPrompt, userContent, 3000)
+	results, err := c.callChatCompletions(ctx, enrichmentSystemPrompt, userContent, 6000)
 	if err != nil {
 		return fmt.Errorf("chat completions: %w", err)
 	}
@@ -212,6 +234,11 @@ func (c *Client) enrichBatch(ctx context.Context, movies []models.Movie, repo *g
 		for _, m := range item.Moods {
 			if err := repo.UpsertMood(ctx, int(item.TMDBID), m.Name, m.Score, mediaType); err != nil {
 				log.Warn().Err(err).Str("mood", m.Name).Int64("tmdb_id", item.TMDBID).Msg("upsert mood failed")
+			}
+		}
+		if item.CinovaSynopsis != "" && mediaType == "movie" {
+			if err := repo.UpdateMovieEnrichmentText(ctx, item.TMDBID, "", item.CinovaSynopsis); err != nil {
+				log.Warn().Err(err).Int64("tmdb_id", item.TMDBID).Msg("update synopsis failed")
 			}
 		}
 	}

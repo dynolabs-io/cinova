@@ -7,8 +7,12 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/foundrylab-app/cinova/backend/internal/models"
 )
 
 const (
@@ -183,6 +187,358 @@ func extractLiteral(v sparqlValue) string {
 type InfluenceWithLabels struct {
 	DirectorName  string
 	InfluencerName string
+}
+
+// ---- Per-movie enrichment ----
+
+// MovieEnrichment holds Wikidata-sourced enrichment data for a single film.
+type MovieEnrichment struct {
+	WikidataID string
+	RTScore    float64          // Rotten Tomatoes percentage / 100, or -1 if absent
+	MetaScore  float64          // Metacritic score / 100, or -1 if absent
+	IMDbScore  float64          // IMDb rating / 10, or -1 if absent
+	Awards     []models.Award
+}
+
+// GetMovieEnrichment fetches critic scores and award data for a film by Wikidata QID.
+// Runs two separate SPARQL queries to avoid timeout.
+func (c *Client) GetMovieEnrichment(ctx context.Context, wikidataID string) (*MovieEnrichment, error) {
+	result := &MovieEnrichment{
+		WikidataID: wikidataID,
+		RTScore:    -1,
+		MetaScore:  -1,
+		IMDbScore:  -1,
+	}
+
+	// Query 1: review scores (P444 = review score, P447 = reviewed by)
+	scoreSPARQL := fmt.Sprintf(`
+SELECT ?score ?reviewer ?reviewerLabel WHERE {
+  wd:%s p:P444 ?stmt .
+  ?stmt ps:P444 ?score .
+  OPTIONAL { ?stmt pq:P447 ?reviewer . }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }
+}
+LIMIT 20
+`, wikidataID)
+	scoreRows, err := c.query(ctx, scoreSPARQL)
+	if err == nil {
+		for _, row := range scoreRows {
+			scoreStr := extractLiteral(row["score"])
+			reviewer := strings.ToLower(extractLiteral(row["reviewerLabel"]))
+			if rt, ok := parseRTScore(scoreStr); ok && strings.Contains(reviewer, "rotten tomatoes") {
+				result.RTScore = rt
+			} else if meta, ok := parseMetacriticScore(scoreStr); ok && strings.Contains(reviewer, "metacritic") {
+				result.MetaScore = meta
+			} else if imdb, ok := parseIMDbScore(scoreStr); ok && strings.Contains(reviewer, "imdb") {
+				result.IMDbScore = imdb
+			}
+		}
+	}
+
+	// Query 2: awards won (P166)
+	awardSPARQL := fmt.Sprintf(`
+SELECT ?award ?awardLabel ?year ?recipient ?recipientLabel WHERE {
+  wd:%s p:P166 ?stmt .
+  ?stmt ps:P166 ?award .
+  OPTIONAL { ?stmt pq:P585 ?year . }
+  OPTIONAL { ?stmt pq:P1346 ?recipient . }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }
+}
+LIMIT 50
+`, wikidataID)
+	awardRows, err := c.query(ctx, awardSPARQL)
+	if err == nil {
+		for _, row := range awardRows {
+			qid := extractQID(row["award"])
+			name := extractLiteral(row["awardLabel"])
+			if qid == "" || name == "" {
+				continue
+			}
+			a := models.Award{
+				WikidataID:   qid,
+				AwardName:    name,
+				IsNomination: false,
+			}
+			if yr, ok := row["year"]; ok {
+				a.Year = parseYear(extractLiteral(yr))
+			}
+			if rec, ok := row["recipientLabel"]; ok {
+				a.RecipientName = extractLiteral(rec)
+			}
+			result.Awards = append(result.Awards, a)
+		}
+	}
+
+	// Query 3: nominations (P1411)
+	nomSPARQL := fmt.Sprintf(`
+SELECT ?award ?awardLabel ?year WHERE {
+  wd:%s p:P1411 ?stmt .
+  ?stmt ps:P1411 ?award .
+  OPTIONAL { ?stmt pq:P585 ?year . }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }
+}
+LIMIT 50
+`, wikidataID)
+	nomRows, err := c.query(ctx, nomSPARQL)
+	if err == nil {
+		for _, row := range nomRows {
+			qid := extractQID(row["award"])
+			name := extractLiteral(row["awardLabel"])
+			if qid == "" || name == "" {
+				continue
+			}
+			a := models.Award{
+				WikidataID:   qid,
+				AwardName:    name,
+				IsNomination: true,
+			}
+			if yr, ok := row["year"]; ok {
+				a.Year = parseYear(extractLiteral(yr))
+			}
+			result.Awards = append(result.Awards, a)
+		}
+	}
+
+	return result, nil
+}
+
+// GetWikipediaPlot fetches the Plot section from Wikipedia for a film by Wikidata QID.
+// Returns the raw section text (may contain light wiki markup — Sonnet handles it).
+// Returns empty string if no Wikipedia article or Plot section is found.
+func (c *Client) GetWikipediaPlot(ctx context.Context, wikidataID string) (string, error) {
+	title, lang, err := c.getWikipediaSitelink(ctx, wikidataID)
+	if err != nil || title == "" {
+		return "", nil
+	}
+
+	sectionIdx, err := c.findPlotSectionIndex(ctx, title, lang)
+	if err != nil || sectionIdx < 0 {
+		// Fallback: use lead section (intro paragraph)
+		sectionIdx = 0
+	}
+
+	text, err := c.getWikipediaSection(ctx, title, lang, sectionIdx)
+	if err != nil {
+		return "", nil
+	}
+	return stripWikiMarkup(text), nil
+}
+
+// ---- Wikipedia helpers ----
+
+type wikiSitelinksResponse struct {
+	Entities map[string]struct {
+		Sitelinks map[string]struct {
+			Site  string `json:"site"`
+			Title string `json:"title"`
+		} `json:"sitelinks"`
+	} `json:"entities"`
+}
+
+// getWikipediaSitelink returns the best Wikipedia article title and language code for a QID.
+// Prefers English; falls back to any available sitelink.
+func (c *Client) getWikipediaSitelink(ctx context.Context, wikidataID string) (title, lang string, err error) {
+	apiURL := "https://www.wikidata.org/w/api.php"
+	params := url.Values{}
+	params.Set("action", "wbgetentities")
+	params.Set("ids", wikidataID)
+	params.Set("props", "sitelinks")
+	params.Set("format", "json")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL+"?"+params.Encode(), nil)
+	if err != nil {
+		return "", "", fmt.Errorf("build sitelinks request: %w", err)
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("sitelinks http: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result wikiSitelinksResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", "", fmt.Errorf("decode sitelinks: %w", err)
+	}
+
+	entity, ok := result.Entities[wikidataID]
+	if !ok {
+		return "", "", nil
+	}
+
+	// Prefer English
+	if sl, ok := entity.Sitelinks["enwiki"]; ok {
+		return sl.Title, "en", nil
+	}
+	// Fallback to first available Wikipedia sitelink
+	for site, sl := range entity.Sitelinks {
+		if strings.HasSuffix(site, "wiki") && !strings.Contains(site, "wikidata") {
+			langCode := strings.TrimSuffix(site, "wiki")
+			return sl.Title, langCode, nil
+		}
+	}
+	return "", "", nil
+}
+
+type wikiSectionsResponse struct {
+	Parse struct {
+		Sections []struct {
+			Index string `json:"index"`
+			Line  string `json:"line"`
+		} `json:"sections"`
+	} `json:"parse"`
+}
+
+// findPlotSectionIndex returns the numeric section index for the Plot/Synopsis section.
+// Returns -1 if not found.
+func (c *Client) findPlotSectionIndex(ctx context.Context, title, lang string) (int, error) {
+	apiURL := fmt.Sprintf("https://%s.wikipedia.org/w/api.php", lang)
+	params := url.Values{}
+	params.Set("action", "parse")
+	params.Set("page", title)
+	params.Set("prop", "sections")
+	params.Set("format", "json")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL+"?"+params.Encode(), nil)
+	if err != nil {
+		return -1, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return -1, err
+	}
+	defer resp.Body.Close()
+
+	var result wikiSectionsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return -1, err
+	}
+
+	for _, s := range result.Parse.Sections {
+		lower := strings.ToLower(s.Line)
+		if lower == "plot" || lower == "synopsis" || lower == "story" ||
+			strings.HasPrefix(lower, "plot") || strings.HasPrefix(lower, "synopsis") {
+			idx, err := strconv.Atoi(s.Index)
+			if err == nil {
+				return idx, nil
+			}
+		}
+	}
+	return -1, nil
+}
+
+type wikiTextResponse struct {
+	Parse struct {
+		Wikitext struct {
+			Content string `json:"*"`
+		} `json:"wikitext"`
+	} `json:"parse"`
+}
+
+// getWikipediaSection fetches the wikitext for a specific section of a Wikipedia article.
+func (c *Client) getWikipediaSection(ctx context.Context, title, lang string, sectionIdx int) (string, error) {
+	apiURL := fmt.Sprintf("https://%s.wikipedia.org/w/api.php", lang)
+	params := url.Values{}
+	params.Set("action", "parse")
+	params.Set("page", title)
+	params.Set("prop", "wikitext")
+	params.Set("section", strconv.Itoa(sectionIdx))
+	params.Set("format", "json")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL+"?"+params.Encode(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var result wikiTextResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+	return result.Parse.Wikitext.Content, nil
+}
+
+// stripWikiMarkup removes the noisiest wiki markup so the text is cleaner for Sonnet.
+// Removes {{templates}}, [[File:...]], ref tags, and reduces [[link|text]] → text.
+func stripWikiMarkup(s string) string {
+	// Remove ref tags and their content
+	s = regexp.MustCompile(`(?s)<ref[^>]*>.*?</ref>`).ReplaceAllString(s, "")
+	s = regexp.MustCompile(`<ref[^/]*/>`).ReplaceAllString(s, "")
+	// Remove {{templates}} (non-nested approximation)
+	for strings.Contains(s, "{{") {
+		s = regexp.MustCompile(`\{\{[^{}]*\}\}`).ReplaceAllString(s, "")
+	}
+	// Remove [[File:...]] and [[Image:...]] links
+	s = regexp.MustCompile(`\[\[(?:File|Image|Datei|Fichier):[^\]]*\]\]`).ReplaceAllString(s, "")
+	// [[link|display text]] → display text
+	s = regexp.MustCompile(`\[\[[^\]|]*\|([^\]]*)\]\]`).ReplaceAllString(s, "$1")
+	// [[link]] → link
+	s = regexp.MustCompile(`\[\[([^\]]*)\]\]`).ReplaceAllString(s, "$1")
+	// Remove HTML tags
+	s = regexp.MustCompile(`<[^>]+>`).ReplaceAllString(s, "")
+	// Collapse whitespace
+	s = regexp.MustCompile(`\n{3,}`).ReplaceAllString(s, "\n\n")
+	return strings.TrimSpace(s)
+}
+
+// ---- score parsing helpers ----
+
+// parseRTScore parses "83%" → 0.83
+func parseRTScore(s string) (float64, bool) {
+	s = strings.TrimSpace(s)
+	if strings.HasSuffix(s, "%") {
+		v, err := strconv.ParseFloat(strings.TrimSuffix(s, "%"), 64)
+		if err == nil && v >= 0 && v <= 100 {
+			return v / 100.0, true
+		}
+	}
+	return 0, false
+}
+
+// parseMetacriticScore parses "73/100" → 0.73
+func parseMetacriticScore(s string) (float64, bool) {
+	s = strings.TrimSpace(s)
+	parts := strings.Split(s, "/")
+	if len(parts) == 2 && strings.TrimSpace(parts[1]) == "100" {
+		v, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+		if err == nil && v >= 0 && v <= 100 {
+			return v / 100.0, true
+		}
+	}
+	return 0, false
+}
+
+// parseIMDbScore parses "8.7/10" → 0.87
+func parseIMDbScore(s string) (float64, bool) {
+	s = strings.TrimSpace(s)
+	parts := strings.Split(s, "/")
+	if len(parts) == 2 && strings.TrimSpace(parts[1]) == "10" {
+		v, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+		if err == nil && v >= 0 && v <= 10 {
+			return v / 10.0, true
+		}
+	}
+	return 0, false
+}
+
+// parseYear extracts a 4-digit year from a Wikidata datetime string like "2001-01-01T00:00:00Z".
+func parseYear(s string) int {
+	if len(s) >= 4 {
+		y, err := strconv.Atoi(s[:4])
+		if err == nil && y > 1880 && y < 2100 {
+			return y
+		}
+	}
+	return 0
 }
 
 // GetDirectorInfluencesWithLabels returns director influence pairs with human-readable names.

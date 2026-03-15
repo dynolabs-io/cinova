@@ -40,25 +40,32 @@ func NewClient(apiKey string) *Client {
 
 // TMDBMovie is the full movie details response from TMDB.
 type TMDBMovie struct {
-	ID               int            `json:"id"`
-	IMDbID           string         `json:"imdb_id"`
-	Title            string         `json:"title"`
-	OriginalTitle    string         `json:"original_title"`
-	Overview         string         `json:"overview"`
-	ReleaseDate      string         `json:"release_date"`
-	Runtime          int            `json:"runtime"`
-	VoteAverage      float64        `json:"vote_average"`
-	VoteCount        int64          `json:"vote_count"`
-	Popularity       float64        `json:"popularity"`
-	PosterPath       string         `json:"poster_path"`
-	BackdropPath     string         `json:"backdrop_path"`
-	OriginalLanguage string         `json:"original_language"`
-	Adult            bool           `json:"adult"`
-	Genres           []tmdbGenre    `json:"genres"`
-	Credits          *tmdbCredits   `json:"credits,omitempty"`
-	Keywords         *tmdbKeywords  `json:"keywords,omitempty"`
-	WatchProviders   *tmdbWatchRoot `json:"watch/providers,omitempty"`
-	Similar          *tmdbMoviePage `json:"similar,omitempty"`
+	ID                  int                   `json:"id"`
+	IMDbID              string                `json:"imdb_id"`
+	Title               string                `json:"title"`
+	OriginalTitle       string                `json:"original_title"`
+	Tagline             string                `json:"tagline"`
+	Overview            string                `json:"overview"`
+	ReleaseDate         string                `json:"release_date"`
+	Runtime             int                   `json:"runtime"`
+	VoteAverage         float64               `json:"vote_average"`
+	VoteCount           int64                 `json:"vote_count"`
+	Popularity          float64               `json:"popularity"`
+	Budget              int64                 `json:"budget"`
+	Revenue             int64                 `json:"revenue"`
+	PosterPath          string                `json:"poster_path"`
+	BackdropPath        string                `json:"backdrop_path"`
+	OriginalLanguage    string                `json:"original_language"`
+	SpokenLanguages     []tmdbLanguage        `json:"spoken_languages"`
+	BelongsToCollection *tmdbCollection       `json:"belongs_to_collection,omitempty"`
+	Adult               bool                  `json:"adult"`
+	Genres              []tmdbGenre           `json:"genres"`
+	Credits             *tmdbCredits          `json:"credits,omitempty"`
+	Keywords            *tmdbKeywords         `json:"keywords,omitempty"`
+	ReleaseDates        *tmdbReleaseDatesRoot `json:"release_dates,omitempty"`
+	Videos              *tmdbVideosRoot       `json:"videos,omitempty"`
+	WatchProviders      *tmdbWatchRoot        `json:"watch/providers,omitempty"`
+	Similar             *tmdbMoviePage        `json:"similar,omitempty"`
 }
 
 // ToModel converts a TMDBMovie to a models.Movie.
@@ -68,12 +75,15 @@ func (t *TMDBMovie) ToModel() *models.Movie {
 		IMDbID:           t.IMDbID,
 		Title:            t.Title,
 		OriginalTitle:    t.OriginalTitle,
+		Tagline:          t.Tagline,
 		Overview:         t.Overview,
 		ReleaseDate:      t.ReleaseDate,
 		Runtime:          t.Runtime,
 		VoteAverage:      t.VoteAverage,
 		VoteCount:        t.VoteCount,
 		Popularity:       t.Popularity,
+		Budget:           t.Budget,
+		Revenue:          t.Revenue,
 		PosterPath:       t.PosterPath,
 		BackdropPath:     t.BackdropPath,
 		OriginalLanguage: t.OriginalLanguage,
@@ -82,6 +92,59 @@ func (t *TMDBMovie) ToModel() *models.Movie {
 
 	for _, g := range t.Genres {
 		m.Genres = append(m.Genres, models.Genre{ID: int64(g.ID), Name: g.Name})
+	}
+
+	for _, l := range t.SpokenLanguages {
+		if l.Name != "" {
+			m.SpokenLanguages = append(m.SpokenLanguages, l.Name)
+		}
+	}
+
+	if t.BelongsToCollection != nil {
+		m.CollectionID = int64(t.BelongsToCollection.ID)
+		m.CollectionName = t.BelongsToCollection.Name
+	}
+
+	if t.Keywords != nil {
+		for _, kw := range t.Keywords.Keywords {
+			m.Keywords = append(m.Keywords, models.Keyword{ID: int64(kw.ID), Name: kw.Name})
+		}
+	}
+
+	// US theatrical certification
+	if t.ReleaseDates != nil {
+		for _, entry := range t.ReleaseDates.Results {
+			if entry.Iso31661 != "US" {
+				continue
+			}
+			for _, rd := range entry.ReleaseDates {
+				if rd.Type == 3 && rd.Certification != "" { // 3 = Theatrical
+					m.Certification = rd.Certification
+					break
+				}
+			}
+			break
+		}
+	}
+
+	// First official YouTube trailer (fall back to teaser)
+	if t.Videos != nil {
+		var teaserKey string
+		for _, v := range t.Videos.Results {
+			if v.Site != "YouTube" {
+				continue
+			}
+			if v.Type == "Trailer" && v.Official {
+				m.TrailerYouTubeKey = v.Key
+				break
+			}
+			if v.Type == "Teaser" && v.Official && teaserKey == "" {
+				teaserKey = v.Key
+			}
+		}
+		if m.TrailerYouTubeKey == "" {
+			m.TrailerYouTubeKey = teaserKey
+		}
 	}
 
 	if t.Credits != nil {
@@ -98,14 +161,20 @@ func (t *TMDBMovie) ToModel() *models.Movie {
 			})
 		}
 		for _, cr := range t.Credits.Crew {
-			if cr.Job == "Director" {
-				m.Directors = append(m.Directors, models.Person{
-					TMDBID:      int64(cr.ID),
-					Name:        cr.Name,
-					ProfilePath: cr.ProfilePath,
-					Job:         cr.Job,
-					Department:  cr.Department,
-				})
+			person := models.Person{
+				TMDBID:      int64(cr.ID),
+				Name:        cr.Name,
+				ProfilePath: cr.ProfilePath,
+				Job:         cr.Job,
+				Department:  cr.Department,
+			}
+			switch cr.Job {
+			case "Director":
+				m.Directors = append(m.Directors, person)
+			case "Writer", "Screenplay", "Story", "Author":
+				m.Writers = append(m.Writers, person)
+			case "Producer", "Executive Producer":
+				m.Producers = append(m.Producers, person)
 			}
 		}
 	}
@@ -115,25 +184,28 @@ func (t *TMDBMovie) ToModel() *models.Movie {
 
 // TMDBShow is the full TV show details response from TMDB.
 type TMDBShow struct {
-	ID               int            `json:"id"`
-	Name             string         `json:"name"`
-	OriginalName     string         `json:"original_name"`
-	Overview         string         `json:"overview"`
-	FirstAirDate     string         `json:"first_air_date"`
-	LastAirDate      string         `json:"last_air_date"`
-	NumberOfSeasons  int            `json:"number_of_seasons"`
-	NumberOfEpisodes int            `json:"number_of_episodes"`
-	VoteAverage      float64        `json:"vote_average"`
-	VoteCount        int64          `json:"vote_count"`
-	Popularity       float64        `json:"popularity"`
-	PosterPath       string         `json:"poster_path"`
-	BackdropPath     string         `json:"backdrop_path"`
-	OriginalLanguage string         `json:"original_language"`
-	Status           string         `json:"status"`
-	Genres           []tmdbGenre    `json:"genres"`
-	CreatedBy        []tmdbCreator  `json:"created_by"`
-	Credits          *tmdbCredits   `json:"credits,omitempty"`
-	WatchProviders   *tmdbWatchRoot `json:"watch/providers,omitempty"`
+	ID               int              `json:"id"`
+	Name             string           `json:"name"`
+	OriginalName     string           `json:"original_name"`
+	Tagline          string           `json:"tagline"`
+	Overview         string           `json:"overview"`
+	FirstAirDate     string           `json:"first_air_date"`
+	LastAirDate      string           `json:"last_air_date"`
+	NumberOfSeasons  int              `json:"number_of_seasons"`
+	NumberOfEpisodes int              `json:"number_of_episodes"`
+	VoteAverage      float64          `json:"vote_average"`
+	VoteCount        int64            `json:"vote_count"`
+	Popularity       float64          `json:"popularity"`
+	PosterPath       string           `json:"poster_path"`
+	BackdropPath     string           `json:"backdrop_path"`
+	OriginalLanguage string           `json:"original_language"`
+	Status           string           `json:"status"`
+	Genres           []tmdbGenre      `json:"genres"`
+	CreatedBy        []tmdbCreator    `json:"created_by"`
+	Credits          *tmdbCredits     `json:"credits,omitempty"`
+	Keywords         *tmdbTVKeywords  `json:"keywords,omitempty"`
+	Videos           *tmdbVideosRoot  `json:"videos,omitempty"`
+	WatchProviders   *tmdbWatchRoot   `json:"watch/providers,omitempty"`
 }
 
 // ToModel converts a TMDBShow to a models.TVShow.
@@ -142,6 +214,7 @@ func (t *TMDBShow) ToModel() *models.TVShow {
 		TMDBID:           int64(t.ID),
 		Name:             t.Name,
 		OriginalName:     t.OriginalName,
+		Tagline:          t.Tagline,
 		Overview:         t.Overview,
 		FirstAirDate:     t.FirstAirDate,
 		LastAirDate:      t.LastAirDate,
@@ -158,6 +231,12 @@ func (t *TMDBShow) ToModel() *models.TVShow {
 
 	for _, g := range t.Genres {
 		show.Genres = append(show.Genres, models.Genre{ID: int64(g.ID), Name: g.Name})
+	}
+
+	if t.Keywords != nil {
+		for _, kw := range t.Keywords.Results {
+			show.Keywords = append(show.Keywords, models.Keyword{ID: int64(kw.ID), Name: kw.Name})
+		}
 	}
 
 	for _, c := range t.CreatedBy {
@@ -234,6 +313,49 @@ type tmdbKeywords struct {
 	} `json:"keywords"`
 }
 
+// tmdbTVKeywords handles TV show keywords (TMDB uses "results" key instead of "keywords").
+type tmdbTVKeywords struct {
+	Results []struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	} `json:"results"`
+}
+
+type tmdbCollection struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+type tmdbLanguage struct {
+	Iso6391 string `json:"iso_639_1"`
+	Name    string `json:"english_name"`
+}
+
+type tmdbReleaseDatesRoot struct {
+	Results []tmdbReleaseDateEntry `json:"results"`
+}
+
+type tmdbReleaseDateEntry struct {
+	Iso31661    string           `json:"iso_3166_1"`
+	ReleaseDates []tmdbReleaseDate `json:"release_dates"`
+}
+
+type tmdbReleaseDate struct {
+	Certification string `json:"certification"`
+	Type          int    `json:"type"` // 3 = Theatrical
+}
+
+type tmdbVideosRoot struct {
+	Results []tmdbVideo `json:"results"`
+}
+
+type tmdbVideo struct {
+	Key      string `json:"key"`
+	Site     string `json:"site"`
+	Type     string `json:"type"` // "Trailer", "Teaser", "Clip"
+	Official bool   `json:"official"`
+}
+
 type tmdbWatchRoot struct {
 	Results map[string]tmdbCountryProviders `json:"results"`
 }
@@ -271,9 +393,9 @@ type tmdbBulkEntry struct {
 
 // ---- Public API methods ----
 
-// GetMovieDetails fetches full movie details with credits, keywords, watch/providers, and similar.
+// GetMovieDetails fetches full movie details with credits, keywords, watch/providers, similar, release_dates, and videos.
 func (c *Client) GetMovieDetails(ctx context.Context, id int) (*TMDBMovie, error) {
-	url := fmt.Sprintf("%s/movie/%d?api_key=%s&append_to_response=credits,keywords,watch/providers,similar", baseURL, id, c.apiKey)
+	url := fmt.Sprintf("%s/movie/%d?api_key=%s&append_to_response=credits,keywords,watch/providers,similar,release_dates,videos", baseURL, id, c.apiKey)
 	var result TMDBMovie
 	if err := c.get(ctx, url, &result); err != nil {
 		return nil, fmt.Errorf("GetMovieDetails(%d): %w", id, err)
@@ -281,9 +403,9 @@ func (c *Client) GetMovieDetails(ctx context.Context, id int) (*TMDBMovie, error
 	return &result, nil
 }
 
-// GetTVDetails fetches full TV show details with credits, keywords, and watch/providers.
+// GetTVDetails fetches full TV show details with credits, keywords, watch/providers, and videos.
 func (c *Client) GetTVDetails(ctx context.Context, id int) (*TMDBShow, error) {
-	url := fmt.Sprintf("%s/tv/%d?api_key=%s&append_to_response=credits,keywords,watch/providers", baseURL, id, c.apiKey)
+	url := fmt.Sprintf("%s/tv/%d?api_key=%s&append_to_response=credits,keywords,watch/providers,videos", baseURL, id, c.apiKey)
 	var result TMDBShow
 	if err := c.get(ctx, url, &result); err != nil {
 		return nil, fmt.Errorf("GetTVDetails(%d): %w", id, err)

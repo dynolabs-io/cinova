@@ -24,14 +24,16 @@ func (r *MovieRepository) GetMovie(ctx context.Context, tmdbID int) (*models.Mov
 	records, err := r.driver.RunQuery(ctx, `
 		MATCH (m:Movie {tmdb_id: $tmdb_id})
 		OPTIONAL MATCH (m)-[:IN_GENRE]->(g:Genre)
+		OPTIONAL MATCH (m)-[:HAS_KEYWORD]->(k:Keyword)
 		OPTIONAL MATCH (m)-[:HAS_THEME]->(t:Theme)
 		OPTIONAL MATCH (m)-[:HAS_MOOD]->(mo:Mood)
 		OPTIONAL MATCH (m)<-[act:ACTED_IN]-(p:Person)
 		OPTIONAL MATCH (m)<-[dir:DIRECTED]-(d:Person)
 		RETURN m,
 		       collect(DISTINCT {id: g.id, name: g.name})              AS genres,
-		       collect(DISTINCT {name: t.name, score: t.score})         AS themes,
-		       collect(DISTINCT {name: mo.name, score: mo.score})       AS moods,
+		       collect(DISTINCT {id: k.id, name: k.name})              AS keywords,
+		       collect(DISTINCT {name: t.name, score: t.score})        AS themes,
+		       collect(DISTINCT {name: mo.name, score: mo.score})      AS moods,
 		       collect(DISTINCT {tmdb_id: p.tmdb_id, name: p.name,
 		                          profile_path: p.profile_path,
 		                          role: act.character, order: act.order}) AS cast,
@@ -52,6 +54,9 @@ func (r *MovieRepository) GetMovie(ctx context.Context, tmdbID int) (*models.Mov
 
 	if v, ok := rec.Get("genres"); ok {
 		movie.Genres = toGenres(v)
+	}
+	if v, ok := rec.Get("keywords"); ok {
+		movie.Keywords = toKeywords(v)
 	}
 	if v, ok := rec.Get("themes"); ok {
 		movie.Themes = toThemes(v)
@@ -191,40 +196,62 @@ func (r *MovieRepository) GetTrending(ctx context.Context, country string, limit
 	return movies, nil
 }
 
-// UpsertMovie creates or updates a Movie node and its related Genre/Person relationships.
+// UpsertMovie creates or updates a Movie node and its related Genre/Person/Keyword relationships.
 func (r *MovieRepository) UpsertMovie(ctx context.Context, movie *models.Movie) error {
 	err := r.driver.RunWriteUnit(ctx, `
 		MERGE (m:Movie {tmdb_id: $tmdb_id})
-		SET m.imdb_id           = $imdb_id,
-		    m.title             = $title,
-		    m.original_title    = $original_title,
-		    m.overview          = $overview,
-		    m.release_date      = $release_date,
-		    m.runtime           = $runtime,
-		    m.vote_average      = $vote_average,
-		    m.vote_count        = $vote_count,
-		    m.popularity        = $popularity,
-		    m.poster_path       = $poster_path,
-		    m.backdrop_path     = $backdrop_path,
-		    m.original_language = $original_language,
-		    m.adult             = $adult,
-		    m.cinova_score      = $cinova_score
+		SET m.imdb_id              = $imdb_id,
+		    m.wikidata_id          = $wikidata_id,
+		    m.title                = $title,
+		    m.original_title       = $original_title,
+		    m.tagline              = $tagline,
+		    m.overview             = $overview,
+		    m.release_date         = $release_date,
+		    m.runtime              = $runtime,
+		    m.vote_average         = $vote_average,
+		    m.vote_count           = $vote_count,
+		    m.popularity           = $popularity,
+		    m.budget               = $budget,
+		    m.revenue              = $revenue,
+		    m.certification        = $certification,
+		    m.trailer_youtube_key  = $trailer_youtube_key,
+		    m.poster_path          = $poster_path,
+		    m.backdrop_path        = $backdrop_path,
+		    m.original_language    = $original_language,
+		    m.spoken_languages     = $spoken_languages,
+		    m.collection_id        = $collection_id,
+		    m.collection_name      = $collection_name,
+		    m.adult                = $adult,
+		    m.cinova_score         = $cinova_score,
+		    m.plot_summary         = $plot_summary,
+		    m.cinova_synopsis      = $cinova_synopsis
 	`, map[string]interface{}{
-		"tmdb_id":           movie.TMDBID,
-		"imdb_id":           movie.IMDbID,
-		"title":             movie.Title,
-		"original_title":    movie.OriginalTitle,
-		"overview":          movie.Overview,
-		"release_date":      movie.ReleaseDate,
-		"runtime":           movie.Runtime,
-		"vote_average":      movie.VoteAverage,
-		"vote_count":        movie.VoteCount,
-		"popularity":        movie.Popularity,
-		"poster_path":       movie.PosterPath,
-		"backdrop_path":     movie.BackdropPath,
-		"original_language": movie.OriginalLanguage,
-		"adult":             movie.Adult,
-		"cinova_score":      movie.CinovaScore,
+		"tmdb_id":             movie.TMDBID,
+		"imdb_id":             movie.IMDbID,
+		"wikidata_id":         movie.WikidataID,
+		"title":               movie.Title,
+		"original_title":      movie.OriginalTitle,
+		"tagline":             movie.Tagline,
+		"overview":            movie.Overview,
+		"release_date":        movie.ReleaseDate,
+		"runtime":             movie.Runtime,
+		"vote_average":        movie.VoteAverage,
+		"vote_count":          movie.VoteCount,
+		"popularity":          movie.Popularity,
+		"budget":              movie.Budget,
+		"revenue":             movie.Revenue,
+		"certification":       movie.Certification,
+		"trailer_youtube_key": movie.TrailerYouTubeKey,
+		"poster_path":         movie.PosterPath,
+		"backdrop_path":       movie.BackdropPath,
+		"original_language":   movie.OriginalLanguage,
+		"spoken_languages":    movie.SpokenLanguages,
+		"collection_id":       movie.CollectionID,
+		"collection_name":     movie.CollectionName,
+		"adult":               movie.Adult,
+		"cinova_score":        movie.CinovaScore,
+		"plot_summary":        movie.PlotSummary,
+		"cinova_synopsis":     movie.CinovaSynopsis,
 	})
 	if err != nil {
 		return fmt.Errorf("UpsertMovie: %w", err)
@@ -239,6 +266,23 @@ func (r *MovieRepository) UpsertMovie(ctx context.Context, movie *models.Movie) 
 			MERGE (m)-[:IN_GENRE]->(g)
 		`, map[string]interface{}{"id": g.ID, "name": g.Name, "tmdb_id": movie.TMDBID}); err != nil {
 			return fmt.Errorf("UpsertMovie genre %d: %w", g.ID, err)
+		}
+	}
+
+	// Upsert keywords (UNWIND for efficiency — one round trip)
+	if len(movie.Keywords) > 0 {
+		kwMaps := make([]map[string]interface{}, len(movie.Keywords))
+		for i, kw := range movie.Keywords {
+			kwMaps[i] = map[string]interface{}{"id": kw.ID, "name": kw.Name}
+		}
+		if err := r.driver.RunWriteUnit(ctx, `
+			UNWIND $keywords AS kw
+			MERGE (k:Keyword {id: kw.id}) SET k.name = kw.name
+			WITH k
+			MATCH (m:Movie {tmdb_id: $tmdb_id})
+			MERGE (m)-[:HAS_KEYWORD]->(k)
+		`, map[string]interface{}{"keywords": kwMaps, "tmdb_id": movie.TMDBID}); err != nil {
+			return fmt.Errorf("UpsertMovie keywords: %w", err)
 		}
 	}
 
@@ -280,6 +324,46 @@ func (r *MovieRepository) UpsertMovie(ctx context.Context, movie *models.Movie) 
 			"job":           d.Job,
 		}); err != nil {
 			return fmt.Errorf("UpsertMovie director %d: %w", d.TMDBID, err)
+		}
+	}
+
+	// Upsert writers
+	for _, w := range movie.Writers {
+		if err := r.driver.RunWriteUnit(ctx, `
+			MERGE (p:Person {tmdb_id: $tmdb_id})
+			SET p.name = $name, p.profile_path = $profile_path
+			WITH p
+			MATCH (m:Movie {tmdb_id: $movie_tmdb_id})
+			MERGE (p)-[wr:WROTE {movie_tmdb_id: $movie_tmdb_id}]->(m)
+			SET wr.job = $job
+		`, map[string]interface{}{
+			"tmdb_id":       w.TMDBID,
+			"name":          w.Name,
+			"profile_path":  w.ProfilePath,
+			"movie_tmdb_id": movie.TMDBID,
+			"job":           w.Job,
+		}); err != nil {
+			return fmt.Errorf("UpsertMovie writer %d: %w", w.TMDBID, err)
+		}
+	}
+
+	// Upsert producers
+	for _, pr := range movie.Producers {
+		if err := r.driver.RunWriteUnit(ctx, `
+			MERGE (p:Person {tmdb_id: $tmdb_id})
+			SET p.name = $name, p.profile_path = $profile_path
+			WITH p
+			MATCH (m:Movie {tmdb_id: $movie_tmdb_id})
+			MERGE (p)-[prod:PRODUCED {movie_tmdb_id: $movie_tmdb_id}]->(m)
+			SET prod.job = $job
+		`, map[string]interface{}{
+			"tmdb_id":       pr.TMDBID,
+			"name":          pr.Name,
+			"profile_path":  pr.ProfilePath,
+			"movie_tmdb_id": movie.TMDBID,
+			"job":           pr.Job,
+		}); err != nil {
+			return fmt.Errorf("UpsertMovie producer %d: %w", pr.TMDBID, err)
 		}
 	}
 
@@ -394,19 +478,38 @@ func movieNodeToModel(v interface{}) *models.Movie {
 	props := node.Props
 	m.TMDBID = int64Val(props["tmdb_id"])
 	m.IMDbID = strVal(props["imdb_id"])
+	m.WikidataID = strVal(props["wikidata_id"])
 	m.Title = strVal(props["title"])
 	m.OriginalTitle = strVal(props["original_title"])
+	m.Tagline = strVal(props["tagline"])
 	m.Overview = strVal(props["overview"])
 	m.ReleaseDate = strVal(props["release_date"])
 	m.Runtime = int(int64Val(props["runtime"]))
 	m.VoteAverage = float64Val(props["vote_average"])
 	m.VoteCount = int64Val(props["vote_count"])
 	m.Popularity = float64Val(props["popularity"])
+	m.Budget = int64Val(props["budget"])
+	m.Revenue = int64Val(props["revenue"])
+	m.Certification = strVal(props["certification"])
+	m.TrailerYouTubeKey = strVal(props["trailer_youtube_key"])
 	m.PosterPath = strVal(props["poster_path"])
 	m.BackdropPath = strVal(props["backdrop_path"])
 	m.OriginalLanguage = strVal(props["original_language"])
+	m.CollectionID = int64Val(props["collection_id"])
+	m.CollectionName = strVal(props["collection_name"])
 	m.Adult = boolVal(props["adult"])
 	m.CinovaScore = float64Val(props["cinova_score"])
+	m.PlotSummary = strVal(props["plot_summary"])
+	m.CinovaSynopsis = strVal(props["cinova_synopsis"])
+	if sl, ok := props["spoken_languages"]; ok && sl != nil {
+		if list, ok := sl.([]interface{}); ok {
+			for _, item := range list {
+				if s, ok := item.(string); ok {
+					m.SpokenLanguages = append(m.SpokenLanguages, s)
+				}
+			}
+		}
+	}
 	return m
 }
 
@@ -420,6 +523,7 @@ func tvNodeToModel(v interface{}) *models.TVShow {
 	t.TMDBID = int64Val(props["tmdb_id"])
 	t.Name = strVal(props["name"])
 	t.OriginalName = strVal(props["original_name"])
+	t.Tagline = strVal(props["tagline"])
 	t.Overview = strVal(props["overview"])
 	t.FirstAirDate = strVal(props["first_air_date"])
 	t.LastAirDate = strVal(props["last_air_date"])
@@ -433,6 +537,8 @@ func tvNodeToModel(v interface{}) *models.TVShow {
 	t.OriginalLanguage = strVal(props["original_language"])
 	t.Status = strVal(props["status"])
 	t.CinovaScore = float64Val(props["cinova_score"])
+	t.PlotSummary = strVal(props["plot_summary"])
+	t.CinovaSynopsis = strVal(props["cinova_synopsis"])
 	return t
 }
 
@@ -454,6 +560,23 @@ func toGenres(v interface{}) []models.Genre {
 		})
 	}
 	return genres
+}
+
+// toKeywords converts a Neo4j list of keyword maps into []models.Keyword.
+func toKeywords(v interface{}) []models.Keyword {
+	list, _ := v.([]interface{})
+	keywords := make([]models.Keyword, 0, len(list))
+	for _, item := range list {
+		m, _ := item.(map[string]interface{})
+		if m == nil || m["id"] == nil {
+			continue
+		}
+		keywords = append(keywords, models.Keyword{
+			ID:   int64Val(m["id"]),
+			Name: strVal(m["name"]),
+		})
+	}
+	return keywords
 }
 
 // toThemes converts a Neo4j list of theme maps into []models.Theme.
@@ -535,6 +658,7 @@ func (r *MovieRepository) UpsertTVShow(ctx context.Context, show *models.TVShow)
 		MERGE (s:TVShow {tmdb_id: $tmdb_id})
 		SET s.name               = $name,
 		    s.original_name      = $original_name,
+		    s.tagline            = $tagline,
 		    s.overview           = $overview,
 		    s.first_air_date     = $first_air_date,
 		    s.last_air_date      = $last_air_date,
@@ -552,6 +676,7 @@ func (r *MovieRepository) UpsertTVShow(ctx context.Context, show *models.TVShow)
 		"tmdb_id":            show.TMDBID,
 		"name":               show.Name,
 		"original_name":      show.OriginalName,
+		"tagline":            show.Tagline,
 		"overview":           show.Overview,
 		"first_air_date":     show.FirstAirDate,
 		"last_air_date":      show.LastAirDate,
@@ -651,6 +776,50 @@ func (r *MovieRepository) UpsertTVShow(ctx context.Context, show *models.TVShow)
 	return nil
 }
 
+// UpsertMovieAward creates or updates an Award node and attaches a HAS_WON (or HAS_NOMINATION)
+// relationship from the Movie to the Award. Uses wikidata_id as the unique key.
+func (r *MovieRepository) UpsertMovieAward(ctx context.Context, tmdbID int64, award models.Award) error {
+	relType := "HAS_WON"
+	if award.IsNomination {
+		relType = "HAS_NOMINATION"
+	}
+	cypher := `
+		MERGE (a:Award {wikidata_id: $wikidata_id})
+		SET a.award_name    = $award_name,
+		    a.ceremony_name = $ceremony_name,
+		    a.year          = $year,
+		    a.category      = $category
+		WITH a
+		MATCH (m:Movie {tmdb_id: $tmdb_id})
+		MERGE (m)-[r:` + relType + ` {wikidata_id: $wikidata_id}]->(a)
+		SET r.recipient_name = $recipient_name,
+		    r.year           = $year
+	`
+	return r.driver.RunWriteUnit(ctx, cypher, map[string]interface{}{
+		"wikidata_id":    award.WikidataID,
+		"award_name":     award.AwardName,
+		"ceremony_name":  award.CeremonyName,
+		"year":           award.Year,
+		"category":       award.Category,
+		"recipient_name": award.RecipientName,
+		"tmdb_id":        tmdbID,
+	})
+}
+
+// UpdateMovieEnrichmentText writes AI-generated plot_summary and cinova_synopsis
+// back to a Movie node after the enrichment pass.
+func (r *MovieRepository) UpdateMovieEnrichmentText(ctx context.Context, tmdbID int64, plotSummary, cinovaSynopsis string) error {
+	return r.driver.RunWriteUnit(ctx, `
+		MATCH (m:Movie {tmdb_id: $tmdb_id})
+		SET m.plot_summary    = $plot_summary,
+		    m.cinova_synopsis = $cinova_synopsis
+	`, map[string]interface{}{
+		"tmdb_id":        tmdbID,
+		"plot_summary":   plotSummary,
+		"cinova_synopsis": cinovaSynopsis,
+	})
+}
+
 // UpsertInfluenceRelationship creates an INFLUENCED_BY relationship between two Person nodes by name.
 func (r *MovieRepository) UpsertInfluenceRelationship(ctx context.Context, directorName, influencerName string) error {
 	return r.driver.RunWriteUnit(ctx, `
@@ -662,4 +831,84 @@ func (r *MovieRepository) UpsertInfluenceRelationship(ctx context.Context, direc
 		"director_name":  directorName,
 		"influencer_name": influencerName,
 	})
+}
+
+// ComputeAndUpdatePageRank runs a simplified PageRank-inspired computation using
+// Cypher without the GDS plugin. Uses the INFLUENCED_BY + DIRECTED graph to
+// compute a normalised prestige score per Movie/TVShow node.
+//
+// Strategy:
+//   - Score a movie/show by summing the "importance" of its directors
+//   - A director's importance = 1 + count of INFLUENCED_BY relationships they appear in
+//   - Normalise to [0, 1] range across all movies
+//   - Write cinova_score using ComputeCinovaScore(vote_average, vote_count, normalisedPrestige)
+func (r *MovieRepository) ComputeAndUpdatePageRank(ctx context.Context) error {
+	// Step 1: compute director prestige (in-degree on INFLUENCED_BY)
+	_, err := r.driver.RunWrite(ctx, `
+		MATCH (p:Person)
+		OPTIONAL MATCH (other:Person)-[:INFLUENCED_BY]->(p)
+		WITH p, count(other) AS influence_count
+		SET p.prestige = toFloat(1 + influence_count)
+	`, nil)
+	if err != nil {
+		return fmt.Errorf("ComputePageRank prestige: %w", err)
+	}
+
+	// Step 2: compute raw graph signal per Movie as sum of director prestige
+	_, err = r.driver.RunWrite(ctx, `
+		MATCH (m:Movie)
+		OPTIONAL MATCH (d:Person)-[:DIRECTED]->(m)
+		WITH m, coalesce(sum(d.prestige), 0.0) AS raw_signal
+		SET m.raw_graph_signal = raw_signal
+	`, nil)
+	if err != nil {
+		return fmt.Errorf("ComputePageRank movie signal: %w", err)
+	}
+
+	// Also for TV shows
+	_, err = r.driver.RunWrite(ctx, `
+		MATCH (s:TVShow)
+		OPTIONAL MATCH (d:Person)-[:DIRECTED]->(s)
+		WITH s, coalesce(sum(d.prestige), 0.0) AS raw_signal
+		SET s.raw_graph_signal = raw_signal
+	`, nil)
+	if err != nil {
+		return fmt.Errorf("ComputePageRank tvshow signal: %w", err)
+	}
+
+	// Step 3: get max raw signal for normalisation
+	records, err := r.driver.RunQuery(ctx, `
+		MATCH (n) WHERE n:Movie OR n:TVShow
+		RETURN max(n.raw_graph_signal) AS max_signal
+	`, nil)
+	if err != nil || len(records) == 0 {
+		return fmt.Errorf("ComputePageRank max query: %w", err)
+	}
+
+	maxSignalVal, _ := records[0].Get("max_signal")
+	maxSignal := float64Val(maxSignalVal)
+	if maxSignal <= 0 {
+		// No influence data yet — skip prestige update
+		return nil
+	}
+
+	// Step 4: rewrite cinova_score incorporating prestige signal.
+	// Full formula weights: audience=0.40, critic=0.25 (fallback to audience), award=0.20 (neutral=0.5),
+	// prestige=0.10, commercial=0.05 (neutral=0.5).
+	// Simplified Cypher approximation using available stored fields:
+	//   audience = bayesian(vote_average, vote_count) / 10
+	//   commercial = neutral 0.5 when budget/revenue unknown
+	//   award = neutral 0.5 (no stored aggregate yet)
+	_, err = r.driver.RunWrite(ctx, `
+		MATCH (n) WHERE n:Movie OR n:TVShow
+		WITH n, n.raw_graph_signal / $max_signal AS norm_prestige
+		WITH n, norm_prestige,
+		     (toFloat(n.vote_count) * n.vote_average + 1000.0 * 6.5) / (toFloat(n.vote_count) + 1000.0) / 10.0 AS audience
+		SET n.cinova_score = (audience * 0.65 + 0.5 * 0.20 + norm_prestige * 0.10 + 0.5 * 0.05) * 100
+	`, map[string]interface{}{"max_signal": maxSignal})
+	if err != nil {
+		return fmt.Errorf("ComputePageRank score update: %w", err)
+	}
+
+	return nil
 }

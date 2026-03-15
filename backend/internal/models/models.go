@@ -6,53 +6,72 @@ import "time"
 
 // Movie represents a movie node in the graph database.
 type Movie struct {
-	TMDBID          int64     `json:"tmdb_id"`
-	IMDbID          string    `json:"imdb_id,omitempty"`
-	Title           string    `json:"title"`
-	OriginalTitle   string    `json:"original_title,omitempty"`
-	Overview        string    `json:"overview,omitempty"`
-	ReleaseDate     string    `json:"release_date,omitempty"`
-	Runtime         int       `json:"runtime,omitempty"`
-	VoteAverage     float64   `json:"vote_average"`
-	VoteCount       int64     `json:"vote_count"`
-	Popularity      float64   `json:"popularity"`
-	PosterPath      string    `json:"poster_path,omitempty"`
-	BackdropPath    string    `json:"backdrop_path,omitempty"`
-	OriginalLanguage string   `json:"original_language,omitempty"`
-	Adult           bool      `json:"adult"`
-	CinovaScore     float64   `json:"cinova_score,omitempty"`
-	Genres          []Genre   `json:"genres,omitempty"`
-	Themes          []Theme   `json:"themes,omitempty"`
-	Moods           []Mood    `json:"moods,omitempty"`
-	Cast            []Person  `json:"cast,omitempty"`
-	Directors       []Person  `json:"directors,omitempty"`
-	Providers       []Provider `json:"providers,omitempty"`
+	TMDBID             int64      `json:"tmdb_id"`
+	IMDbID             string     `json:"imdb_id,omitempty"`
+	WikidataID         string     `json:"wikidata_id,omitempty"`
+	Title              string     `json:"title"`
+	OriginalTitle      string     `json:"original_title,omitempty"`
+	Tagline            string     `json:"tagline,omitempty"`
+	Overview           string     `json:"overview,omitempty"`
+	ReleaseDate        string     `json:"release_date,omitempty"`
+	Runtime            int        `json:"runtime,omitempty"`
+	VoteAverage        float64    `json:"vote_average"`
+	VoteCount          int64      `json:"vote_count"`
+	Popularity         float64    `json:"popularity"`
+	Budget             int64      `json:"budget,omitempty"`
+	Revenue            int64      `json:"revenue,omitempty"`
+	Certification      string     `json:"certification,omitempty"`
+	TrailerYouTubeKey  string     `json:"trailer_youtube_key,omitempty"`
+	PosterPath         string     `json:"poster_path,omitempty"`
+	BackdropPath       string     `json:"backdrop_path,omitempty"`
+	OriginalLanguage   string     `json:"original_language,omitempty"`
+	SpokenLanguages    []string   `json:"spoken_languages,omitempty"`
+	CollectionID       int64      `json:"collection_id,omitempty"`
+	CollectionName     string     `json:"collection_name,omitempty"`
+	Adult              bool       `json:"adult"`
+	CinovaScore        float64    `json:"cinova_score,omitempty"`
+	Genres             []Genre    `json:"genres,omitempty"`
+	Keywords           []Keyword  `json:"keywords,omitempty"`
+	Themes             []Theme    `json:"themes,omitempty"`
+	Moods              []Mood     `json:"moods,omitempty"`
+	Cast               []Person   `json:"cast,omitempty"`
+	Directors          []Person   `json:"directors,omitempty"`
+	Writers            []Person   `json:"writers,omitempty"`
+	Producers          []Person   `json:"producers,omitempty"`
+	Providers          []Provider `json:"providers,omitempty"`
+	Awards             []Award    `json:"awards,omitempty"`
+	PlotSummary        string     `json:"plot_summary,omitempty"`
+	CinovaSynopsis     string     `json:"cinova_synopsis,omitempty"`
 }
 
 // TVShow represents a TV series node in the graph database.
 type TVShow struct {
-	TMDBID           int64     `json:"tmdb_id"`
-	Name             string    `json:"name"`
-	OriginalName     string    `json:"original_name,omitempty"`
-	Overview         string    `json:"overview,omitempty"`
-	FirstAirDate     string    `json:"first_air_date,omitempty"`
-	LastAirDate      string    `json:"last_air_date,omitempty"`
-	NumberOfSeasons  int       `json:"number_of_seasons,omitempty"`
-	NumberOfEpisodes int       `json:"number_of_episodes,omitempty"`
-	VoteAverage      float64   `json:"vote_average"`
-	VoteCount        int64     `json:"vote_count"`
-	Popularity       float64   `json:"popularity"`
-	PosterPath       string    `json:"poster_path,omitempty"`
-	BackdropPath     string    `json:"backdrop_path,omitempty"`
-	OriginalLanguage string    `json:"original_language,omitempty"`
-	Status           string    `json:"status,omitempty"`
-	CinovaScore      float64   `json:"cinova_score,omitempty"`
-	Genres           []Genre   `json:"genres,omitempty"`
-	Themes           []Theme   `json:"themes,omitempty"`
-	Moods            []Mood    `json:"moods,omitempty"`
-	Cast             []Person  `json:"cast,omitempty"`
-	Creators         []Person  `json:"creators,omitempty"`
+	TMDBID           int64      `json:"tmdb_id"`
+	Name             string     `json:"name"`
+	OriginalName     string     `json:"original_name,omitempty"`
+	Tagline          string     `json:"tagline,omitempty"`
+	Overview         string     `json:"overview,omitempty"`
+	FirstAirDate     string     `json:"first_air_date,omitempty"`
+	LastAirDate      string     `json:"last_air_date,omitempty"`
+	NumberOfSeasons  int        `json:"number_of_seasons,omitempty"`
+	NumberOfEpisodes int        `json:"number_of_episodes,omitempty"`
+	VoteAverage      float64    `json:"vote_average"`
+	VoteCount        int64      `json:"vote_count"`
+	Popularity       float64    `json:"popularity"`
+	PosterPath       string     `json:"poster_path,omitempty"`
+	BackdropPath     string     `json:"backdrop_path,omitempty"`
+	OriginalLanguage string     `json:"original_language,omitempty"`
+	Status           string     `json:"status,omitempty"`
+	CinovaScore      float64    `json:"cinova_score,omitempty"`
+	Genres           []Genre    `json:"genres,omitempty"`
+	Keywords         []Keyword  `json:"keywords,omitempty"`
+	Themes           []Theme    `json:"themes,omitempty"`
+	Moods            []Mood     `json:"moods,omitempty"`
+	Cast             []Person   `json:"cast,omitempty"`
+	Creators         []Person   `json:"creators,omitempty"`
 	Providers        []Provider `json:"providers,omitempty"`
+	PlotSummary      string     `json:"plot_summary,omitempty"`
+	CinovaSynopsis   string     `json:"cinova_synopsis,omitempty"`
 }
 
 // Person represents an actor, director, or other crew member.
@@ -71,6 +90,33 @@ type Person struct {
 type Genre struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
+}
+
+// Keyword is a structured TMDB vocabulary tag (e.g. "vampire", "1930s", "southern gothic").
+type Keyword struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+// Award represents a film/TV award or nomination sourced from Wikidata (P166/P1411).
+type Award struct {
+	WikidataID    string `json:"wikidata_id,omitempty"`   // QID of the award item
+	AwardName     string `json:"award_name"`
+	CeremonyName  string `json:"ceremony_name,omitempty"`
+	Year          int    `json:"year,omitempty"`
+	RecipientName string `json:"recipient_name,omitempty"` // individual winner if applicable
+	Category      string `json:"category,omitempty"`
+	IsNomination  bool   `json:"is_nomination"`
+}
+
+// ScoringProfile stores a user's personalized scoring weights preset.
+type ScoringProfile struct {
+	Preset     string  `json:"preset"`     // "mainstream", "cinephile", "arthouse", "blockbuster", "award_season"
+	Audience   float64 `json:"audience"`
+	Critic     float64 `json:"critic"`
+	Award      float64 `json:"award"`
+	Prestige   float64 `json:"prestige"`
+	Commercial float64 `json:"commercial"`
 }
 
 // Theme is an AI-extracted thematic tag.

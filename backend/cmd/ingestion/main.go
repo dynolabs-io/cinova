@@ -134,7 +134,7 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 				return
 			}
 
-			movie, err := fetchMovie(ctx, tmdbClient, movieID, country)
+			movie, err := fetchMovie(ctx, tmdbClient, wikiClient, movieID, country)
 			if err != nil {
 				log.Error().Err(err).Int("tmdb_id", movieID).Msg("fetch failed")
 				errors.Add(1)
@@ -152,7 +152,13 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 				return
 			}
 
-			// Wire Wikidata director influences
+			// Upsert Wikidata awards
+			for _, award := range movie.Awards {
+				if err := repo.UpsertMovieAward(ctx, movie.TMDBID, award); err != nil {
+					log.Debug().Err(err).Int64("tmdb_id", movie.TMDBID).Str("award", award.AwardName).Msg("award upsert failed")
+				}
+			}
+
 			n := processed.Add(1)
 			mu.Lock()
 			batch = append(batch, *movie)
@@ -203,6 +209,14 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 
 	// Wire Wikidata director influences (post-ingestion, run once)
 	runWikidataInfluences(ctx, repo, wikiClient)
+
+	// Recompute prestige-informed CinovaScores
+	log.Info().Msg("computing graph prestige scores")
+	if err := repo.ComputeAndUpdatePageRank(ctx); err != nil {
+		log.Warn().Err(err).Msg("PageRank computation failed (non-fatal)")
+	} else {
+		log.Info().Msg("graph prestige scores updated")
+	}
 }
 
 // ── Full TV Ingestion ──────────────────────────────────────────────────────────
@@ -359,7 +373,7 @@ func runDeltaIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClien
 				return
 			}
 
-			movie, err := fetchMovie(ctx, tmdbClient, movieID, country)
+			movie, err := fetchMovie(ctx, tmdbClient, wikiClient, movieID, country)
 			if err != nil {
 				log.Error().Err(err).Int("tmdb_id", movieID).Msg("fetch failed")
 				errors.Add(1)
@@ -370,6 +384,12 @@ func runDeltaIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClien
 				log.Error().Err(err).Int64("tmdb_id", movie.TMDBID).Msg("upsert failed")
 				errors.Add(1)
 				return
+			}
+
+			for _, award := range movie.Awards {
+				if err := repo.UpsertMovieAward(ctx, movie.TMDBID, award); err != nil {
+					log.Debug().Err(err).Int64("tmdb_id", movie.TMDBID).Str("award", award.AwardName).Msg("award upsert failed")
+				}
 			}
 
 			processed.Add(1)
@@ -501,17 +521,68 @@ func runDeltaTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichCli
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-// fetchMovie fetches full TMDB movie details + providers, computes CinovaScore.
-func fetchMovie(ctx context.Context, client *tmdb.Client, id int, country string) (*models.Movie, error) {
-	details, err := client.GetMovieDetails(ctx, id)
+// fetchMovie fetches full TMDB movie details + providers + Wikidata enrichment,
+// then computes a CinovaScore incorporating critic scores and awards when available.
+func fetchMovie(ctx context.Context, tmdbClient *tmdb.Client, wikiClient *wikidata.Client, id int, country string) (*models.Movie, error) {
+	details, err := tmdbClient.GetMovieDetails(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
 	movie := details.ToModel()
-	movie.CinovaScore = scoring.ComputeCinovaScore(movie.VoteAverage, int(movie.VoteCount), movie.Popularity/1000)
 
-	providers, err := client.GetWatchProviders(ctx, id, "movie")
+	// Wikidata enrichment: awards, critic scores, Wikipedia plot
+	params := scoring.ScoreParams{
+		VoteAverage:   movie.VoteAverage,
+		VoteCount:     int(movie.VoteCount),
+		CriticScore:   -1,  // unknown until Wikidata confirms
+		AwardScore:    0.5, // neutral until Wikidata confirms
+		GraphPrestige: 0,   // set later by ComputeAndUpdatePageRank
+		Budget:        movie.Budget,
+		Revenue:       movie.Revenue,
+	}
+
+	if movie.WikidataID != "" {
+		enrichCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		enrichData, enrichErr := wikiClient.GetMovieEnrichment(enrichCtx, movie.WikidataID)
+		cancel()
+
+		if enrichErr == nil && enrichData != nil {
+			movie.Awards = enrichData.Awards
+			params.AwardScore = scoring.ComputeAwardScore(enrichData.Awards)
+
+			// Blend available critic signals
+			var criticSignals []float64
+			if enrichData.RTScore >= 0 {
+				criticSignals = append(criticSignals, enrichData.RTScore)
+			}
+			if enrichData.MetaScore >= 0 {
+				criticSignals = append(criticSignals, enrichData.MetaScore)
+			}
+			if enrichData.IMDbScore >= 0 {
+				criticSignals = append(criticSignals, enrichData.IMDbScore)
+			}
+			if len(criticSignals) > 0 {
+				sum := 0.0
+				for _, s := range criticSignals {
+					sum += s
+				}
+				params.CriticScore = sum / float64(len(criticSignals))
+			}
+		}
+
+		// Wikipedia plot (best-effort)
+		plotCtx, plotCancel := context.WithTimeout(ctx, 20*time.Second)
+		plot, plotErr := wikiClient.GetWikipediaPlot(plotCtx, movie.WikidataID)
+		plotCancel()
+		if plotErr == nil && plot != "" {
+			movie.PlotSummary = plot
+		}
+	}
+
+	movie.CinovaScore = scoring.ComputeFullScore(params, scoring.DefaultWeights())
+
+	providers, err := tmdbClient.GetWatchProviders(ctx, id, "movie")
 	if err == nil {
 		countryProviders := providers[country]
 		movie.Providers = make([]models.Provider, 0, len(countryProviders))
