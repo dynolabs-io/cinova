@@ -63,18 +63,21 @@ func (r *MovieRepository) DismissTitle(ctx context.Context, ownerID string, owne
 	})
 }
 
-// GetWatchlist returns all titles saved by an owner, ordered by save date descending.
+// GetWatchlist returns all titles (Movies and TVShows) saved by an owner, ordered by save date descending.
 func (r *MovieRepository) GetWatchlist(ctx context.Context, ownerID string, ownerType string) ([]models.Movie, error) {
 	cypher := fmt.Sprintf(`
-		MATCH (owner:%s {id: $owner_id})-[rel:SAVED]->(n:Movie)
+		MATCH (owner:%s {id: $owner_id})-[rel:SAVED]->(n)
+		WHERE n:Movie OR n:TVShow
 		OPTIONAL MATCH (n)-[:IN_GENRE]->(g:Genre)
-		OPTIONAL MATCH (n)-[:AVAILABLE_ON]->(prov:Provider)
+		OPTIONAL MATCH (n)-[avail:AVAILABLE_ON]->(prov:Provider)
 		RETURN n,
-		       rel.saved_at                                              AS saved_at,
-		       collect(DISTINCT {id: g.id, name: g.name})               AS genres,
+		       labels(n)                                                  AS node_labels,
+		       rel.saved_at                                               AS saved_at,
+		       collect(DISTINCT {id: g.id, name: g.name})                AS genres,
 		       collect(DISTINCT {provider_id: prov.provider_id,
 		                          provider_name: prov.provider_name,
-		                          logo_path: prov.logo_path})             AS providers
+		                          logo_path: prov.logo_path,
+		                          type: avail.type})                      AS providers
 		ORDER BY rel.saved_at DESC
 	`, ownerType)
 
@@ -88,7 +91,41 @@ func (r *MovieRepository) GetWatchlist(ctx context.Context, ownerID string, owne
 	movies := make([]models.Movie, 0, len(records))
 	for _, rec := range records {
 		node, _ := rec.Get("n")
-		m := movieNodeToModel(node)
+		// Determine media type from labels to set correct title field
+		mediaType := "movie"
+		if labels, ok := rec.Get("node_labels"); ok {
+			if labelList, ok := labels.([]interface{}); ok {
+				for _, l := range labelList {
+					if s, ok := l.(string); ok && s == "TVShow" {
+						mediaType = "tv"
+						break
+					}
+				}
+			}
+		}
+		var m *models.Movie
+		if mediaType == "tv" {
+			// Convert TVShow node to Movie-shaped response for unified list
+			show := tvNodeToModel(node)
+			m = &models.Movie{
+				TMDBID:         show.TMDBID,
+				MediaType:      "tv",
+				Title:          show.Name,
+				OriginalTitle:  show.OriginalName,
+				Tagline:        show.Tagline,
+				Overview:       show.Overview,
+				ReleaseDate:    show.FirstAirDate,
+				VoteAverage:    show.VoteAverage,
+				VoteCount:      show.VoteCount,
+				Popularity:     show.Popularity,
+				PosterPath:     show.PosterPath,
+				BackdropPath:   show.BackdropPath,
+				CinovaScore:    show.CinovaScore,
+				CinovaSynopsis: show.CinovaSynopsis,
+			}
+		} else {
+			m = movieNodeToModel(node)
+		}
 		if v, ok := rec.Get("genres"); ok {
 			m.Genres = toGenres(v)
 		}
