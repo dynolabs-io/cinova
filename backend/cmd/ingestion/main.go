@@ -104,6 +104,19 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 
 	log.Info().Int("total_ids", len(ids)).Int("min_votes", minVotes).Msg("bulk ID export fetched")
 
+	// Async enrichment: dedicated goroutine so TMDB fetching is never blocked.
+	enrichCh := make(chan []models.Movie, 20)
+	var enrichWg sync.WaitGroup
+	enrichWg.Add(1)
+	go func() {
+		defer enrichWg.Done()
+		for b := range enrichCh {
+			if enrichErr := enrichClient.ProcessMovieBatch(ctx, b, repo); enrichErr != nil {
+				log.Warn().Err(enrichErr).Msg("async batch enrichment failed")
+			}
+		}
+	}()
+
 	var (
 		processed  atomic.Int64
 		skipped    atomic.Int64
@@ -121,6 +134,8 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 		case <-ctx.Done():
 			log.Warn().Msg("context cancelled, stopping")
 			wg.Wait()
+			close(enrichCh)
+			enrichWg.Wait()
 			return
 		default:
 		}
@@ -163,17 +178,18 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 			n := processed.Add(1)
 			mu.Lock()
 			batch = append(batch, *movie)
-			currentBatch := batch
+			var sendBatch []models.Movie
 			if len(batch) >= enrichBatch {
+				sendBatch = batch
 				batch = make([]models.Movie, 0, enrichBatch)
-			} else {
-				currentBatch = nil
 			}
 			mu.Unlock()
 
-			if currentBatch != nil {
-				if enrichErr := enrichClient.ProcessMovieBatch(ctx, currentBatch, repo); enrichErr != nil {
-					log.Warn().Err(enrichErr).Msg("batch enrichment failed")
+			if sendBatch != nil {
+				select {
+				case enrichCh <- sendBatch:
+				default:
+					log.Warn().Int("batch_size", len(sendBatch)).Msg("enrichment queue full, skipping batch")
 				}
 			}
 
@@ -196,10 +212,11 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 	remaining := batch
 	mu.Unlock()
 	if len(remaining) > 0 {
-		if err := enrichClient.ProcessMovieBatch(ctx, remaining, repo); err != nil {
-			log.Warn().Err(err).Msg("final batch enrichment failed")
-		}
+		enrichCh <- remaining
 	}
+	close(enrichCh)
+	log.Info().Msg("waiting for enrichment to drain...")
+	enrichWg.Wait()
 
 	log.Info().
 		Int64("processed", processed.Load()).
@@ -232,6 +249,19 @@ func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClient
 
 	log.Info().Int("total_ids", len(ids)).Int("min_votes", minVotes).Msg("TV bulk ID export fetched")
 
+	// Async enrichment: dedicated goroutine so TMDB fetching is never blocked.
+	enrichCh := make(chan []models.TVShow, 20)
+	var enrichWg sync.WaitGroup
+	enrichWg.Add(1)
+	go func() {
+		defer enrichWg.Done()
+		for b := range enrichCh {
+			if enrichErr := enrichClient.ProcessTVBatch(ctx, b, repo); enrichErr != nil {
+				log.Warn().Err(enrichErr).Msg("async TV batch enrichment failed")
+			}
+		}
+	}()
+
 	var (
 		processed atomic.Int64
 		skipped   atomic.Int64
@@ -248,6 +278,8 @@ func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClient
 		select {
 		case <-ctx.Done():
 			wg.Wait()
+			close(enrichCh)
+			enrichWg.Wait()
 			return
 		default:
 		}
@@ -283,17 +315,18 @@ func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClient
 			n := processed.Add(1)
 			mu.Lock()
 			batch = append(batch, *show)
-			currentBatch := batch
+			var sendBatch []models.TVShow
 			if len(batch) >= enrichBatch {
+				sendBatch = batch
 				batch = make([]models.TVShow, 0, enrichBatch)
-			} else {
-				currentBatch = nil
 			}
 			mu.Unlock()
 
-			if currentBatch != nil {
-				if enrichErr := enrichClient.ProcessTVBatch(ctx, currentBatch, repo); enrichErr != nil {
-					log.Warn().Err(enrichErr).Msg("TV batch enrichment failed")
+			if sendBatch != nil {
+				select {
+				case enrichCh <- sendBatch:
+				default:
+					log.Warn().Int("batch_size", len(sendBatch)).Msg("TV enrichment queue full, skipping batch")
 				}
 			}
 
@@ -315,10 +348,11 @@ func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClient
 	remaining := batch
 	mu.Unlock()
 	if len(remaining) > 0 {
-		if err := enrichClient.ProcessTVBatch(ctx, remaining, repo); err != nil {
-			log.Warn().Err(err).Msg("final TV batch enrichment failed")
-		}
+		enrichCh <- remaining
 	}
+	close(enrichCh)
+	log.Info().Msg("waiting for TV enrichment to drain...")
+	enrichWg.Wait()
 
 	log.Info().
 		Int64("processed", processed.Load()).
