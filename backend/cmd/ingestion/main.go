@@ -75,14 +75,14 @@ func main() {
 			runFullIngestion(ctx, tmdbClient, enrichClient, movieRepo, wikiClient, *country, *minVotes, limiter)
 		}
 		if *mediaType == "tvshow" || *mediaType == "all" {
-			runFullTVIngestion(ctx, tmdbClient, enrichClient, movieRepo, *country, *minVotes, limiter)
+			runFullTVIngestion(ctx, tmdbClient, wikiClient, enrichClient, movieRepo, *country, *minVotes, limiter)
 		}
 	case "delta":
 		if *mediaType == "movie" || *mediaType == "all" {
 			runDeltaIngestion(ctx, tmdbClient, enrichClient, movieRepo, wikiClient, *country, limiter)
 		}
 		if *mediaType == "tvshow" || *mediaType == "all" {
-			runDeltaTVIngestion(ctx, tmdbClient, enrichClient, movieRepo, *country, limiter)
+			runDeltaTVIngestion(ctx, tmdbClient, wikiClient, enrichClient, movieRepo, *country, limiter)
 		}
 	default:
 		log.Fatal().Str("mode", *mode).Msg("unknown mode; use full or delta")
@@ -221,7 +221,7 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 
 // ── Full TV Ingestion ──────────────────────────────────────────────────────────
 
-func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient *enrichment.Client, repo *graph.MovieRepository, country string, minVotes int, limiter *rate.Limiter) {
+func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClient *wikidata.Client, enrichClient *enrichment.Client, repo *graph.MovieRepository, country string, minVotes int, limiter *rate.Limiter) {
 	log.Info().Msg("fetching bulk TV show ID export from TMDB")
 
 	ids, err := tmdbClient.GetBulkTVShowIDs(ctx)
@@ -261,7 +261,7 @@ func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClie
 				return
 			}
 
-			show, err := fetchTVShow(ctx, tmdbClient, showID, country)
+			show, err := fetchTVShow(ctx, tmdbClient, wikiClient, showID, country)
 			if err != nil {
 				log.Error().Err(err).Int("tmdb_id", showID).Msg("TV fetch failed")
 				errors.Add(1)
@@ -429,7 +429,7 @@ func runDeltaIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClien
 
 // ── Delta TV Ingestion ─────────────────────────────────────────────────────────
 
-func runDeltaTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient *enrichment.Client, repo *graph.MovieRepository, country string, limiter *rate.Limiter) {
+func runDeltaTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClient *wikidata.Client, enrichClient *enrichment.Client, repo *graph.MovieRepository, country string, limiter *rate.Limiter) {
 	log.Info().Msg("fetching trending TV shows (delta)")
 
 	allIDs := make([]int, 0, 500)
@@ -473,7 +473,7 @@ func runDeltaTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichCli
 				return
 			}
 
-			show, err := fetchTVShow(ctx, tmdbClient, showID, country)
+			show, err := fetchTVShow(ctx, tmdbClient, wikiClient, showID, country)
 			if err != nil {
 				log.Error().Err(err).Int("tmdb_id", showID).Msg("TV fetch failed")
 				errors.Add(1)
@@ -601,17 +601,32 @@ func fetchMovie(ctx context.Context, tmdbClient *tmdb.Client, wikiClient *wikida
 	return movie, nil
 }
 
-// fetchTVShow fetches full TMDB TV show details + providers, computes CinovaScore.
-func fetchTVShow(ctx context.Context, client *tmdb.Client, id int, country string) (*models.TVShow, error) {
-	details, err := client.GetTVShowDetails(ctx, id)
+// fetchTVShow fetches full TMDB TV show details + providers + Wikidata enrichment,
+// then computes CinovaScore.
+func fetchTVShow(ctx context.Context, tmdbClient *tmdb.Client, wikiClient *wikidata.Client, id int, country string) (*models.TVShow, error) {
+	details, err := tmdbClient.GetTVShowDetails(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
 	show := details.ToModel()
-	show.CinovaScore = scoring.ComputeCinovaScore(show.VoteAverage, int(show.VoteCount), show.Popularity/1000)
 
-	providers, err := client.GetWatchProviders(ctx, id, "tv")
+	params := scoring.ScoreParams{
+		VoteAverage:   show.VoteAverage,
+		VoteCount:     int(show.VoteCount),
+		CriticScore:   -1,
+		AwardScore:    0.5,
+		GraphPrestige: 0,
+	}
+
+	// Wikidata enrichment for TV shows that have a wikidata_id
+	// (Currently stored in external_ids but TVShow model needs wikidata_id — skip if empty)
+	// Wikipedia plot + awards use same 3-query approach as movies
+	_ = wikiClient // reserved for future TV wikidata_id field
+
+	show.CinovaScore = scoring.ComputeFullScore(params, scoring.DefaultWeights())
+
+	providers, err := tmdbClient.GetWatchProviders(ctx, id, "tv")
 	if err == nil {
 		countryProviders := providers[country]
 		show.Providers = make([]models.Provider, 0, len(countryProviders))

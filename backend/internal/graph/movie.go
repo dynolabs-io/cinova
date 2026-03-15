@@ -19,7 +19,7 @@ func NewMovieRepository(driver *Driver) *MovieRepository {
 	return &MovieRepository{driver: driver}
 }
 
-// GetMovie retrieves a full movie node with genres, themes, cast, and directors.
+// GetMovie retrieves a full movie node with genres, keywords, themes, cast, directors, and awards.
 func (r *MovieRepository) GetMovie(ctx context.Context, tmdbID int) (*models.Movie, error) {
 	records, err := r.driver.RunQuery(ctx, `
 		MATCH (m:Movie {tmdb_id: $tmdb_id})
@@ -29,17 +29,26 @@ func (r *MovieRepository) GetMovie(ctx context.Context, tmdbID int) (*models.Mov
 		OPTIONAL MATCH (m)-[:HAS_MOOD]->(mo:Mood)
 		OPTIONAL MATCH (m)<-[act:ACTED_IN]-(p:Person)
 		OPTIONAL MATCH (m)<-[dir:DIRECTED]-(d:Person)
+		OPTIONAL MATCH (m)-[won:HAS_WON]->(aw:Award)
+		OPTIONAL MATCH (m)-[nom:HAS_NOMINATION]->(na:Award)
 		RETURN m,
-		       collect(DISTINCT {id: g.id, name: g.name})              AS genres,
-		       collect(DISTINCT {id: k.id, name: k.name})              AS keywords,
-		       collect(DISTINCT {name: t.name, score: t.score})        AS themes,
-		       collect(DISTINCT {name: mo.name, score: mo.score})      AS moods,
+		       collect(DISTINCT {id: g.id, name: g.name})                        AS genres,
+		       collect(DISTINCT {id: k.id, name: k.name})                        AS keywords,
+		       collect(DISTINCT {name: t.name, score: t.score})                  AS themes,
+		       collect(DISTINCT {name: mo.name, score: mo.score})                AS moods,
 		       collect(DISTINCT {tmdb_id: p.tmdb_id, name: p.name,
 		                          profile_path: p.profile_path,
-		                          role: act.character, order: act.order}) AS cast,
+		                          role: act.character, order: act.order})        AS cast,
 		       collect(DISTINCT {tmdb_id: d.tmdb_id, name: d.name,
 		                          profile_path: d.profile_path,
-		                          job: dir.job})                         AS directors
+		                          job: dir.job})                                  AS directors,
+		       collect(DISTINCT {wikidata_id: aw.wikidata_id, award_name: aw.award_name,
+		                          ceremony_name: aw.ceremony_name, year: won.year,
+		                          recipient_name: won.recipient_name,
+		                          is_nomination: false})                          AS wins,
+		       collect(DISTINCT {wikidata_id: na.wikidata_id, award_name: na.award_name,
+		                          ceremony_name: na.ceremony_name, year: nom.year,
+		                          is_nomination: true})                           AS nominations
 	`, map[string]interface{}{"tmdb_id": tmdbID})
 	if err != nil {
 		return nil, fmt.Errorf("GetMovie query: %w", err)
@@ -70,21 +79,29 @@ func (r *MovieRepository) GetMovie(ctx context.Context, tmdbID int) (*models.Mov
 	if v, ok := rec.Get("directors"); ok {
 		movie.Directors = toPeople(v)
 	}
+	if v, ok := rec.Get("wins"); ok {
+		movie.Awards = append(movie.Awards, toAwards(v)...)
+	}
+	if v, ok := rec.Get("nominations"); ok {
+		movie.Awards = append(movie.Awards, toAwards(v)...)
+	}
 
 	return movie, nil
 }
 
-// GetTVShow retrieves a full TV show node with genres, themes, cast, and creators.
+// GetTVShow retrieves a full TV show node with genres, keywords, themes, cast, and creators.
 func (r *MovieRepository) GetTVShow(ctx context.Context, tmdbID int) (*models.TVShow, error) {
 	records, err := r.driver.RunQuery(ctx, `
 		MATCH (t:TVShow {tmdb_id: $tmdb_id})
 		OPTIONAL MATCH (t)-[:IN_GENRE]->(g:Genre)
+		OPTIONAL MATCH (t)-[:HAS_KEYWORD]->(k:Keyword)
 		OPTIONAL MATCH (t)-[:HAS_THEME]->(th:Theme)
 		OPTIONAL MATCH (t)-[:HAS_MOOD]->(mo:Mood)
 		OPTIONAL MATCH (t)<-[act:ACTED_IN]-(p:Person)
 		OPTIONAL MATCH (t)<-[cr:CREATED]-(c:Person)
 		RETURN t,
 		       collect(DISTINCT {id: g.id, name: g.name})               AS genres,
+		       collect(DISTINCT {id: k.id, name: k.name})               AS keywords,
 		       collect(DISTINCT {name: th.name, score: th.score})        AS themes,
 		       collect(DISTINCT {name: mo.name, score: mo.score})        AS moods,
 		       collect(DISTINCT {tmdb_id: p.tmdb_id, name: p.name,
@@ -106,6 +123,9 @@ func (r *MovieRepository) GetTVShow(ctx context.Context, tmdbID int) (*models.TV
 
 	if v, ok := rec.Get("genres"); ok {
 		show.Genres = toGenres(v)
+	}
+	if v, ok := rec.Get("keywords"); ok {
+		show.Keywords = toKeywords(v)
 	}
 	if v, ok := rec.Get("themes"); ok {
 		show.Themes = toThemes(v)
@@ -634,6 +654,27 @@ func toPeople(v interface{}) []models.Person {
 	return people
 }
 
+// toAwards converts a Neo4j list of award maps into []models.Award.
+func toAwards(v interface{}) []models.Award {
+	list, _ := v.([]interface{})
+	awards := make([]models.Award, 0, len(list))
+	for _, item := range list {
+		m, _ := item.(map[string]interface{})
+		if m == nil || m["wikidata_id"] == nil || strVal(m["wikidata_id"]) == "" {
+			continue
+		}
+		awards = append(awards, models.Award{
+			WikidataID:    strVal(m["wikidata_id"]),
+			AwardName:     strVal(m["award_name"]),
+			CeremonyName:  strVal(m["ceremony_name"]),
+			Year:          int(int64Val(m["year"])),
+			RecipientName: strVal(m["recipient_name"]),
+			IsNomination:  boolVal(m["is_nomination"]),
+		})
+	}
+	return awards
+}
+
 // toProviders converts a Neo4j list of provider maps into []models.Provider.
 func toProviders(v interface{}) []models.Provider {
 	list, _ := v.([]interface{})
@@ -831,6 +872,97 @@ func (r *MovieRepository) UpsertInfluenceRelationship(ctx context.Context, direc
 		"director_name":  directorName,
 		"influencer_name": influencerName,
 	})
+}
+
+// UpsertTVShowAward creates or updates an Award node and attaches a HAS_WON or
+// HAS_NOMINATION relationship from a TVShow node.
+func (r *MovieRepository) UpsertTVShowAward(ctx context.Context, tmdbID int64, award models.Award) error {
+	relType := "HAS_WON"
+	if award.IsNomination {
+		relType = "HAS_NOMINATION"
+	}
+	cypher := `
+		MERGE (a:Award {wikidata_id: $wikidata_id})
+		SET a.award_name    = $award_name,
+		    a.ceremony_name = $ceremony_name,
+		    a.year          = $year,
+		    a.category      = $category
+		WITH a
+		MATCH (s:TVShow {tmdb_id: $tmdb_id})
+		MERGE (s)-[r:` + relType + ` {wikidata_id: $wikidata_id}]->(a)
+		SET r.recipient_name = $recipient_name,
+		    r.year           = $year
+	`
+	return r.driver.RunWriteUnit(ctx, cypher, map[string]interface{}{
+		"wikidata_id":    award.WikidataID,
+		"award_name":     award.AwardName,
+		"ceremony_name":  award.CeremonyName,
+		"year":           award.Year,
+		"category":       award.Category,
+		"recipient_name": award.RecipientName,
+		"tmdb_id":        tmdbID,
+	})
+}
+
+// UpsertScoringProfile stores a user's scoring preset on the User node in Neo4j.
+func (r *MovieRepository) UpsertScoringProfile(ctx context.Context, userID string, profile models.ScoringProfile) error {
+	return r.driver.RunWriteUnit(ctx, `
+		MATCH (u:User {id: $user_id})
+		SET u.scoring_preset      = $preset,
+		    u.scoring_audience    = $audience,
+		    u.scoring_critic      = $critic,
+		    u.scoring_award       = $award,
+		    u.scoring_prestige    = $prestige,
+		    u.scoring_commercial  = $commercial
+	`, map[string]interface{}{
+		"user_id":    userID,
+		"preset":     profile.Preset,
+		"audience":   profile.Audience,
+		"critic":     profile.Critic,
+		"award":      profile.Award,
+		"prestige":   profile.Prestige,
+		"commercial": profile.Commercial,
+	})
+}
+
+// GetScoringProfile returns a user's stored scoring profile, or the default if not set.
+func (r *MovieRepository) GetScoringProfile(ctx context.Context, userID string) (models.ScoringProfile, error) {
+	records, err := r.driver.RunQuery(ctx, `
+		MATCH (u:User {id: $user_id})
+		RETURN u.scoring_preset     AS preset,
+		       u.scoring_audience   AS audience,
+		       u.scoring_critic     AS critic,
+		       u.scoring_award      AS award,
+		       u.scoring_prestige   AS prestige,
+		       u.scoring_commercial AS commercial
+	`, map[string]interface{}{"user_id": userID})
+	if err != nil || len(records) == 0 {
+		return models.ScoringProfile{Preset: "mainstream"}, nil
+	}
+	rec := records[0]
+	p := models.ScoringProfile{}
+	if v, ok := rec.Get("preset"); ok {
+		p.Preset = strVal(v)
+	}
+	if v, ok := rec.Get("audience"); ok {
+		p.Audience = float64Val(v)
+	}
+	if v, ok := rec.Get("critic"); ok {
+		p.Critic = float64Val(v)
+	}
+	if v, ok := rec.Get("award"); ok {
+		p.Award = float64Val(v)
+	}
+	if v, ok := rec.Get("prestige"); ok {
+		p.Prestige = float64Val(v)
+	}
+	if v, ok := rec.Get("commercial"); ok {
+		p.Commercial = float64Val(v)
+	}
+	if p.Preset == "" {
+		p.Preset = "mainstream"
+	}
+	return p, nil
 }
 
 // ComputeAndUpdatePageRank runs a simplified PageRank-inspired computation using

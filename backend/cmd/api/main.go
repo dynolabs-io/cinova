@@ -78,6 +78,7 @@ func main() {
 	recommendHandler := handlers.NewRecommendHandler(movieRepo, rdb)
 	personHandler := handlers.NewPersonHandler(movieRepo)
 	pushTokenHandler := handlers.NewPushTokenHandler(pg)
+	scoringHandler := handlers.NewScoringHandler(movieRepo)
 
 	// Search
 	searchHandler := search.NewHandler(neo, rdb, cfg)
@@ -166,6 +167,8 @@ func main() {
 				r.Post("/dismiss", interactionHandler.Dismiss)
 				r.Get("/watchlist", interactionHandler.GetWatchlist)
 				r.Post("/push-token", pushTokenHandler.RegisterPushToken)
+				r.Get("/scoring-profile", scoringHandler.GetScoringProfile)
+				r.Put("/scoring-profile", scoringHandler.SetScoringProfile)
 			})
 		})
 	})
