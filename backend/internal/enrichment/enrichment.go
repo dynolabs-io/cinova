@@ -24,14 +24,14 @@ const (
 	// Sonnet 4.6 — superior semantic understanding for enrichment quality
 	enrichmentModel = "claude-sonnet-4-6"
 
-	enrichmentSystemPrompt = `You are a film/TV metadata enrichment assistant.
-For each item in the input array, produce:
-- themes: 2-5 broad thematic labels (e.g. "Redemption", "Identity", "Power & Corruption", "Survival")
-- moods: 2-4 emotional/tonal labels (e.g. "Tense", "Melancholic", "Darkly Comic", "Uplifting")
-- cinova_synopsis: a 2-sentence spoiler-free hook that would make someone want to watch it.
-  Write in present tense. Do NOT reveal plot twists or the ending. Always output English regardless of input language.
+	enrichmentSystemPrompt = `You are a film/TV metadata enrichment assistant. You will receive items that include title, tagline, overview, keywords, and when available a full Wikipedia plot_summary of 400-800 words.
 
-Return ONLY a valid JSON object — no markdown, no explanation — with this EXACT structure (use "name" not "label"):
+For each item produce:
+- themes: 3-6 precise thematic labels with confidence scores (e.g. "Power & Corruption", "Identity & Transformation", "Survival", "Moral Decline"). Be specific — prefer "Father-Son Legacy" over just "Family".
+- moods: 2-4 emotional/tonal labels with confidence scores (e.g. "Tense", "Melancholic", "Darkly Comic", "Epic"). Reflect the actual viewing experience.
+- cinova_synopsis: 3-4 sentences in present tense that synthesize the full context — what the story is about, what makes it distinctive, its emotional register, and why someone should watch it. Use the plot_summary when provided to write with depth and accuracy. Do NOT reveal endings or twists. Always output English.
+
+Return ONLY a valid JSON object — no markdown, no explanation:
 {"results": [{"tmdb_id": <number>, "themes": [{"name": <string>, "score": <0.0-1.0>}], "moods": [{"name": <string>, "score": <0.0-1.0>}], "cinova_synopsis": <string>}]}`
 )
 
@@ -155,11 +155,12 @@ func (c *Client) ProcessTVBatch(ctx context.Context, shows []models.TVShow, repo
 	movies := make([]models.Movie, 0, len(shows))
 	for _, s := range shows {
 		movies = append(movies, models.Movie{
-			TMDBID:   s.TMDBID,
-			Title:    s.Name,
-			Tagline:  s.Tagline,
-			Overview: s.Overview,
-			Keywords: s.Keywords,
+			TMDBID:      s.TMDBID,
+			Title:       s.Name,
+			Tagline:     s.Tagline,
+			Overview:    s.Overview,
+			Keywords:    s.Keywords,
+			PlotSummary: s.PlotSummary,
 		})
 	}
 	for i := 0; i < len(movies); i += batchSize {

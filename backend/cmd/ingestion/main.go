@@ -113,26 +113,14 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 
 	log.Info().Int("total_ids", len(ids)).Int("min_votes", minVotes).Msg("bulk ID export fetched")
 
-	// Async enrichment: dedicated goroutine so TMDB fetching is never blocked.
-	enrichCh := make(chan []models.Movie, 20)
-	var enrichWg sync.WaitGroup
-	enrichWg.Add(1)
-	go func() {
-		defer enrichWg.Done()
-		for b := range enrichCh {
-			if enrichErr := enrichClient.ProcessMovieBatch(ctx, b, repo); enrichErr != nil {
-				log.Warn().Err(enrichErr).Msg("async batch enrichment failed")
-			}
-		}
-	}()
-
+	// ── Phase 1: Ingest all movies into Neo4j (no enrichment yet) ──────────────
+	// Enrichment runs AFTER all data (including Wikipedia plots) is stored,
+	// so Claude always receives the full context.
 	var (
-		processed  atomic.Int64
-		skipped    atomic.Int64
-		errors     atomic.Int64
-		mu         sync.Mutex
-		batch      = make([]models.Movie, 0, enrichBatch)
-		start      = time.Now()
+		processed atomic.Int64
+		skipped   atomic.Int64
+		errors    atomic.Int64
+		start     = time.Now()
 	)
 
 	sem := make(chan struct{}, workers)
@@ -143,8 +131,6 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 		case <-ctx.Done():
 			log.Warn().Msg("context cancelled, stopping")
 			wg.Wait()
-			close(enrichCh)
-			enrichWg.Wait()
 			return
 		default:
 		}
@@ -177,7 +163,6 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 				return
 			}
 
-			// Upsert Wikidata awards
 			for _, award := range movie.Awards {
 				if err := repo.UpsertMovieAward(ctx, movie.TMDBID, award); err != nil {
 					log.Debug().Err(err).Int64("tmdb_id", movie.TMDBID).Str("award", award.AwardName).Msg("award upsert failed")
@@ -185,23 +170,6 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 			}
 
 			n := processed.Add(1)
-			mu.Lock()
-			batch = append(batch, *movie)
-			var sendBatch []models.Movie
-			if len(batch) >= enrichBatch {
-				sendBatch = batch
-				batch = make([]models.Movie, 0, enrichBatch)
-			}
-			mu.Unlock()
-
-			if sendBatch != nil {
-				select {
-				case enrichCh <- sendBatch:
-				default:
-					log.Warn().Int("batch_size", len(sendBatch)).Msg("enrichment queue full, skipping batch")
-				}
-			}
-
 			if n%int64(logEvery) == 0 {
 				log.Info().
 					Int64("processed", n).
@@ -216,25 +184,14 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 
 	wg.Wait()
 
-	// Flush remaining batch
-	mu.Lock()
-	remaining := batch
-	mu.Unlock()
-	if len(remaining) > 0 {
-		enrichCh <- remaining
-	}
-	close(enrichCh)
-	log.Info().Msg("waiting for enrichment to drain...")
-	enrichWg.Wait()
-
 	log.Info().
 		Int64("processed", processed.Load()).
 		Int64("skipped", skipped.Load()).
 		Int64("errors", errors.Load()).
 		Str("elapsed", time.Since(start).Round(time.Second).String()).
-		Msg("full movie ingestion complete")
+		Msg("phase 1 complete — all movies stored in Neo4j")
 
-	// Wire Wikidata director influences (post-ingestion, run once)
+	// Wire Wikidata director influences
 	runWikidataInfluences(ctx, repo, wikiClient)
 
 	// Recompute prestige-informed CinovaScores
@@ -244,6 +201,12 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 	} else {
 		log.Info().Msg("graph prestige scores updated")
 	}
+
+	// ── Phase 2: Enrich all movies with full context ────────────────────────────
+	// Movies are now in Neo4j with plot_summary populated. Claude receives
+	// title + tagline + overview + keywords + plot_summary for every item.
+	log.Info().Msg("phase 2 — enriching all movies (themes, moods, synopsis)")
+	runEnrichOnly(ctx, enrichClient, repo)
 }
 
 // ── Full TV Ingestion ──────────────────────────────────────────────────────────
@@ -258,25 +221,11 @@ func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClient
 
 	log.Info().Int("total_ids", len(ids)).Int("min_votes", minVotes).Msg("TV bulk ID export fetched")
 
-	// Async enrichment: dedicated goroutine so TMDB fetching is never blocked.
-	enrichCh := make(chan []models.TVShow, 20)
-	var enrichWg sync.WaitGroup
-	enrichWg.Add(1)
-	go func() {
-		defer enrichWg.Done()
-		for b := range enrichCh {
-			if enrichErr := enrichClient.ProcessTVBatch(ctx, b, repo); enrichErr != nil {
-				log.Warn().Err(enrichErr).Msg("async TV batch enrichment failed")
-			}
-		}
-	}()
-
+	// ── Phase 1: Ingest all TV shows into Neo4j (no enrichment yet) ───────────
 	var (
 		processed atomic.Int64
 		skipped   atomic.Int64
 		errors    atomic.Int64
-		mu        sync.Mutex
-		batch     = make([]models.TVShow, 0, enrichBatch)
 		start     = time.Now()
 	)
 
@@ -287,8 +236,6 @@ func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClient
 		select {
 		case <-ctx.Done():
 			wg.Wait()
-			close(enrichCh)
-			enrichWg.Wait()
 			return
 		default:
 		}
@@ -322,23 +269,6 @@ func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClient
 			}
 
 			n := processed.Add(1)
-			mu.Lock()
-			batch = append(batch, *show)
-			var sendBatch []models.TVShow
-			if len(batch) >= enrichBatch {
-				sendBatch = batch
-				batch = make([]models.TVShow, 0, enrichBatch)
-			}
-			mu.Unlock()
-
-			if sendBatch != nil {
-				select {
-				case enrichCh <- sendBatch:
-				default:
-					log.Warn().Int("batch_size", len(sendBatch)).Msg("TV enrichment queue full, skipping batch")
-				}
-			}
-
 			if n%int64(logEvery) == 0 {
 				log.Info().
 					Int64("processed", n).
@@ -353,22 +283,16 @@ func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClient
 
 	wg.Wait()
 
-	mu.Lock()
-	remaining := batch
-	mu.Unlock()
-	if len(remaining) > 0 {
-		enrichCh <- remaining
-	}
-	close(enrichCh)
-	log.Info().Msg("waiting for TV enrichment to drain...")
-	enrichWg.Wait()
-
 	log.Info().
 		Int64("processed", processed.Load()).
 		Int64("skipped", skipped.Load()).
 		Int64("errors", errors.Load()).
 		Str("elapsed", time.Since(start).Round(time.Second).String()).
-		Msg("full TV ingestion complete")
+		Msg("phase 1 complete — all TV shows stored in Neo4j")
+
+	// ── Phase 2: Enrich all TV shows with full context ─────────────────────────
+	log.Info().Msg("phase 2 — enriching all TV shows (themes, moods, synopsis)")
+	runEnrichOnlyTV(ctx, enrichClient, repo)
 }
 
 // ── Delta Movie Ingestion ──────────────────────────────────────────────────────
@@ -391,8 +315,6 @@ func runDeltaIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClien
 	var (
 		processed atomic.Int64
 		errors    atomic.Int64
-		mu        sync.Mutex
-		batch     = make([]models.Movie, 0, enrichBatch)
 		start     = time.Now()
 	)
 
@@ -437,38 +359,18 @@ func runDeltaIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClien
 			}
 
 			processed.Add(1)
-			mu.Lock()
-			batch = append(batch, *movie)
-			currentBatch := batch
-			if len(batch) >= enrichBatch {
-				batch = make([]models.Movie, 0, enrichBatch)
-			} else {
-				currentBatch = nil
-			}
-			mu.Unlock()
-
-			if currentBatch != nil {
-				if enrichErr := enrichClient.ProcessMovieBatch(ctx, currentBatch, repo); enrichErr != nil {
-					log.Warn().Err(enrichErr).Msg("batch enrichment failed")
-				}
-			}
 		}(id)
 	}
 
 	wg.Wait()
 
-	mu.Lock()
-	remaining := batch
-	mu.Unlock()
-	if len(remaining) > 0 {
-		enrichClient.ProcessMovieBatch(ctx, remaining, repo)
-	}
-
 	log.Info().
 		Int64("processed", processed.Load()).
 		Int64("errors", errors.Load()).
 		Str("elapsed", time.Since(start).Round(time.Second).String()).
-		Msg("delta movie ingestion complete")
+		Msg("delta movie ingest complete — starting enrichment")
+
+	runEnrichOnly(ctx, enrichClient, repo)
 }
 
 // ── Delta TV Ingestion ─────────────────────────────────────────────────────────
@@ -491,8 +393,6 @@ func runDeltaTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClien
 	var (
 		processed atomic.Int64
 		errors    atomic.Int64
-		mu        sync.Mutex
-		batch     = make([]models.TVShow, 0, enrichBatch)
 		start     = time.Now()
 	)
 
@@ -531,36 +431,18 @@ func runDeltaTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClien
 			}
 
 			processed.Add(1)
-			mu.Lock()
-			batch = append(batch, *show)
-			currentBatch := batch
-			if len(batch) >= enrichBatch {
-				batch = make([]models.TVShow, 0, enrichBatch)
-			} else {
-				currentBatch = nil
-			}
-			mu.Unlock()
-
-			if currentBatch != nil {
-				enrichClient.ProcessTVBatch(ctx, currentBatch, repo)
-			}
 		}(id)
 	}
 
 	wg.Wait()
 
-	mu.Lock()
-	remaining := batch
-	mu.Unlock()
-	if len(remaining) > 0 {
-		enrichClient.ProcessTVBatch(ctx, remaining, repo)
-	}
-
 	log.Info().
 		Int64("processed", processed.Load()).
 		Int64("errors", errors.Load()).
 		Str("elapsed", time.Since(start).Round(time.Second).String()).
-		Msg("delta TV ingestion complete")
+		Msg("delta TV ingest complete — starting enrichment")
+
+	runEnrichOnlyTV(ctx, enrichClient, repo)
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -615,11 +497,18 @@ func fetchMovie(ctx context.Context, tmdbClient *tmdb.Client, wikiClient *wikida
 			}
 		}
 
-		// Wikipedia plot (best-effort)
-		plotCtx, plotCancel := context.WithTimeout(ctx, 20*time.Second)
-		plot, plotErr := wikiClient.GetWikipediaPlot(plotCtx, movie.WikidataID)
-		plotCancel()
-		if plotErr == nil && plot != "" {
+		// Wikipedia plot — retry once on timeout
+		var plot string
+		for attempt := 0; attempt < 2; attempt++ {
+			plotCtx, plotCancel := context.WithTimeout(ctx, 30*time.Second)
+			var plotErr error
+			plot, plotErr = wikiClient.GetWikipediaPlot(plotCtx, movie.WikidataID)
+			plotCancel()
+			if plotErr == nil {
+				break
+			}
+		}
+		if plot != "" {
 			movie.PlotSummary = plot
 		}
 	}
@@ -675,11 +564,19 @@ func fetchTVShow(ctx context.Context, tmdbClient *tmdb.Client, wikiClient *wikid
 			}
 		}
 
-		plotCtx, plotCancel := context.WithTimeout(ctx, 20*time.Second)
-		plot, plotErr := wikiClient.GetWikipediaPlot(plotCtx, show.WikidataID)
-		plotCancel()
-		if plotErr == nil && plot != "" {
-			show.PlotSummary = plot
+		// Wikipedia plot — retry once on timeout
+		var tvPlot string
+		var tvPlotErr error
+		for attempt := 0; attempt < 2; attempt++ {
+			plotCtx, plotCancel := context.WithTimeout(ctx, 30*time.Second)
+			tvPlot, tvPlotErr = wikiClient.GetWikipediaPlot(plotCtx, show.WikidataID)
+			plotCancel()
+			if tvPlotErr == nil {
+				break
+			}
+		}
+		if tvPlot != "" {
+			show.PlotSummary = tvPlot
 		}
 	}
 
