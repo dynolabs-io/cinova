@@ -19,8 +19,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { clearSession } from '../../services/session';
+import { getScoringProfile, setScoringProfile } from '../../services/api';
 import {
   Colors,
   Typography,
@@ -28,6 +30,15 @@ import {
   Radius,
   Shadows,
 } from '../../constants/theme';
+import type { ScoringPresetDescription } from '../../types';
+
+const DEFAULT_PRESETS: ScoringPresetDescription[] = [
+  { id: 'mainstream', name: 'Mainstream', emoji: '🎯', description: 'Audience ratings drive recommendations', audience: 0.50, critic: 0.20, award: 0.15, prestige: 0.10, commercial: 0.05 },
+  { id: 'cinephile', name: 'Cinephile', emoji: '🎬', description: 'Critics and awards matter most', audience: 0.25, critic: 0.35, award: 0.25, prestige: 0.15, commercial: 0.00 },
+  { id: 'arthouse', name: 'Arthouse', emoji: '🎨', description: 'Director influence and auteur cinema', audience: 0.20, critic: 0.30, award: 0.20, prestige: 0.25, commercial: 0.05 },
+  { id: 'blockbuster', name: 'Blockbuster', emoji: '💥', description: 'Commercial success and spectacle', audience: 0.45, critic: 0.15, award: 0.10, prestige: 0.05, commercial: 0.25 },
+  { id: 'award_season', name: 'Award Season', emoji: '🏆', description: 'Oscars, BAFTAs, and film festivals', audience: 0.20, critic: 0.25, award: 0.45, prestige: 0.10, commercial: 0.00 },
+];
 
 const COUNTRIES = [
   { code: 'US', name: 'United States', flag: '🇺🇸' },
@@ -50,8 +61,26 @@ const COUNTRIES = [
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, isAnonymous, country, setCountry, logout } = useAppStore();
+  const queryClient = useQueryClient();
+  const { user, isAnonymous, country, scoringPreset, setCountry, setScoringPreset, logout } = useAppStore();
   const [countryModalVisible, setCountryModalVisible] = useState(false);
+
+  const { data: scoringData } = useQuery({
+    queryKey: ['scoring-profile'],
+    queryFn: getScoringProfile,
+    enabled: !isAnonymous,
+  });
+
+  const presetMutation = useMutation({
+    mutationFn: (preset: string) => setScoringProfile({
+      preset,
+      audience: 0, critic: 0, award: 0, prestige: 0, commercial: 0,
+    }),
+    onSuccess: (data) => {
+      setScoringPreset(data.preset);
+      queryClient.setQueryData(['scoring-profile'], data);
+    },
+  });
 
   const currentCountry =
     COUNTRIES.find((c) => c.code === country) ?? COUNTRIES[0];
@@ -151,6 +180,35 @@ export default function ProfileScreen() {
             <StatCard label="Rated" value={user?.stats.rated ?? 0} />
             <View style={styles.statDivider} />
             <StatCard label="Skipped" value={user?.stats.dismissed ?? 0} />
+          </View>
+
+          {/* Taste Profile — scoring preset selector */}
+          <View style={styles.tasteSection}>
+            <Text style={styles.tasteSectionTitle}>Taste Profile</Text>
+            <Text style={styles.tasteSectionHint}>
+              How should Cinova weigh scores?
+            </Text>
+            <View style={styles.presetGrid}>
+              {(scoringData?.presets ?? DEFAULT_PRESETS).map((p) => {
+                const active = (scoringData?.preset ?? scoringPreset) === p.id;
+                return (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={[styles.presetCard, active && styles.presetCardActive]}
+                    onPress={() => presetMutation.mutate(p.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.presetEmoji}>{p.emoji}</Text>
+                    <Text style={[styles.presetName, active && styles.presetNameActive]}>
+                      {p.name}
+                    </Text>
+                    <Text style={styles.presetDesc} numberOfLines={2}>
+                      {p.description}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
 
           {/* Sign out */}
@@ -417,6 +475,53 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     backgroundColor: Colors.border,
+  },
+  tasteSection: {
+    gap: Spacing[2],
+  },
+  tasteSectionTitle: {
+    color: Colors.textPrimary,
+    fontSize: Typography.base,
+    fontWeight: Typography.bold,
+  },
+  tasteSectionHint: {
+    color: Colors.textMuted,
+    fontSize: Typography.xs,
+  },
+  presetGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing[2],
+    marginTop: Spacing[1],
+  },
+  presetCard: {
+    width: '47%',
+    backgroundColor: Colors.card,
+    borderRadius: Radius.md,
+    padding: Spacing[3],
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: Spacing[1],
+  },
+  presetCardActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.elevated,
+  },
+  presetEmoji: {
+    fontSize: 22,
+  },
+  presetName: {
+    color: Colors.textSecondary,
+    fontSize: Typography.sm,
+    fontWeight: Typography.semibold,
+  },
+  presetNameActive: {
+    color: Colors.primary,
+  },
+  presetDesc: {
+    color: Colors.textMuted,
+    fontSize: Typography.xs,
+    lineHeight: Typography.xs * 1.4,
   },
   signOutBtn: {
     alignSelf: 'flex-start',

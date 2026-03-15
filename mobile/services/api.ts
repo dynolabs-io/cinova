@@ -8,7 +8,7 @@ import axios, {
   InternalAxiosRequestConfig,
 } from 'axios';
 import { getToken, saveToken, clearToken, getSessionId } from './session';
-import type { Movie, TVShow, Person, AuthResponse, SearchResult, WatchProvider } from '../types';
+import type { Movie, TVShow, Person, AuthResponse, SearchResult, WatchProvider, ScoringProfile } from '../types';
 
 export const BASE_URL = 'https://api.cinova.openova.io';
 
@@ -47,6 +47,8 @@ function normalizeMedia(item: unknown): unknown {
   if (!Array.isArray(m.cast)) m.cast = [];
   if (!Array.isArray(m.genres)) m.genres = [];
   if (!Array.isArray(m.providers)) m.providers = [];
+  if (!Array.isArray(m.awards)) m.awards = [];
+  if (!Array.isArray(m.keywords)) m.keywords = [];
   return m;
 }
 
@@ -229,6 +231,18 @@ export async function getTopRated(country = 'US', limit = 20): Promise<Movie[]> 
 /** Alias used by search screen */
 export async function searchMovies(q: string, country = 'US'): Promise<SearchResult> {
   return search(q, country);
+}
+
+// ── Scoring Profile (require auth) ────────────────────────────────────────────
+
+export async function getScoringProfile(): Promise<ScoringProfile> {
+  const { data } = await api.get<ScoringProfile>('/api/v1/me/scoring-profile');
+  return data;
+}
+
+export async function setScoringProfile(profile: Pick<ScoringProfile, 'preset' | 'audience' | 'critic' | 'award' | 'prestige' | 'commercial'>): Promise<ScoringProfile> {
+  const { data } = await api.put<ScoringProfile>('/api/v1/me/scoring-profile', profile);
+  return data;
 }
 
 /** Aliases matching screen import names */

@@ -171,15 +171,20 @@ export default function ReelItem({
           {[movie.year, genreLabel, runtimeLabel].filter(Boolean).join(' · ')}
         </Text>
 
-        {/* AI one-liner */}
-        {movie.aiDescription ? (
+        {/* Cinova synopsis — AI hook */}
+        {(movie.cinovaSynopsis ?? movie.aiDescription ?? movie.overview) ? (
           <Text style={styles.aiDescription} numberOfLines={2}>
-            {movie.aiDescription}
+            {movie.cinovaSynopsis ?? movie.aiDescription ?? movie.overview}
           </Text>
-        ) : movie.overview ? (
-          <Text style={styles.aiDescription} numberOfLines={2}>
-            {movie.overview}
-          </Text>
+        ) : null}
+
+        {/* Award win chip */}
+        {movie.awards && movie.awards.filter((a) => !a.isNomination).length > 0 ? (
+          <View style={styles.awardChip}>
+            <Text style={styles.awardChipText}>
+              🏆 {movie.awards.filter((a) => !a.isNomination).length} Award Win{movie.awards.filter((a) => !a.isNomination).length !== 1 ? 's' : ''}
+            </Text>
+          </View>
         ) : null}
       </View>
     </TouchableOpacity>
@@ -295,5 +300,20 @@ const styles = StyleSheet.create({
     fontSize: Typography.sm,
     fontStyle: 'italic',
     lineHeight: Typography.sm * 1.5,
+  },
+  awardChip: {
+    alignSelf: 'flex-start',
+    marginTop: Spacing[2],
+    backgroundColor: 'rgba(255, 200, 0, 0.15)',
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing[3],
+    paddingVertical: Spacing[1],
+    borderWidth: 1,
+    borderColor: 'rgba(255, 200, 0, 0.4)',
+  },
+  awardChipText: {
+    color: '#FFD700',
+    fontSize: Typography.xs,
+    fontWeight: Typography.semibold,
   },
 });

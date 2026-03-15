@@ -40,7 +40,7 @@ import {
   Radius,
   Shadows,
 } from '../../constants/theme';
-import type { CastMember, Movie, WatchProvider } from '../../types';
+import type { Award, CastMember, Movie, WatchProvider } from '../../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_HEIGHT = SCREEN_HEIGHT * 0.55;
@@ -234,6 +234,11 @@ export default function MovieDetailScreen() {
           {/* Title */}
           <Text style={styles.title}>{movie.title}</Text>
 
+          {/* Tagline */}
+          {movie.tagline ? (
+            <Text style={styles.tagline}>{movie.tagline}</Text>
+          ) : null}
+
           {/* Metadata row */}
           <View style={styles.metaRow}>
             <MetaPill label={String(movie.year)} />
@@ -306,14 +311,29 @@ export default function MovieDetailScreen() {
             </View>
           )}
 
-          {/* Synopsis */}
-          {(movie.aiDescription ?? movie.overview) ? (
+          {/* Cinova synopsis — AI hook (preferred over raw overview) */}
+          {(movie.cinovaSynopsis ?? movie.aiDescription) ? (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Synopsis</Text>
               <Text style={styles.synopsis}>
-                {movie.aiDescription ?? movie.overview}
+                {movie.cinovaSynopsis ?? movie.aiDescription}
               </Text>
             </View>
+          ) : movie.overview ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Synopsis</Text>
+              <Text style={styles.synopsis}>{movie.overview}</Text>
+            </View>
+          ) : null}
+
+          {/* Plot summary (Wikipedia-sourced, collapsible) */}
+          {movie.plotSummary ? (
+            <PlotSection plot={movie.plotSummary} />
+          ) : null}
+
+          {/* Awards */}
+          {movie.awards && movie.awards.length > 0 ? (
+            <AwardSection awards={movie.awards} />
           ) : null}
 
           {/* Cast */}
@@ -363,6 +383,58 @@ export default function MovieDetailScreen() {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+function PlotSection({ plot }: { plot: string }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const PREVIEW = 200;
+  const isLong = plot.length > PREVIEW;
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Plot</Text>
+      <Text style={styles.synopsis} numberOfLines={expanded ? undefined : 4}>
+        {plot}
+      </Text>
+      {isLong && (
+        <TouchableOpacity onPress={() => setExpanded(!expanded)} activeOpacity={0.7}>
+          <Text style={styles.expandLink}>{expanded ? 'Show less' : 'Read more'}</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+function AwardSection({ awards }: { awards: Award[] }) {
+  const wins = awards.filter((a) => !a.isNomination);
+  const nominations = awards.filter((a) => a.isNomination);
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>
+        Awards{wins.length > 0 ? ` · ${wins.length} win${wins.length !== 1 ? 's' : ''}` : ''}
+      </Text>
+      {wins.slice(0, 5).map((a, i) => (
+        <AwardRow key={`win-${i}`} award={a} isWin />
+      ))}
+      {nominations.slice(0, 3).map((a, i) => (
+        <AwardRow key={`nom-${i}`} award={a} isWin={false} />
+      ))}
+    </View>
+  );
+}
+
+function AwardRow({ award, isWin }: { award: Award; isWin: boolean }) {
+  const label = [award.awardName, award.category].filter(Boolean).join(' — ');
+  return (
+    <View style={awardStyles.row}>
+      <Text style={awardStyles.icon}>{isWin ? '🏆' : '🎖️'}</Text>
+      <View style={awardStyles.info}>
+        <Text style={awardStyles.name} numberOfLines={2}>{label}</Text>
+        {award.year ? (
+          <Text style={awardStyles.year}>{award.year}</Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
 
 function ActionBtn({
   icon,
@@ -615,6 +687,18 @@ const styles = StyleSheet.create({
     fontSize: Typography.base,
     lineHeight: Typography.base * Typography.relaxed,
   },
+  tagline: {
+    color: Colors.textMuted,
+    fontSize: Typography.base,
+    fontStyle: 'italic',
+    marginTop: -Spacing[3],
+  },
+  expandLink: {
+    color: Colors.primary,
+    fontSize: Typography.sm,
+    fontWeight: Typography.medium,
+    marginTop: Spacing[1],
+  },
 });
 
 const actionStyles = StyleSheet.create({
@@ -678,6 +762,33 @@ const tagStyles = StyleSheet.create({
   chipText: {
     fontSize: Typography.xs,
     fontWeight: Typography.medium,
+  },
+});
+
+const awardStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing[3],
+    paddingVertical: Spacing[1.5],
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderFaint,
+  },
+  icon: {
+    fontSize: Typography.lg,
+  },
+  info: {
+    flex: 1,
+    gap: 2,
+  },
+  name: {
+    color: Colors.textPrimary,
+    fontSize: Typography.sm,
+    fontWeight: Typography.medium,
+  },
+  year: {
+    color: Colors.textMuted,
+    fontSize: Typography.xs,
   },
 });
 

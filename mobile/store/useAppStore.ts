@@ -15,6 +15,7 @@ interface AppState {
 
   // Preferences
   country: string;
+  scoringPreset: string;
 
   // UI state
   hasOnboarded: boolean;
@@ -23,6 +24,7 @@ interface AppState {
 interface AppActions {
   setUser: (user: User | null) => void;
   setCountry: (country: string) => void;
+  setScoringPreset: (preset: string) => void;
   setSessionId: (sessionId: string) => void;
   setHasOnboarded: (value: boolean) => void;
   logout: () => void;
@@ -33,6 +35,7 @@ const initialState: AppState = {
   isAnonymous: true,
   sessionId: null,
   country: 'US',
+  scoringPreset: 'mainstream',
   hasOnboarded: false,
 };
 
@@ -48,6 +51,8 @@ export const useAppStore = create<AppState & AppActions>()(
         }),
 
       setCountry: (country) => set({ country }),
+
+      setScoringPreset: (scoringPreset) => set({ scoringPreset }),
 
       setSessionId: (sessionId) => set({ sessionId }),
 
@@ -66,6 +71,7 @@ export const useAppStore = create<AppState & AppActions>()(
       // Only persist non-sensitive state — JWT lives in SecureStore
       partialize: (state) => ({
         country: state.country,
+        scoringPreset: state.scoringPreset,
         hasOnboarded: state.hasOnboarded,
         // user email/displayName for display — no tokens here
         user: state.user

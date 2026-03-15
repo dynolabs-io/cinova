@@ -2,6 +2,16 @@
  * Cinova — Core TypeScript types
  */
 
+export interface Award {
+  wikidataId?: string;
+  awardName: string;
+  ceremonyName?: string;
+  year?: number;
+  recipientName?: string;
+  category?: string;
+  isNomination: boolean;
+}
+
 export interface Movie {
   id: number;
   tmdbId: number;
@@ -18,6 +28,8 @@ export interface Movie {
   genres: Genre[];
   themes: Theme[];
   moods: Mood[];
+  awards?: Award[];
+  keywords?: string[];
   cinovaScore: number | null;
   voteAverage: number;
   voteCount: number;
@@ -25,6 +37,9 @@ export interface Movie {
   providers: WatchProvider[];
   cast: CastMember[];
   trailer?: Trailer;
+  plotSummary?: string;
+  cinovaSynopsis?: string;
+  /** @deprecated use cinovaSynopsis */
   aiDescription?: string;
 }
 
@@ -44,12 +59,17 @@ export interface TVShow {
   genres: Genre[];
   themes: Theme[];
   moods: Mood[];
+  awards?: Award[];
+  keywords?: string[];
   cinovaScore: number | null;
   voteAverage: number;
   voteCount: number;
   popularity: number;
   providers: WatchProvider[];
   seasons: number;
+  plotSummary?: string;
+  cinovaSynopsis?: string;
+  /** @deprecated use cinovaSynopsis */
   aiDescription?: string;
 }
 
@@ -173,3 +193,25 @@ export interface Trailer {
 }
 
 export type MediaType = 'movie' | 'tv';
+
+export interface ScoringProfile {
+  preset: string;
+  audience: number;
+  critic: number;
+  award: number;
+  prestige: number;
+  commercial: number;
+  presets?: ScoringPresetDescription[];
+}
+
+export interface ScoringPresetDescription {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  audience: number;
+  critic: number;
+  award: number;
+  prestige: number;
+  commercial: number;
+}
