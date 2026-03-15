@@ -1,0 +1,144 @@
+{
+  "source": "Wikidata",
+  "wikidata_id": "Q190525",
+  "title": "Memento",
+  "ids": {
+    "imdb_id": "tt0209144",
+    "tmdb_id": "77",
+    "rotten_tomatoes_id": "m/memento",
+    "metacritic_id": "movie/memento",
+    "letterboxd_id": "memento"
+  },
+  "review_scores_from_wikidata": {
+    "Metacritic": "83/100",
+    "Rotten Tomatoes": "8.3/10",
+    "IMDb": "8.4/10"
+  },
+  "production": {
+    "directors": [
+      "Christopher Nolan"
+    ],
+    "screenwriters": [
+      "Christopher Nolan"
+    ],
+    "producers": [
+      "Jennifer Todd",
+      "Suzanne Todd"
+    ],
+    "executive_producers": [
+      "Aaron Ryder"
+    ],
+    "composer": [
+      "David Julyan"
+    ],
+    "cinematographer": [
+      "Wally Pfister"
+    ],
+    "film_editor": [
+      "Dody Dorn"
+    ],
+    "production_companies": [
+      "Summit Entertainment",
+      "Newmarket Films"
+    ],
+    "distributors": [
+      "Newmarket Films"
+    ]
+  },
+  "cast": [
+    "Carrie-Anne Moss",
+    "Guy Pearce",
+    "Jorja Fox",
+    "Harriet Sansom Harris",
+    "Joe Pantoliano",
+    "Stephen Tobolowsky",
+    "Marianne Muellerleile",
+    "Larry Holden",
+    "Callum Keith Rennie",
+    "Mark Boone Junior",
+    "Thomas Lennon"
+  ],
+  "details": {
+    "release_dates": [
+      "2000-09-05",
+      "2000-09-07",
+      "2000-09-09",
+      "2000-10-11",
+      "2000-10-20",
+      "2001-01-19",
+      "2001-12-13"
+    ],
+    "duration_minutes": "113",
+    "country_of_origin": [
+      "United States"
+    ],
+    "original_language": [
+      "English"
+    ],
+    "filming_locations": [
+      "Los Angeles"
+    ],
+    "mpa_rating": "R",
+    "budget_usd": "9000000",
+    "box_office_usd": [
+      "39665951"
+    ]
+  },
+  "genres": [
+    "drama film",
+    "film noir",
+    "horror film",
+    "crime film",
+    "mystery film",
+    "neo-noir",
+    "thriller film",
+    "flashback film",
+    "film based on literature"
+  ],
+  "main_subjects": [
+    "amnesia"
+  ],
+  "narrative_topics": [],
+  "based_on": [
+    "Memento Mori"
+  ],
+  "franchise": {
+    "series": "BBC's 100 Greatest Films of the 21st Century",
+    "followed_by": null
+  },
+  "awards_won": [
+    {
+      "award": "National Board of Review: Top Ten Films",
+      "year": null,
+      "ceremony": null,
+      "winners": []
+    },
+    {
+      "award": "The Waldo Salt Screenwriting Award",
+      "year": "2001",
+      "ceremony": "2001 Sundance Film Festival",
+      "winners": [
+        "Christopher Nolan"
+      ]
+    }
+  ],
+  "nominations": [
+    {
+      "nomination": "Academy Award for Best Film Editing",
+      "year": "2002",
+      "ceremony": "74th Academy Awards"
+    },
+    {
+      "nomination": "Academy Award for Best Writing, Original Screenplay",
+      "year": "2002",
+      "ceremony": "74th Academy Awards"
+    }
+  ],
+  "cross_reference_ids": {
+    "rotten_tomatoes_id": "m/memento",
+    "metacritic_id": "movie/memento",
+    "letterboxd_id": "memento",
+    "trakt_id": "47",
+    "mubi_id": "142"
+  }
+}

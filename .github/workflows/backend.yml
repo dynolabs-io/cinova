@@ -122,7 +122,8 @@ jobs:
 
           for INGESTION_MANIFEST in \
             "openova-private/clusters/contabo-mkt/apps/cinova/cronjobs/ingestion.yaml" \
-            "openova-private/clusters/contabo-mkt/apps/cinova/cronjobs/ingestion-full.yaml"; do
+            "openova-private/clusters/contabo-mkt/apps/cinova/cronjobs/ingestion-full.yaml" \
+            "openova-private/clusters/contabo-mkt/apps/cinova/cronjobs/ingestion-enrich.yaml"; do
             sed -i "s|image: ${INGESTION_IMAGE}:.*|image: ${INGESTION_IMAGE}:${SHA_SHORT}|" "$INGESTION_MANIFEST"
             echo "Updated $(basename $INGESTION_MANIFEST) to SHA ${SHA_SHORT}:"
             grep "image:" "$INGESTION_MANIFEST"

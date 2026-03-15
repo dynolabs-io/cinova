@@ -1,0 +1,252 @@
+{
+  "source": "Wikidata",
+  "wikidata_id": "Q83495",
+  "title": "The Matrix",
+  "ids": {
+    "imdb_id": "tt0133093",
+    "tmdb_id": "603",
+    "rotten_tomatoes_id": "m/matrix",
+    "metacritic_id": "movie/the-matrix",
+    "letterboxd_id": "the-matrix"
+  },
+  "review_scores_from_wikidata": {
+    "rotten_tomatoes_critics_percent": "83%",
+    "rotten_tomatoes_audience": "7.8/10",
+    "metacritic": "73/100",
+    "imdb": "8.7/10",
+    "roger_ebert": "3/4"
+  },
+  "production": {
+    "directors": [
+      "Lilly Wachowski",
+      "Lana Wachowski"
+    ],
+    "screenwriters": [
+      "the Wachowskis"
+    ],
+    "producers": [
+      "Joel Silver"
+    ],
+    "executive_producers": [
+      "Barrie M. Osborne",
+      "Bruce Berman",
+      "Lilly Wachowski",
+      "Lana Wachowski",
+      "Erwin Stoff",
+      "Andrew Mason"
+    ],
+    "composer": [
+      "Don Davis"
+    ],
+    "cinematographer": [
+      "Bill Pope"
+    ],
+    "film_editor": [
+      "Zach Staenberg"
+    ],
+    "production_companies": [
+      "Warner Bros. Entertainment",
+      "Village Roadshow Pictures",
+      "Silver Pictures"
+    ],
+    "distributors": [
+      "Warner Bros. Entertainment",
+      "Netflix",
+      "InterCom",
+      "HBO Max"
+    ]
+  },
+  "cast": [
+    "Hugo Weaving",
+    "Keanu Reeves",
+    "Laurence Fishburne",
+    "Carrie-Anne Moss",
+    "David Aston",
+    "Joe Pantoliano",
+    "Gloria Foster",
+    "Bill Young",
+    "Robert Taylor",
+    "Marcus Chong",
+    "Matt Doran",
+    "Ada Nicodemou",
+    "Steve Dodd",
+    "Anthony Ray Parker",
+    "Paul Goddard",
+    "Belinda McClory",
+    "Julian Arahanga",
+    "Jeremy Ball",
+    "Rowan Witt"
+  ],
+  "characters": [
+    "Trinity",
+    "Oracle",
+    "Neo",
+    "Morpheus",
+    "Cypher",
+    "Agent Smith",
+    "Tank"
+  ],
+  "details": {
+    "release_dates": [
+      "1999-03-31",
+      "1999-06-17",
+      "1999-07-14"
+    ],
+    "duration_minutes": 136,
+    "aspect_ratio": "2.35:1",
+    "country_of_origin": [
+      "United States",
+      "Australia"
+    ],
+    "original_language": [
+      "English"
+    ],
+    "filming_locations": [
+      "San Francisco",
+      "Australia",
+      "Sydney"
+    ],
+    "color": "color",
+    "mpa_rating": "R",
+    "budget_usd": 63000000,
+    "box_office_usd_domestic": 172076928,
+    "box_office_usd_worldwide": 467222728
+  },
+  "genres": [
+    "cyberpunk",
+    "film noir",
+    "action film",
+    "science fiction film",
+    "post-apocalyptic film",
+    "superhero film",
+    "thriller film",
+    "action thriller",
+    "dystopian film"
+  ],
+  "main_subjects": [
+    "artificial intelligence",
+    "telepresence",
+    "simulation hypothesis",
+    "security hacker"
+  ],
+  "narrative_topics": [
+    "simulated reality"
+  ],
+  "inspired_by": [
+    "Ghost in the Shell",
+    "gnosticism in modern times"
+  ],
+  "franchise": {
+    "series": "The Matrix series",
+    "followed_by": "The Matrix Reloaded",
+    "media_franchise": "The Matrix",
+    "derivative_works": [
+      "The Animatrix"
+    ]
+  },
+  "recognition": {
+    "national_film_registry": true,
+    "bechdel_test_results": [
+      "Bechdel test",
+      "reverse Bechdel Test"
+    ]
+  },
+  "awards_won": [
+    {
+      "award": "Academy Award for Best Film Editing",
+      "year": "2000",
+      "ceremony": "72nd Academy Awards",
+      "winners": [
+        "Zach Staenberg"
+      ]
+    },
+    {
+      "award": "Academy Award for Best Sound",
+      "year": "2000",
+      "ceremony": "72nd Academy Awards",
+      "winners": [
+        "Gregg Rudloff",
+        "John T. Reitz",
+        "David E. Campbell",
+        "David Lee"
+      ]
+    },
+    {
+      "award": "Academy Award for Best Sound Editing",
+      "year": "2000",
+      "ceremony": "72nd Academy Awards",
+      "winners": [
+        "Dane Davis"
+      ]
+    },
+    {
+      "award": "Academy Award for Best Visual Effects",
+      "year": "2000",
+      "ceremony": "72nd Academy Awards",
+      "winners": [
+        "John Gaeta",
+        "Janek Sirrs",
+        "Steve Courtley",
+        "Jon Thum"
+      ]
+    },
+    {
+      "award": "BAFTA Award for Best Sound",
+      "year": "2000",
+      "ceremony": "53rd British Academy Film Awards",
+      "winners": []
+    },
+    {
+      "award": "BAFTA Award for Best Special Visual Effects",
+      "year": "2000",
+      "ceremony": "53rd British Academy Film Awards",
+      "winners": []
+    },
+    {
+      "award": "Saturn Award for Best Director",
+      "year": "2000",
+      "ceremony": "26th Saturn Awards",
+      "winners": []
+    },
+    {
+      "award": "Saturn Award for Best Science Fiction Film",
+      "year": "2000",
+      "ceremony": "26th Saturn Awards",
+      "winners": []
+    }
+  ],
+  "nominations": [
+    {
+      "nomination": "Academy Award for Best Film Editing",
+      "year": "2000",
+      "ceremony": "72nd Academy Awards"
+    },
+    {
+      "nomination": "Academy Award for Best Sound",
+      "year": "2000",
+      "ceremony": "72nd Academy Awards"
+    },
+    {
+      "nomination": "Academy Award for Best Sound Editing",
+      "year": "2000",
+      "ceremony": "72nd Academy Awards"
+    },
+    {
+      "nomination": "Academy Award for Best Visual Effects",
+      "year": "2000",
+      "ceremony": "72nd Academy Awards"
+    }
+  ],
+  "cross_reference_ids": {
+    "rotten_tomatoes_id": "m/matrix",
+    "metacritic_id": "movie/the-matrix",
+    "letterboxd_id": "the-matrix",
+    "trakt_id": "481",
+    "mubi_id": "3394",
+    "netflix_id": "20557937",
+    "apple_tv_id": "umc.cmc.af8k9kcq9r1s1qmmdxpq4itn"
+  },
+  "external_urls": {
+    "official_website": "https://www.warnerbros.com/movies/matrix"
+  }
+}

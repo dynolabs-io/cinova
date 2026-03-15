@@ -1044,3 +1044,50 @@ func (r *MovieRepository) ComputeAndUpdatePageRank(ctx context.Context) error {
 
 	return nil
 }
+
+// GetMoviesWithoutSynopsis returns up to limit Movie nodes that lack a cinova_synopsis,
+// have a non-empty overview (so they can be enriched), ordered by popularity desc.
+func (r *MovieRepository) GetMoviesWithoutSynopsis(ctx context.Context, limit int) ([]models.Movie, error) {
+	records, err := r.driver.RunQuery(ctx, `
+		MATCH (m:Movie)
+		WHERE (m.cinova_synopsis IS NULL OR m.cinova_synopsis = '')
+		  AND m.overview IS NOT NULL AND m.overview <> ''
+		RETURN m
+		ORDER BY m.popularity DESC
+		LIMIT $limit
+	`, map[string]interface{}{"limit": limit})
+	if err != nil {
+		return nil, fmt.Errorf("GetMoviesWithoutSynopsis: %w", err)
+	}
+	movies := make([]models.Movie, 0, len(records))
+	for _, rec := range records {
+		raw, _ := rec.Get("m")
+		if m := movieNodeToModel(raw); m != nil {
+			movies = append(movies, *m)
+		}
+	}
+	return movies, nil
+}
+
+// GetTVShowsWithoutSynopsis returns up to limit TVShow nodes that lack a cinova_synopsis.
+func (r *MovieRepository) GetTVShowsWithoutSynopsis(ctx context.Context, limit int) ([]models.TVShow, error) {
+	records, err := r.driver.RunQuery(ctx, `
+		MATCH (s:TVShow)
+		WHERE (s.cinova_synopsis IS NULL OR s.cinova_synopsis = '')
+		  AND s.overview IS NOT NULL AND s.overview <> ''
+		RETURN s
+		ORDER BY s.popularity DESC
+		LIMIT $limit
+	`, map[string]interface{}{"limit": limit})
+	if err != nil {
+		return nil, fmt.Errorf("GetTVShowsWithoutSynopsis: %w", err)
+	}
+	shows := make([]models.TVShow, 0, len(records))
+	for _, rec := range records {
+		raw, _ := rec.Get("s")
+		if s := tvNodeToModel(raw); s != nil && s.TMDBID > 0 {
+			shows = append(shows, *s)
+		}
+	}
+	return shows, nil
+}

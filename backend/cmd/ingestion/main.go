@@ -85,8 +85,15 @@ func main() {
 		if *mediaType == "tvshow" || *mediaType == "all" {
 			runDeltaTVIngestion(ctx, tmdbClient, wikiClient, enrichClient, movieRepo, *country, limiter)
 		}
+	case "enrich-only":
+		if *mediaType == "movie" || *mediaType == "all" {
+			runEnrichOnly(ctx, enrichClient, movieRepo)
+		}
+		if *mediaType == "tvshow" || *mediaType == "all" {
+			runEnrichOnlyTV(ctx, enrichClient, movieRepo)
+		}
 	default:
-		log.Fatal().Str("mode", *mode).Msg("unknown mode; use full or delta")
+		log.Fatal().Str("mode", *mode).Msg("unknown mode; use full, delta, or enrich-only")
 	}
 
 	log.Info().Msg("ingestion complete")
@@ -703,4 +710,88 @@ func runWikidataInfluences(ctx context.Context, repo *graph.MovieRepository, wik
 	}
 
 	log.Info().Int("upserted", upserted).Msg("Wikidata influence graph wired")
+}
+
+// ── Enrich-Only Mode ───────────────────────────────────────────────────────────
+
+const enrichOnlyBatch = 30 // movies per Neo4j query
+
+// runEnrichOnly iterates all Movie nodes without cinova_synopsis and enriches them.
+// Designed to run after full ingestion completes — enriches in popularity order
+// so the most-watched films get synopses first.
+func runEnrichOnly(ctx context.Context, enrichClient *enrichment.Client, repo *graph.MovieRepository) {
+	log.Info().Msg("starting enrich-only pass for movies without synopsis")
+
+	var (
+		offset    int
+		total     int
+		start     = time.Now()
+	)
+
+	for {
+		movies, err := repo.GetMoviesWithoutSynopsis(ctx, enrichOnlyBatch)
+		if err != nil {
+			log.Error().Err(err).Msg("GetMoviesWithoutSynopsis failed")
+			return
+		}
+		if len(movies) == 0 {
+			break
+		}
+
+		if err := enrichClient.ProcessMovieBatch(ctx, movies, repo); err != nil {
+			log.Warn().Err(err).Int("offset", offset).Msg("enrich-only movie batch failed")
+		}
+
+		total += len(movies)
+		offset += len(movies)
+
+		log.Info().Int("enriched_so_far", total).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("enrich-only progress")
+
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+	}
+
+	log.Info().Int("total", total).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("movie enrich-only complete")
+}
+
+// runEnrichOnlyTV is the TV show counterpart of runEnrichOnly.
+func runEnrichOnlyTV(ctx context.Context, enrichClient *enrichment.Client, repo *graph.MovieRepository) {
+	log.Info().Msg("starting enrich-only pass for TV shows without synopsis")
+
+	var (
+		offset int
+		total  int
+		start  = time.Now()
+	)
+
+	for {
+		shows, err := repo.GetTVShowsWithoutSynopsis(ctx, enrichOnlyBatch)
+		if err != nil {
+			log.Error().Err(err).Msg("GetTVShowsWithoutSynopsis failed")
+			return
+		}
+		if len(shows) == 0 {
+			break
+		}
+
+		if err := enrichClient.ProcessTVBatch(ctx, shows, repo); err != nil {
+			log.Warn().Err(err).Int("offset", offset).Msg("enrich-only TV batch failed")
+		}
+
+		total += len(shows)
+		offset += len(shows)
+
+		log.Info().Int("enriched_so_far", total).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("TV enrich-only progress")
+
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+	}
+
+	log.Info().Int("total", total).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("TV enrich-only complete")
 }

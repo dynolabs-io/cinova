@@ -1,0 +1,1172 @@
+{
+  "source": "TMDB",
+  "tmdb_id": 77,
+  "imdb_id": "tt0209144",
+  "wikidata_id": "Q190525",
+  "title": "Memento",
+  "original_title": "Memento",
+  "tagline": "Some memories are best forgotten.",
+  "overview": "Leonard Shelby is tracking down the man who raped and murdered his wife. The difficulty of locating his wife's killer, however, is compounded by the fact that he suffers from a rare, untreatable form of short-term memory loss. Although he can recall details of life before his accident, Leonard cannot remember what happened fifteen minutes ago, where he's going, or why.",
+  "release_date": "2000-10-11",
+  "runtime_minutes": 113,
+  "status": "Released",
+  "vote_average": 8.176,
+  "vote_count": 15984,
+  "popularity": 12.1897,
+  "budget_usd": 9000000,
+  "revenue_usd": 40060108,
+  "original_language": "en",
+  "spoken_languages": [
+    "English"
+  ],
+  "adult": false,
+  "homepage": "",
+  "genres": [
+    {
+      "id": 9648,
+      "name": "Mystery"
+    },
+    {
+      "id": 53,
+      "name": "Thriller"
+    }
+  ],
+  "keywords": [
+    {
+      "id": 2231,
+      "name": "drug dealer"
+    },
+    {
+      "id": 1453,
+      "name": "amnesia"
+    },
+    {
+      "id": 328,
+      "name": "insulin"
+    },
+    {
+      "id": 331,
+      "name": "tattoo"
+    },
+    {
+      "id": 828,
+      "name": "waitress"
+    },
+    {
+      "id": 2669,
+      "name": "motel"
+    },
+    {
+      "id": 2887,
+      "name": "manipulation"
+    },
+    {
+      "id": 9856,
+      "name": "flashback"
+    },
+    {
+      "id": 10705,
+      "name": "confusion"
+    },
+    {
+      "id": 9748,
+      "name": "revenge"
+    },
+    {
+      "id": 9826,
+      "name": "murder"
+    },
+    {
+      "id": 11469,
+      "name": "memory loss"
+    },
+    {
+      "id": 10937,
+      "name": "memory"
+    },
+    {
+      "id": 12565,
+      "name": "psychological thriller"
+    },
+    {
+      "id": 12570,
+      "name": "whodunit"
+    },
+    {
+      "id": 12670,
+      "name": "los angeles, california"
+    },
+    {
+      "id": 33874,
+      "name": "polaroid"
+    },
+    {
+      "id": 156866,
+      "name": "based on short story"
+    },
+    {
+      "id": 157171,
+      "name": "nonlinear timeline"
+    },
+    {
+      "id": 159103,
+      "name": "mourning"
+    },
+    {
+      "id": 159531,
+      "name": "insurance agent"
+    },
+    {
+      "id": 161248,
+      "name": "individuality"
+    },
+    {
+      "id": 191527,
+      "name": "phone call"
+    },
+    {
+      "id": 199524,
+      "name": "disturbed"
+    },
+    {
+      "id": 201456,
+      "name": "paranoid"
+    },
+    {
+      "id": 207268,
+      "name": "neo-noir"
+    },
+    {
+      "id": 211659,
+      "name": "somber"
+    },
+    {
+      "id": 229787,
+      "name": "reverse chronology"
+    },
+    {
+      "id": 241625,
+      "name": "diabetes"
+    },
+    {
+      "id": 325777,
+      "name": "bewildered"
+    },
+    {
+      "id": 325778,
+      "name": "bold"
+    },
+    {
+      "id": 325787,
+      "name": "complicated"
+    },
+    {
+      "id": 352727,
+      "name": "suspense mystery"
+    }
+  ],
+  "production_companies": [
+    {
+      "id": 28,
+      "name": "Newmarket Films",
+      "country": "US"
+    },
+    {
+      "id": 491,
+      "name": "Summit Entertainment",
+      "country": "US"
+    },
+    {
+      "id": 598,
+      "name": "Team Todd",
+      "country": "US"
+    },
+    {
+      "id": 34446,
+      "name": "I Remember Productions",
+      "country": ""
+    }
+  ],
+  "production_countries": [
+    "United States of America"
+  ],
+  "belongs_to_collection": null,
+  "certification_by_country": {
+    "AR": "+13",
+    "AU": "MA15+",
+    "BE": "18",
+    "BG": "D",
+    "BR": "16",
+    "CH": "14",
+    "CZ": "12+",
+    "DE": "16",
+    "DK": "15",
+    "ES": "12",
+    "FI": "K-15",
+    "FR": "12",
+    "GB": "15",
+    "HK": "IIB",
+    "HU": "16",
+    "IE": "18",
+    "IL": "14",
+    "IT": "T",
+    "JP": "PG12",
+    "KR": "15",
+    "MX": "B",
+    "NL": "16",
+    "NO": "15",
+    "NZ": "R16",
+    "PL": "16",
+    "PT": "M/12",
+    "RU": "18+",
+    "SE": "15",
+    "SG": "NC16",
+    "TR": "13+",
+    "TW": "\u8f1412",
+    "US": "R"
+  },
+  "trailer_youtube_key": null,
+  "videos": [
+    {
+      "key": "Rq9eM4ZXRgs",
+      "site": "YouTube",
+      "type": "Trailer",
+      "official": false,
+      "name": "Memento Original 35 mm Anamorphic Trailer (HD) (CC)"
+    }
+  ],
+  "cast": [
+    {
+      "tmdb_id": 529,
+      "name": "Guy Pearce",
+      "character": "Leonard",
+      "order": 0,
+      "profile_path": "/vTqk6Nh3WgqPubkS23eOlMAwmwa.jpg"
+    },
+    {
+      "tmdb_id": 530,
+      "name": "Carrie-Anne Moss",
+      "character": "Natalie",
+      "order": 1,
+      "profile_path": "/xD4jTA3KmVp5Rq3aHcymL9DUGjD.jpg"
+    },
+    {
+      "tmdb_id": 532,
+      "name": "Joe Pantoliano",
+      "character": "Teddy",
+      "order": 2,
+      "profile_path": "/3OHUI3nX4SYGGItDk3xqeIvWtIf.jpg"
+    },
+    {
+      "tmdb_id": 534,
+      "name": "Mark Boone Junior",
+      "character": "Burt",
+      "order": 3,
+      "profile_path": "/swWzGOTX3SQ2udv7NQhAE1DlZsb.jpg"
+    },
+    {
+      "tmdb_id": 535,
+      "name": "Russ Fega",
+      "character": "Waiter",
+      "order": 4,
+      "profile_path": "/d0W7kq97Ul8Iz5LZIVNDKxSly8M.jpg"
+    },
+    {
+      "tmdb_id": 536,
+      "name": "Jorja Fox",
+      "character": "Leonard's Wife",
+      "order": 5,
+      "profile_path": "/hCRdbNzZjkhYyVoZPmhYF5OqpaX.jpg"
+    },
+    {
+      "tmdb_id": 537,
+      "name": "Stephen Tobolowsky",
+      "character": "Sammy",
+      "order": 6,
+      "profile_path": "/uL8yfcm0dCFYFQt052kczVQVvac.jpg"
+    },
+    {
+      "tmdb_id": 538,
+      "name": "Harriet Sansom Harris",
+      "character": "Mrs. Jankis",
+      "order": 7,
+      "profile_path": "/1ShvYCWkZycAGb27ZivGrLx1PhS.jpg"
+    },
+    {
+      "tmdb_id": 539,
+      "name": "Thomas Lennon",
+      "character": "Doctor",
+      "order": 8,
+      "profile_path": "/s8pw7BfuMxN7P0p5XJ9POfod7zW.jpg"
+    },
+    {
+      "tmdb_id": 540,
+      "name": "Callum Keith Rennie",
+      "character": "Dodd",
+      "order": 9,
+      "profile_path": "/zOeA4IR4xYde2VlDsHZy2SoPZkc.jpg"
+    },
+    {
+      "tmdb_id": 542,
+      "name": "Kimberly Campbell",
+      "character": "Blonde",
+      "order": 10,
+      "profile_path": "/srUMT8MhY0i0CnPNOqdORuxL6JS.jpg"
+    },
+    {
+      "tmdb_id": 543,
+      "name": "Marianne Muellerleile",
+      "character": "Tattooist",
+      "order": 11,
+      "profile_path": "/8mlAV0ChK35WXQrnlKoEzKNNrFR.jpg"
+    },
+    {
+      "tmdb_id": 544,
+      "name": "Larry Holden",
+      "character": "Jimmy",
+      "order": 12,
+      "profile_path": "/1ZYJUFYu97gM0MaCX5EI6oJZu89.jpg"
+    }
+  ],
+  "directors": [
+    {
+      "tmdb_id": 525,
+      "name": "Christopher Nolan",
+      "job": "Director",
+      "department": "Directing"
+    }
+  ],
+  "writers": [
+    {
+      "tmdb_id": 525,
+      "name": "Christopher Nolan",
+      "job": "Screenplay",
+      "department": "Writing"
+    }
+  ],
+  "producers": [
+    {
+      "tmdb_id": 551,
+      "name": "Suzanne Todd",
+      "job": "Producer",
+      "department": "Production"
+    },
+    {
+      "tmdb_id": 550,
+      "name": "Jennifer Todd",
+      "job": "Producer",
+      "department": "Production"
+    },
+    {
+      "tmdb_id": 554,
+      "name": "Aaron Ryder",
+      "job": "Executive Producer",
+      "department": "Production"
+    }
+  ],
+  "streaming_providers": {
+    "AD": [
+      {
+        "name": "HBO Max",
+        "type": "flatrate",
+        "logo": "/jbe4gVSfRlbPTdESXhEKpornsfu.jpg"
+      }
+    ],
+    "AE": [
+      {
+        "name": "Shahid VIP",
+        "type": "flatrate",
+        "logo": "/7qZED0kLBtiV8mLRNBtW4PQCAqW.jpg"
+      }
+    ],
+    "AR": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Claro video",
+        "type": "rent",
+        "logo": "/21M5CpiOYGOhHj2sVPXqwt6yeTO.jpg"
+      }
+    ],
+    "AT": [
+      {
+        "name": "Videobuster",
+        "type": "rent",
+        "logo": "/82hFfWsPYtyskBrnkL8Y36vHcVf.jpg"
+      }
+    ],
+    "AU": [
+      {
+        "name": "Amazon Prime Video",
+        "type": "flatrate",
+        "logo": "/pvske1MyAoymrs5bguRfVqYiM9a.jpg"
+      },
+      {
+        "name": "Paramount Plus",
+        "type": "flatrate",
+        "logo": "/h5DcR0J2EESLitnhR8xLG1QymTE.jpg"
+      },
+      {
+        "name": "Paramount+ Amazon Channel",
+        "type": "flatrate",
+        "logo": "/hExO4PtimLIYn3kBOrzsejNv7cT.jpg"
+      },
+      {
+        "name": "Foxtel Now",
+        "type": "flatrate",
+        "logo": "/fejdSG7TwNQ5E0p6u7A6LVs280R.jpg"
+      },
+      {
+        "name": "Paramount Plus Premium",
+        "type": "flatrate",
+        "logo": "/fts6X10Jn4QT0X6ac3udKEn2tJA.jpg"
+      },
+      {
+        "name": "Paramount Plus Basic with Ads",
+        "type": "flatrate",
+        "logo": "/rl6zez5rCeyelt1I46JRYk6B9Ed.jpg"
+      },
+      {
+        "name": "Amazon Prime Video with Ads",
+        "type": "flatrate",
+        "logo": "/8aBqoNeGGr0oSA85iopgNZUOTOc.jpg"
+      },
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Amazon Video",
+        "type": "rent",
+        "logo": "/qR6FKvnPBx2O37FDg8PNM7efwF3.jpg"
+      },
+      {
+        "name": "Fetch TV",
+        "type": "rent",
+        "logo": "/9B7l9ZSos54kFrZbliVExt2z9C9.jpg"
+      }
+    ],
+    "BE": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Google Play Movies",
+        "type": "rent",
+        "logo": "/8z7rC8uIDaTM91X0ZfkRf04ydj2.jpg"
+      },
+      {
+        "name": "Amazon Video",
+        "type": "rent",
+        "logo": "/qR6FKvnPBx2O37FDg8PNM7efwF3.jpg"
+      }
+    ],
+    "BO": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      }
+    ],
+    "BR": [
+      {
+        "name": "Looke",
+        "type": "flatrate",
+        "logo": "/9HhIlyFlilVtx0sMTcPbhs5qR31.jpg"
+      },
+      {
+        "name": "Oldflix",
+        "type": "flatrate",
+        "logo": "/rXNXvz2096ri69ZlZsFwKxZYJsS.jpg"
+      },
+      {
+        "name": "Looke Amazon Channel",
+        "type": "flatrate",
+        "logo": "/xht0G3uRLcTgjxRz3cDHuf8KKUw.jpg"
+      },
+      {
+        "name": "Lionsgate+ Amazon Channels",
+        "type": "flatrate",
+        "logo": "/o4OqlMLb3ZjhK7OwR4qvxiZKOXf.jpg"
+      },
+      {
+        "name": "Universal+ Amazon Channel",
+        "type": "flatrate",
+        "logo": "/4ABGBjAMtRrYUrr0w3QfanuiaoB.jpg"
+      },
+      {
+        "name": "Claro video",
+        "type": "rent",
+        "logo": "/21M5CpiOYGOhHj2sVPXqwt6yeTO.jpg"
+      },
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Amazon Video",
+        "type": "rent",
+        "logo": "/qR6FKvnPBx2O37FDg8PNM7efwF3.jpg"
+      },
+      {
+        "name": "Google Play Movies",
+        "type": "rent",
+        "logo": "/8z7rC8uIDaTM91X0ZfkRf04ydj2.jpg"
+      }
+    ],
+    "CA": [
+      {
+        "name": "Amazon Prime Video",
+        "type": "flatrate",
+        "logo": "/pvske1MyAoymrs5bguRfVqYiM9a.jpg"
+      },
+      {
+        "name": "Amazon Prime Video with Ads",
+        "type": "flatrate",
+        "logo": "/8aBqoNeGGr0oSA85iopgNZUOTOc.jpg"
+      }
+    ],
+    "CH": [
+      {
+        "name": "blue TV",
+        "type": "rent",
+        "logo": "/47klot430ytIqldQUUx2avN45Sr.jpg"
+      },
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Videobuster",
+        "type": "rent",
+        "logo": "/82hFfWsPYtyskBrnkL8Y36vHcVf.jpg"
+      }
+    ],
+    "CL": [
+      {
+        "name": "Universal+ Amazon Channel",
+        "type": "flatrate",
+        "logo": "/4ABGBjAMtRrYUrr0w3QfanuiaoB.jpg"
+      },
+      {
+        "name": "Lionsgate+ Amazon Channels",
+        "type": "flatrate",
+        "logo": "/o4OqlMLb3ZjhK7OwR4qvxiZKOXf.jpg"
+      },
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Amazon Video",
+        "type": "rent",
+        "logo": "/qR6FKvnPBx2O37FDg8PNM7efwF3.jpg"
+      }
+    ],
+    "CO": [
+      {
+        "name": "Universal+ Amazon Channel",
+        "type": "flatrate",
+        "logo": "/4ABGBjAMtRrYUrr0w3QfanuiaoB.jpg"
+      },
+      {
+        "name": "Lionsgate+ Amazon Channels",
+        "type": "flatrate",
+        "logo": "/o4OqlMLb3ZjhK7OwR4qvxiZKOXf.jpg"
+      },
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Claro video",
+        "type": "rent",
+        "logo": "/21M5CpiOYGOhHj2sVPXqwt6yeTO.jpg"
+      },
+      {
+        "name": "Amazon Video",
+        "type": "rent",
+        "logo": "/qR6FKvnPBx2O37FDg8PNM7efwF3.jpg"
+      }
+    ],
+    "CR": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      }
+    ],
+    "CU": [
+      {
+        "name": "Amazon Prime Video",
+        "type": "flatrate",
+        "logo": "/pvske1MyAoymrs5bguRfVqYiM9a.jpg"
+      }
+    ],
+    "DZ": [
+      {
+        "name": "Shahid VIP",
+        "type": "flatrate",
+        "logo": "/7qZED0kLBtiV8mLRNBtW4PQCAqW.jpg"
+      }
+    ],
+    "EC": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Claro video",
+        "type": "rent",
+        "logo": "/21M5CpiOYGOhHj2sVPXqwt6yeTO.jpg"
+      }
+    ],
+    "EG": [
+      {
+        "name": "Shahid VIP",
+        "type": "flatrate",
+        "logo": "/7qZED0kLBtiV8mLRNBtW4PQCAqW.jpg"
+      },
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      }
+    ],
+    "ES": [
+      {
+        "name": "Movistar Plus+ Ficci\u00f3n Total ",
+        "type": "flatrate",
+        "logo": "/f6TRLB3H4jDpFEZ0z2KWSSvu1SB.jpg"
+      },
+      {
+        "name": "Filmin",
+        "type": "flatrate",
+        "logo": "/kO2SWXvDCHAquaUuTJBuZkTBAuU.jpg"
+      },
+      {
+        "name": "HBO Max",
+        "type": "flatrate",
+        "logo": "/jbe4gVSfRlbPTdESXhEKpornsfu.jpg"
+      },
+      {
+        "name": "HBO Max Amazon Channel",
+        "type": "flatrate",
+        "logo": "/5AkEgpCNaBP3Fbwd2m1GdQIk0vv.jpg"
+      },
+      {
+        "name": "Rakuten TV",
+        "type": "rent",
+        "logo": "/bZvc9dXrXNly7cA0V4D9pR8yJwm.jpg"
+      },
+      {
+        "name": "Amazon Video",
+        "type": "rent",
+        "logo": "/qR6FKvnPBx2O37FDg8PNM7efwF3.jpg"
+      }
+    ],
+    "FI": [
+      {
+        "name": "Blockbuster",
+        "type": "rent",
+        "logo": "/auWzottqpExOHUlJwDZ4DvdHGoL.jpg"
+      },
+      {
+        "name": "Telia Play",
+        "type": "rent",
+        "logo": "/7QzLA6rsML2rKxhuagWlDl7Zxlm.jpg"
+      }
+    ],
+    "FR": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Canal VOD",
+        "type": "rent",
+        "logo": "/cAUTwxqoI7zc9XtYr1SMtWZEsXg.jpg"
+      },
+      {
+        "name": "Orange VOD",
+        "type": "rent",
+        "logo": "/9Fyo6njYvroAIxAzTBbLgnjgYga.jpg"
+      },
+      {
+        "name": "Bbox VOD",
+        "type": "rent",
+        "logo": "/s7mg9n4UHrcdJQL78JmaU6oAdHt.jpg"
+      },
+      {
+        "name": "Cinemas a la Demande",
+        "type": "rent",
+        "logo": "/AboEF9vQyH2AAndLimdO043IzLh.jpg"
+      },
+      {
+        "name": "Amazon Video",
+        "type": "rent",
+        "logo": "/qR6FKvnPBx2O37FDg8PNM7efwF3.jpg"
+      },
+      {
+        "name": "VIVA by videofutur",
+        "type": "rent",
+        "logo": "/PAaj5bekwbeeoRC1evWg4KJW8p.jpg"
+      },
+      {
+        "name": "Premiere Max",
+        "type": "rent",
+        "logo": "/rdMFjYYE0uZ55rBdlX149gRF1XQ.jpg"
+      },
+      {
+        "name": "Path\u00e9 Home",
+        "type": "rent",
+        "logo": "/yvui9yFtpWHt0ZrsPelItbuTavI.jpg"
+      },
+      {
+        "name": "Sooner",
+        "type": "rent",
+        "logo": "/umwf1XIMl3VHlkeuZYCUrq5FOoY.jpg"
+      }
+    ],
+    "GB": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Google Play Movies",
+        "type": "rent",
+        "logo": "/8z7rC8uIDaTM91X0ZfkRf04ydj2.jpg"
+      },
+      {
+        "name": "Sky Store",
+        "type": "rent",
+        "logo": "/59TxOAYcoFaufd6CWm465oPchD.jpg"
+      },
+      {
+        "name": "YouTube",
+        "type": "rent",
+        "logo": "/pTnn5JwWr4p3pG8H6VrpiQo7Vs0.jpg"
+      }
+    ],
+    "GT": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      }
+    ],
+    "HN": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      }
+    ],
+    "IE": [
+      {
+        "name": "Channel 4 Plus",
+        "type": "flatrate",
+        "logo": "/trVzwZhFnxY3sCqyySnXASGBY9j.jpg"
+      },
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Google Play Movies",
+        "type": "rent",
+        "logo": "/8z7rC8uIDaTM91X0ZfkRf04ydj2.jpg"
+      },
+      {
+        "name": "Sky Store",
+        "type": "rent",
+        "logo": "/59TxOAYcoFaufd6CWm465oPchD.jpg"
+      }
+    ],
+    "IL": [
+      {
+        "name": "Shahid VIP",
+        "type": "flatrate",
+        "logo": "/7qZED0kLBtiV8mLRNBtW4PQCAqW.jpg"
+      }
+    ],
+    "IN": [
+      {
+        "name": "Lionsgate Play",
+        "type": "flatrate",
+        "logo": "/e2hCUg2Z3sJ6yWF9NLU24SIKeWa.jpg"
+      },
+      {
+        "name": "Lionsgate Play Apple TV Channel",
+        "type": "flatrate",
+        "logo": "/p8i1zUcZYQ7qU6RrGvGbDItvcx4.jpg"
+      },
+      {
+        "name": "Lionsgate Play Amazon Channel",
+        "type": "flatrate",
+        "logo": "/yVbjPWEbsStanRAxwKMDARVOvsn.jpg"
+      }
+    ],
+    "IQ": [
+      {
+        "name": "Shahid VIP",
+        "type": "flatrate",
+        "logo": "/7qZED0kLBtiV8mLRNBtW4PQCAqW.jpg"
+      }
+    ],
+    "JP": [
+      {
+        "name": "Netflix",
+        "type": "flatrate",
+        "logo": "/pbpMk2JmcoNnQwx5JGpXngfoWtp.jpg"
+      },
+      {
+        "name": "Hulu",
+        "type": "flatrate",
+        "logo": "/bxBlRPEPpMVDc4jMhSrTf2339DW.jpg"
+      },
+      {
+        "name": "U-NEXT",
+        "type": "flatrate",
+        "logo": "/a5T7vNaGvoeckYO6rQkHolvyYf4.jpg"
+      },
+      {
+        "name": "Netflix Standard with Ads",
+        "type": "flatrate",
+        "logo": "/dpR8r13zWDeUR0QkzWidrdMxa56.jpg"
+      },
+      {
+        "name": "Amazon Video",
+        "type": "rent",
+        "logo": "/qR6FKvnPBx2O37FDg8PNM7efwF3.jpg"
+      },
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      }
+    ],
+    "KR": [
+      {
+        "name": "Netflix",
+        "type": "flatrate",
+        "logo": "/pbpMk2JmcoNnQwx5JGpXngfoWtp.jpg"
+      },
+      {
+        "name": "wavve",
+        "type": "flatrate",
+        "logo": "/hPcjSaWfMwEqXaCMu7Fkb529Dkc.jpg"
+      },
+      {
+        "name": "Watcha",
+        "type": "flatrate",
+        "logo": "/5gmEivxOGPdq4Afpq1f8ktLtEW1.jpg"
+      },
+      {
+        "name": "Netflix Standard with Ads",
+        "type": "flatrate",
+        "logo": "/dpR8r13zWDeUR0QkzWidrdMxa56.jpg"
+      },
+      {
+        "name": "TVING",
+        "type": "flatrate",
+        "logo": "/qHThQdkJuROK0k5QTCrknaNukWe.jpg"
+      },
+      {
+        "name": "wavve",
+        "type": "rent",
+        "logo": "/hPcjSaWfMwEqXaCMu7Fkb529Dkc.jpg"
+      },
+      {
+        "name": "Google Play Movies",
+        "type": "rent",
+        "logo": "/8z7rC8uIDaTM91X0ZfkRf04ydj2.jpg"
+      }
+    ],
+    "LB": [
+      {
+        "name": "Shahid VIP",
+        "type": "flatrate",
+        "logo": "/7qZED0kLBtiV8mLRNBtW4PQCAqW.jpg"
+      }
+    ],
+    "LU": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Google Play Movies",
+        "type": "rent",
+        "logo": "/8z7rC8uIDaTM91X0ZfkRf04ydj2.jpg"
+      }
+    ],
+    "LY": [
+      {
+        "name": "Shahid VIP",
+        "type": "flatrate",
+        "logo": "/7qZED0kLBtiV8mLRNBtW4PQCAqW.jpg"
+      }
+    ],
+    "MA": [
+      {
+        "name": "Shahid VIP",
+        "type": "flatrate",
+        "logo": "/7qZED0kLBtiV8mLRNBtW4PQCAqW.jpg"
+      }
+    ],
+    "MX": [
+      {
+        "name": "Universal+ Amazon Channel",
+        "type": "flatrate",
+        "logo": "/4ABGBjAMtRrYUrr0w3QfanuiaoB.jpg"
+      },
+      {
+        "name": "Lionsgate+ Amazon Channels",
+        "type": "flatrate",
+        "logo": "/o4OqlMLb3ZjhK7OwR4qvxiZKOXf.jpg"
+      },
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Amazon Video",
+        "type": "rent",
+        "logo": "/qR6FKvnPBx2O37FDg8PNM7efwF3.jpg"
+      },
+      {
+        "name": "Google Play Movies",
+        "type": "rent",
+        "logo": "/8z7rC8uIDaTM91X0ZfkRf04ydj2.jpg"
+      },
+      {
+        "name": "Claro video",
+        "type": "rent",
+        "logo": "/21M5CpiOYGOhHj2sVPXqwt6yeTO.jpg"
+      }
+    ],
+    "NI": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      }
+    ],
+    "NL": [
+      {
+        "name": "Path\u00e9 Thuis",
+        "type": "rent",
+        "logo": "/lnOkJKyFl87mzqNebAbE8ADdHoB.jpg"
+      },
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Google Play Movies",
+        "type": "rent",
+        "logo": "/8z7rC8uIDaTM91X0ZfkRf04ydj2.jpg"
+      },
+      {
+        "name": "Amazon Video",
+        "type": "rent",
+        "logo": "/qR6FKvnPBx2O37FDg8PNM7efwF3.jpg"
+      }
+    ],
+    "NZ": [
+      {
+        "name": "Amazon Prime Video",
+        "type": "flatrate",
+        "logo": "/pvske1MyAoymrs5bguRfVqYiM9a.jpg"
+      },
+      {
+        "name": "Neon TV",
+        "type": "rent",
+        "logo": "/iscLKFDwQlr0BAgVDBcuRapLiwC.jpg"
+      },
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Amazon Video",
+        "type": "rent",
+        "logo": "/qR6FKvnPBx2O37FDg8PNM7efwF3.jpg"
+      }
+    ],
+    "PE": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      },
+      {
+        "name": "Claro video",
+        "type": "rent",
+        "logo": "/21M5CpiOYGOhHj2sVPXqwt6yeTO.jpg"
+      }
+    ],
+    "PL": [
+      {
+        "name": "CDA Premium",
+        "type": "flatrate",
+        "logo": "/rZG2UBzS8ysl2kloSbrm9w4Mth2.jpg"
+      },
+      {
+        "name": "TVP",
+        "type": "rent",
+        "logo": "/mhsYsVY18PVcVh76y2XFrodqbBD.jpg"
+      },
+      {
+        "name": "Pilot WP",
+        "type": "rent",
+        "logo": "/4OlZobihZLTpizChDitPeH3PmND.jpg"
+      }
+    ],
+    "PS": [
+      {
+        "name": "Shahid VIP",
+        "type": "flatrate",
+        "logo": "/7qZED0kLBtiV8mLRNBtW4PQCAqW.jpg"
+      }
+    ],
+    "PT": [
+      {
+        "name": "Filmin",
+        "type": "flatrate",
+        "logo": "/kO2SWXvDCHAquaUuTJBuZkTBAuU.jpg"
+      }
+    ],
+    "PY": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      }
+    ],
+    "SA": [
+      {
+        "name": "Shahid VIP",
+        "type": "flatrate",
+        "logo": "/7qZED0kLBtiV8mLRNBtW4PQCAqW.jpg"
+      }
+    ],
+    "SE": [
+      {
+        "name": "Tele2 Play",
+        "type": "flatrate",
+        "logo": "/jy4yvY3szonb0p6rtMXvF5stuX9.jpg"
+      }
+    ],
+    "TN": [
+      {
+        "name": "Shahid VIP",
+        "type": "flatrate",
+        "logo": "/7qZED0kLBtiV8mLRNBtW4PQCAqW.jpg"
+      }
+    ],
+    "TR": [
+      {
+        "name": "MUBI",
+        "type": "flatrate",
+        "logo": "/x570VpH2C9EKDf1riP83rYc5dnL.jpg"
+      }
+    ],
+    "TW": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      }
+    ],
+    "US": [
+      {
+        "name": "Amazon Prime Video",
+        "type": "flatrate",
+        "logo": "/pvske1MyAoymrs5bguRfVqYiM9a.jpg"
+      },
+      {
+        "name": "HBO Max",
+        "type": "flatrate",
+        "logo": "/jbe4gVSfRlbPTdESXhEKpornsfu.jpg"
+      },
+      {
+        "name": "Peacock Premium",
+        "type": "flatrate",
+        "logo": "/2aGrp1xw3qhwCYvNGAJZPdjfeeX.jpg"
+      },
+      {
+        "name": "Cinemax Amazon Channel",
+        "type": "flatrate",
+        "logo": "/ohcwolMl8E743CkS8MnhmJKOlRj.jpg"
+      },
+      {
+        "name": "Cinemax Apple TV Channel",
+        "type": "flatrate",
+        "logo": "/zXCdY4pczONheFCU9GkrMbGI1o5.jpg"
+      },
+      {
+        "name": "Amazon Prime Video with Ads",
+        "type": "flatrate",
+        "logo": "/8aBqoNeGGr0oSA85iopgNZUOTOc.jpg"
+      },
+      {
+        "name": "Peacock Premium Plus",
+        "type": "flatrate",
+        "logo": "/drPlq5beqXtBaP7MNs8W616YRhm.jpg"
+      },
+      {
+        "name": "Amazon Video",
+        "type": "rent",
+        "logo": "/qR6FKvnPBx2O37FDg8PNM7efwF3.jpg"
+      },
+      {
+        "name": "Google Play Movies",
+        "type": "rent",
+        "logo": "/8z7rC8uIDaTM91X0ZfkRf04ydj2.jpg"
+      },
+      {
+        "name": "YouTube",
+        "type": "rent",
+        "logo": "/pTnn5JwWr4p3pG8H6VrpiQo7Vs0.jpg"
+      },
+      {
+        "name": "Fandango At Home",
+        "type": "rent",
+        "logo": "/19fkcOz0xeUgCVW8tO85uOYnYK9.jpg"
+      },
+      {
+        "name": "Spectrum On Demand",
+        "type": "rent",
+        "logo": "/aAb9CUHjFe9Y3O57qnrJH0KOF1B.jpg"
+      }
+    ],
+    "VE": [
+      {
+        "name": "Apple TV Store",
+        "type": "rent",
+        "logo": "/SPnB1qiCkYfirS2it3hZORwGVn.jpg"
+      }
+    ]
+  }
+}
