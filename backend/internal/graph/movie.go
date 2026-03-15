@@ -907,7 +907,7 @@ func (r *MovieRepository) UpsertTVShowAward(ctx context.Context, tmdbID int64, a
 // UpsertScoringProfile stores a user's scoring preset on the User node in Neo4j.
 func (r *MovieRepository) UpsertScoringProfile(ctx context.Context, userID string, profile models.ScoringProfile) error {
 	return r.driver.RunWriteUnit(ctx, `
-		MATCH (u:User {id: $user_id})
+		MERGE (u:User {id: $user_id})
 		SET u.scoring_preset      = $preset,
 		    u.scoring_audience    = $audience,
 		    u.scoring_critic      = $critic,
