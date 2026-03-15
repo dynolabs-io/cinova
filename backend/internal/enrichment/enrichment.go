@@ -31,7 +31,7 @@ For each item in the input array, produce:
 - cinova_synopsis: a 2-sentence spoiler-free hook that would make someone want to watch it.
   Write in present tense. Do NOT reveal plot twists or the ending. Always output English regardless of input language.
 
-Return ONLY a valid JSON object with this exact structure:
+Return ONLY a valid JSON object — no markdown, no explanation — with this EXACT structure (use "name" not "label"):
 {"results": [{"tmdb_id": <number>, "themes": [{"name": <string>, "score": <0.0-1.0>}], "moods": [{"name": <string>, "score": <0.0-1.0>}], "cinova_synopsis": <string>}]}`
 )
 
@@ -90,17 +90,25 @@ type chatResponse struct {
 
 // ---- Enrichment result structs ----
 
+// labelField captures both "name" and "label" since the model sometimes uses either.
+type labelField struct {
+	Name  string  `json:"name"`
+	Label string  `json:"label"`
+	Score float64 `json:"score"`
+}
+
+func (l labelField) text() string {
+	if l.Name != "" {
+		return l.Name
+	}
+	return l.Label
+}
+
 type enrichItem struct {
-	TMDBID int64 `json:"tmdb_id"`
-	Themes []struct {
-		Name  string  `json:"name"`
-		Score float64 `json:"score"`
-	} `json:"themes"`
-	Moods []struct {
-		Name  string  `json:"name"`
-		Score float64 `json:"score"`
-	} `json:"moods"`
-	CinovaSynopsis string `json:"cinova_synopsis"`
+	TMDBID         int64        `json:"tmdb_id"`
+	Themes         []labelField `json:"themes"`
+	Moods          []labelField `json:"moods"`
+	CinovaSynopsis string       `json:"cinova_synopsis"`
 }
 
 type enrichResponse struct {
@@ -211,29 +219,24 @@ func (c *Client) enrichBatch(ctx context.Context, movies []models.Movie, repo *g
 		return fmt.Errorf("chat completions: %w", err)
 	}
 
-	var enrichResp enrichResponse
-	if err := json.Unmarshal([]byte(results), &enrichResp); err != nil {
-		// Try to extract JSON from response if model added surrounding text
-		start := strings.Index(results, "{")
-		end := strings.LastIndex(results, "}")
-		if start >= 0 && end > start {
-			if err2 := json.Unmarshal([]byte(results[start:end+1]), &enrichResp); err2 != nil {
-				return fmt.Errorf("parse enrichment response: %w (raw: %.200s)", err, results)
-			}
-		} else {
-			return fmt.Errorf("parse enrichment response: %w (raw: %.200s)", err, results)
-		}
+	items, err := parseEnrichResponse(results)
+	if err != nil {
+		return fmt.Errorf("parse enrichment response: %w (raw: %.200s)", err, results)
 	}
 
-	for _, item := range enrichResp.Results {
+	for _, item := range items {
 		for _, t := range item.Themes {
-			if err := repo.UpsertTheme(ctx, int(item.TMDBID), t.Name, t.Score, mediaType); err != nil {
-				log.Warn().Err(err).Str("theme", t.Name).Int64("tmdb_id", item.TMDBID).Msg("upsert theme failed")
+			if name := t.text(); name != "" {
+				if err := repo.UpsertTheme(ctx, int(item.TMDBID), name, t.Score, mediaType); err != nil {
+					log.Warn().Err(err).Str("theme", name).Int64("tmdb_id", item.TMDBID).Msg("upsert theme failed")
+				}
 			}
 		}
 		for _, m := range item.Moods {
-			if err := repo.UpsertMood(ctx, int(item.TMDBID), m.Name, m.Score, mediaType); err != nil {
-				log.Warn().Err(err).Str("mood", m.Name).Int64("tmdb_id", item.TMDBID).Msg("upsert mood failed")
+			if name := m.text(); name != "" {
+				if err := repo.UpsertMood(ctx, int(item.TMDBID), name, m.Score, mediaType); err != nil {
+					log.Warn().Err(err).Str("mood", name).Int64("tmdb_id", item.TMDBID).Msg("upsert mood failed")
+				}
 			}
 		}
 		if item.CinovaSynopsis != "" && mediaType == "movie" {
@@ -245,6 +248,47 @@ func (c *Client) enrichBatch(ctx context.Context, movies []models.Movie, repo *g
 
 	log.Debug().Int("batch_size", len(inputs)).Int("enriched", len(enrichResp.Results)).Msg("batch enriched")
 	return nil
+}
+
+// parseEnrichResponse handles both {"results":[...]} and bare [...] array responses,
+// and also strips leading/trailing non-JSON text the model sometimes adds.
+func parseEnrichResponse(raw string) ([]enrichItem, error) {
+	// Trim whitespace
+	raw = strings.TrimSpace(raw)
+
+	// Try {"results":[...]} first
+	var resp enrichResponse
+	if err := json.Unmarshal([]byte(raw), &resp); err == nil {
+		return resp.Results, nil
+	}
+
+	// Try bare array [...]
+	var items []enrichItem
+	if err := json.Unmarshal([]byte(raw), &items); err == nil {
+		return items, nil
+	}
+
+	// Try extracting the outermost JSON object
+	start := strings.Index(raw, "{")
+	end := strings.LastIndex(raw, "}")
+	if start >= 0 && end > start {
+		var resp2 enrichResponse
+		if err := json.Unmarshal([]byte(raw[start:end+1]), &resp2); err == nil {
+			return resp2.Results, nil
+		}
+	}
+
+	// Try extracting a bare array
+	aStart := strings.Index(raw, "[")
+	aEnd := strings.LastIndex(raw, "]")
+	if aStart >= 0 && aEnd > aStart {
+		var items2 []enrichItem
+		if err := json.Unmarshal([]byte(raw[aStart:aEnd+1]), &items2); err == nil {
+			return items2, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no valid JSON found in response")
 }
 
 // callChatCompletions sends a chat completions request to Axon and returns the text content.
