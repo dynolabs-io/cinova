@@ -29,10 +29,11 @@ const (
 )
 
 func main() {
-	mode      := flag.String("mode", "delta", "ingestion mode: full or delta")
-	mediaType := flag.String("media-type", "all", "media type: movie, tvshow, or all")
-	country   := flag.String("country", "US", "ISO 3166-1 alpha-2 country code for streaming providers")
-	minVotes  := flag.Int("min-votes", 100, "minimum vote_count to include (quality filter)")
+	mode           := flag.String("mode", "delta", "ingestion mode: full or delta")
+	mediaType      := flag.String("media-type", "all", "media type: movie, tvshow, or all")
+	country        := flag.String("country", "US", "ISO 3166-1 alpha-2 country code for streaming providers")
+	minVotes       := flag.Int("min-votes", 100, "minimum vote_count to include (quality filter)")
+	minPopularity  := flag.Float64("min-popularity", 5.0, "minimum TMDB popularity to include from bulk export (0=all)")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -64,7 +65,7 @@ func main() {
 	movieRepo    := graph.NewMovieRepository(neo)
 	wikiClient   := wikidata.NewClient()
 
-	log.Info().Str("mode", *mode).Str("media_type", *mediaType).Str("country", *country).Int("min_votes", *minVotes).Msg("starting ingestion")
+	log.Info().Str("mode", *mode).Str("media_type", *mediaType).Str("country", *country).Int("min_votes", *minVotes).Float64("min_popularity", *minPopularity).Msg("starting ingestion")
 
 	// Rate limiter shared across all workers
 	limiter := rate.NewLimiter(rate.Limit(tmdbRatePerSec), tmdbRatePerSec)
@@ -72,10 +73,10 @@ func main() {
 	switch *mode {
 	case "full":
 		if *mediaType == "movie" || *mediaType == "all" {
-			runFullIngestion(ctx, tmdbClient, enrichClient, movieRepo, wikiClient, *country, *minVotes, limiter)
+			runFullIngestion(ctx, tmdbClient, enrichClient, movieRepo, wikiClient, *country, *minVotes, *minPopularity, limiter)
 		}
 		if *mediaType == "tvshow" || *mediaType == "all" {
-			runFullTVIngestion(ctx, tmdbClient, wikiClient, enrichClient, movieRepo, *country, *minVotes, limiter)
+			runFullTVIngestion(ctx, tmdbClient, wikiClient, enrichClient, movieRepo, *country, *minVotes, *minPopularity, limiter)
 		}
 	case "delta":
 		if *mediaType == "movie" || *mediaType == "all" {
@@ -93,10 +94,10 @@ func main() {
 
 // ── Full Movie Ingestion ───────────────────────────────────────────────────────
 
-func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient *enrichment.Client, repo *graph.MovieRepository, wikiClient *wikidata.Client, country string, minVotes int, limiter *rate.Limiter) {
-	log.Info().Msg("fetching bulk movie ID export from TMDB")
+func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient *enrichment.Client, repo *graph.MovieRepository, wikiClient *wikidata.Client, country string, minVotes int, minPopularity float64, limiter *rate.Limiter) {
+	log.Info().Float64("min_popularity", minPopularity).Msg("fetching bulk movie ID export from TMDB")
 
-	ids, err := tmdbClient.GetBulkMovieIDs(ctx)
+	ids, err := tmdbClient.GetBulkMovieIDs(ctx, minPopularity)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to fetch bulk movie IDs")
 	}
@@ -221,10 +222,10 @@ func runFullIngestion(ctx context.Context, tmdbClient *tmdb.Client, enrichClient
 
 // ── Full TV Ingestion ──────────────────────────────────────────────────────────
 
-func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClient *wikidata.Client, enrichClient *enrichment.Client, repo *graph.MovieRepository, country string, minVotes int, limiter *rate.Limiter) {
-	log.Info().Msg("fetching bulk TV show ID export from TMDB")
+func runFullTVIngestion(ctx context.Context, tmdbClient *tmdb.Client, wikiClient *wikidata.Client, enrichClient *enrichment.Client, repo *graph.MovieRepository, country string, minVotes int, minPopularity float64, limiter *rate.Limiter) {
+	log.Info().Float64("min_popularity", minPopularity).Msg("fetching bulk TV show ID export from TMDB")
 
-	ids, err := tmdbClient.GetBulkTVShowIDs(ctx)
+	ids, err := tmdbClient.GetBulkTVShowIDs(ctx, minPopularity)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to fetch bulk TV IDs")
 	}

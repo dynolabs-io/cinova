@@ -387,8 +387,10 @@ type tmdbTrendingPage struct {
 }
 
 type tmdbBulkEntry struct {
-	ID       int    `json:"id"`
-	Original string `json:"original_title"`
+	ID         int     `json:"id"`
+	Original   string  `json:"original_title"`
+	Popularity float64 `json:"popularity"`
+	Adult      bool    `json:"adult"`
 }
 
 // ---- Public API methods ----
@@ -427,9 +429,10 @@ func (c *Client) GetTrendingMovies(ctx context.Context, page int) ([]int, error)
 	return ids, nil
 }
 
-// GetBulkMovieIDs downloads the TMDB daily export file and returns all movie IDs.
+// GetBulkMovieIDs downloads the TMDB daily export file and returns movie IDs
+// with popularity >= minPopularity. Use minPopularity=0 for all IDs.
 // The export file is a gzipped JSONL file at http://files.tmdb.org/p/exports/movie_ids_MM_DD_YYYY.json.gz
-func (c *Client) GetBulkMovieIDs(ctx context.Context) ([]int, error) {
+func (c *Client) GetBulkMovieIDs(ctx context.Context, minPopularity float64) ([]int, error) {
 	// Build URL for yesterday's export (today's may not be ready yet)
 	yesterday := time.Now().UTC().AddDate(0, 0, -1)
 	exportURL := fmt.Sprintf("%s/movie_ids_%02d_%02d_%04d.json.gz",
@@ -467,7 +470,7 @@ func (c *Client) GetBulkMovieIDs(ctx context.Context) ([]int, error) {
 			// Skip malformed lines
 			continue
 		}
-		if entry.ID > 0 {
+		if entry.ID > 0 && !entry.Adult && (minPopularity <= 0 || entry.Popularity >= minPopularity) {
 			ids = append(ids, entry.ID)
 		}
 	}
@@ -571,8 +574,9 @@ func (c *Client) GetTrendingTVShows(ctx context.Context, page int) ([]int, error
 	return ids, nil
 }
 
-// GetBulkTVShowIDs downloads the TMDB daily TV show export and returns all show IDs.
-func (c *Client) GetBulkTVShowIDs(ctx context.Context) ([]int, error) {
+// GetBulkTVShowIDs downloads the TMDB daily TV show export and returns show IDs
+// with popularity >= minPopularity. Use minPopularity=0 for all IDs.
+func (c *Client) GetBulkTVShowIDs(ctx context.Context, minPopularity float64) ([]int, error) {
 	yesterday := time.Now().UTC().AddDate(0, 0, -1)
 	exportURL := fmt.Sprintf("%s/tv_series_ids_%02d_%02d_%04d.json.gz",
 		exportsURL, yesterday.Month(), yesterday.Day(), yesterday.Year())
@@ -601,16 +605,14 @@ func (c *Client) GetBulkTVShowIDs(ctx context.Context) ([]int, error) {
 	var ids []int
 	decoder := json.NewDecoder(gzr)
 	for {
-		var entry struct {
-			ID int `json:"id"`
-		}
+		var entry tmdbBulkEntry
 		if err := decoder.Decode(&entry); err != nil {
 			if err == io.EOF {
 				break
 			}
 			continue
 		}
-		if entry.ID > 0 {
+		if entry.ID > 0 && (minPopularity <= 0 || entry.Popularity >= minPopularity) {
 			ids = append(ids, entry.ID)
 		}
 	}
