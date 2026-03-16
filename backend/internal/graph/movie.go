@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j/dbtype"
 
@@ -1159,6 +1160,212 @@ func (r *MovieRepository) SampleQuality(ctx context.Context, n int) (*QualityRep
 	if checks > 0 {
 		rep.PassRate = 1.0 - float64(failures)/float64(checks)
 	}
+	return rep, nil
+}
+
+// AssessmentReport holds quality metrics for fully-enriched nodes.
+// It only covers nodes where cinova_synopsis is populated (phase 2 complete).
+type AssessmentReport struct {
+	// Counts
+	TotalEnriched   int
+	Sampled         int
+
+	// Phase-1 fields (should be ~100% for enriched nodes)
+	MissingTitle     int
+	MissingOverview  int
+	ZeroCinovaScore  int
+	MissingProviders int
+	MissingPlot      int // has wikidata_id but no plot_summary
+
+	// Phase-2 fields (these are the filter condition, so synopsis always 100%)
+	MissingEditorial int
+	MissingThemes    int
+	MissingMoods     int
+
+	// Content quality
+	EditorialTooShort int // < 150 words
+	EditorialTooLong  int // > 250 words
+	SynopsisTooShort  int // < 3 sentences
+
+	// Per-field pass rates (0–1)
+	PassRatePhase1   float64
+	PassRatePhase2   float64
+	PassRateContent  float64
+	PassRateOverall  float64
+}
+
+// AssessEnrichedMovies samples up to n fully-enriched Movie nodes (cinova_synopsis populated)
+// and returns a detailed quality report covering phase-1 completeness, phase-2 completeness,
+// and content quality (editorial word count, synopsis sentence count).
+func (r *MovieRepository) AssessEnrichedMovies(ctx context.Context, n int) (*AssessmentReport, error) {
+	// Step 1: total count of enriched movies
+	countRecs, err := r.driver.RunQuery(ctx, `
+		MATCH (m:Movie)
+		WHERE m.cinova_synopsis IS NOT NULL AND m.cinova_synopsis <> ''
+		RETURN count(m) AS total
+	`, nil)
+	if err != nil {
+		return nil, fmt.Errorf("AssessEnrichedMovies count: %w", err)
+	}
+	rep := &AssessmentReport{}
+	if len(countRecs) > 0 {
+		rep.TotalEnriched = int(int64Val(func() interface{} { v, _ := countRecs[0].Get("total"); return v }()))
+	}
+	if rep.TotalEnriched == 0 {
+		return rep, nil
+	}
+
+	// Step 2: sample enriched nodes (random order via rand())
+	records, err := r.driver.RunQuery(ctx, `
+		MATCH (m:Movie)
+		WHERE m.cinova_synopsis IS NOT NULL AND m.cinova_synopsis <> ''
+		WITH m ORDER BY rand() LIMIT $n
+		OPTIONAL MATCH (m)-[:HAS_THEME]->(th:Theme)
+		OPTIONAL MATCH (m)-[:HAS_MOOD]->(mo:Mood)
+		OPTIONAL MATCH (m)-[:AVAILABLE_ON {country: 'US'}]->(prov:Provider)
+		RETURN m,
+		       count(DISTINCT th) AS theme_count,
+		       count(DISTINCT mo) AS mood_count,
+		       count(DISTINCT prov) AS provider_count
+	`, map[string]interface{}{"n": n})
+	if err != nil {
+		return nil, fmt.Errorf("AssessEnrichedMovies sample: %w", err)
+	}
+
+	rep.Sampled = len(records)
+	p1Checks, p1Failures := 0, 0
+	p2Checks, p2Failures := 0, 0
+	cqChecks, cqFailures := 0, 0
+
+	for _, rec := range records {
+		raw, _ := rec.Get("m")
+		m := movieNodeToModel(raw)
+		themeCount   := int(int64Val(func() interface{} { v, _ := rec.Get("theme_count"); return v }()))
+		moodCount    := int(int64Val(func() interface{} { v, _ := rec.Get("mood_count"); return v }()))
+		providerCount := int(int64Val(func() interface{} { v, _ := rec.Get("provider_count"); return v }()))
+
+		// Phase-1 checks: basic metadata
+		p1Checks += 4
+		if m.Title == ""       { rep.MissingTitle++;    p1Failures++ }
+		if m.Overview == ""    { rep.MissingOverview++; p1Failures++ }
+		if m.CinovaScore == 0  { rep.ZeroCinovaScore++; p1Failures++ }
+		if providerCount == 0  { rep.MissingProviders++; p1Failures++ }
+		if m.WikidataID != "" && m.PlotSummary == "" {
+			rep.MissingPlot++; p1Failures++; p1Checks++
+		}
+
+		// Phase-2 checks: enrichment fields
+		p2Checks += 3
+		if m.CinovaEditorial == "" { rep.MissingEditorial++; p2Failures++ }
+		if themeCount == 0         { rep.MissingThemes++;    p2Failures++ }
+		if moodCount == 0          { rep.MissingMoods++;     p2Failures++ }
+
+		// Content quality: editorial word count (target 150-250 words)
+		if m.CinovaEditorial != "" {
+			cqChecks++
+			wordCount := len(strings.Fields(m.CinovaEditorial))
+			if wordCount < 150 { rep.EditorialTooShort++; cqFailures++ }
+			if wordCount > 250 { rep.EditorialTooLong++;  cqFailures++ }
+		}
+		// Content quality: synopsis sentence count (target 3-4 sentences)
+		if m.CinovaSynopsis != "" {
+			cqChecks++
+			sentenceCount := len(strings.Split(strings.TrimSpace(m.CinovaSynopsis), "."))
+			if sentenceCount < 3 { rep.SynopsisTooShort++; cqFailures++ }
+		}
+	}
+
+	if p1Checks > 0 { rep.PassRatePhase1 = 1.0 - float64(p1Failures)/float64(p1Checks) }
+	if p2Checks > 0 { rep.PassRatePhase2 = 1.0 - float64(p2Failures)/float64(p2Checks) }
+	if cqChecks > 0 { rep.PassRateContent = 1.0 - float64(cqFailures)/float64(cqChecks) }
+	totalC := p1Checks + p2Checks + cqChecks
+	totalF := p1Failures + p2Failures + cqFailures
+	if totalC > 0 { rep.PassRateOverall = 1.0 - float64(totalF)/float64(totalC) }
+
+	return rep, nil
+}
+
+// AssessEnrichedTVShows samples up to n fully-enriched TVShow nodes and returns
+// the same quality report structure as AssessEnrichedMovies.
+func (r *MovieRepository) AssessEnrichedTVShows(ctx context.Context, n int) (*AssessmentReport, error) {
+	countRecs, err := r.driver.RunQuery(ctx, `
+		MATCH (s:TVShow)
+		WHERE s.cinova_synopsis IS NOT NULL AND s.cinova_synopsis <> ''
+		RETURN count(s) AS total
+	`, nil)
+	if err != nil {
+		return nil, fmt.Errorf("AssessEnrichedTVShows count: %w", err)
+	}
+	rep := &AssessmentReport{}
+	if len(countRecs) > 0 {
+		rep.TotalEnriched = int(int64Val(func() interface{} { v, _ := countRecs[0].Get("total"); return v }()))
+	}
+	if rep.TotalEnriched == 0 {
+		return rep, nil
+	}
+
+	records, err := r.driver.RunQuery(ctx, `
+		MATCH (s:TVShow)
+		WHERE s.cinova_synopsis IS NOT NULL AND s.cinova_synopsis <> ''
+		WITH s ORDER BY rand() LIMIT $n
+		OPTIONAL MATCH (s)-[:HAS_THEME]->(th:Theme)
+		OPTIONAL MATCH (s)-[:HAS_MOOD]->(mo:Mood)
+		OPTIONAL MATCH (s)-[:AVAILABLE_ON {country: 'US'}]->(prov:Provider)
+		RETURN s,
+		       count(DISTINCT th) AS theme_count,
+		       count(DISTINCT mo) AS mood_count,
+		       count(DISTINCT prov) AS provider_count
+	`, map[string]interface{}{"n": n})
+	if err != nil {
+		return nil, fmt.Errorf("AssessEnrichedTVShows sample: %w", err)
+	}
+
+	rep.Sampled = len(records)
+	p1Checks, p1Failures := 0, 0
+	p2Checks, p2Failures := 0, 0
+	cqChecks, cqFailures := 0, 0
+
+	for _, rec := range records {
+		raw, _ := rec.Get("s")
+		show := tvNodeToModel(raw)
+		themeCount    := int(int64Val(func() interface{} { v, _ := rec.Get("theme_count"); return v }()))
+		moodCount     := int(int64Val(func() interface{} { v, _ := rec.Get("mood_count"); return v }()))
+		providerCount := int(int64Val(func() interface{} { v, _ := rec.Get("provider_count"); return v }()))
+
+		p1Checks += 4
+		if show.Name == ""       { rep.MissingTitle++;    p1Failures++ }
+		if show.Overview == ""   { rep.MissingOverview++; p1Failures++ }
+		if show.CinovaScore == 0 { rep.ZeroCinovaScore++; p1Failures++ }
+		if providerCount == 0    { rep.MissingProviders++; p1Failures++ }
+		if show.WikidataID != "" && show.PlotSummary == "" {
+			rep.MissingPlot++; p1Failures++; p1Checks++
+		}
+
+		p2Checks += 3
+		if show.CinovaEditorial == "" { rep.MissingEditorial++; p2Failures++ }
+		if themeCount == 0            { rep.MissingThemes++;    p2Failures++ }
+		if moodCount == 0             { rep.MissingMoods++;     p2Failures++ }
+
+		if show.CinovaEditorial != "" {
+			cqChecks++
+			wordCount := len(strings.Fields(show.CinovaEditorial))
+			if wordCount < 150 { rep.EditorialTooShort++; cqFailures++ }
+			if wordCount > 250 { rep.EditorialTooLong++;  cqFailures++ }
+		}
+		if show.CinovaSynopsis != "" {
+			cqChecks++
+			sentenceCount := len(strings.Split(strings.TrimSpace(show.CinovaSynopsis), "."))
+			if sentenceCount < 3 { rep.SynopsisTooShort++; cqFailures++ }
+		}
+	}
+
+	if p1Checks > 0 { rep.PassRatePhase1 = 1.0 - float64(p1Failures)/float64(p1Checks) }
+	if p2Checks > 0 { rep.PassRatePhase2 = 1.0 - float64(p2Failures)/float64(p2Checks) }
+	if cqChecks > 0 { rep.PassRateContent = 1.0 - float64(cqFailures)/float64(cqChecks) }
+	totalC := p1Checks + p2Checks + cqChecks
+	totalF := p1Failures + p2Failures + cqFailures
+	if totalC > 0 { rep.PassRateOverall = 1.0 - float64(totalF)/float64(totalC) }
+
 	return rep, nil
 }
 

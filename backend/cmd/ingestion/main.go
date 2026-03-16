@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -108,8 +109,10 @@ func main() {
 		}
 	case "plot-recovery":
 		runPlotRecovery(ctx, wikiClient, movieRepo)
+	case "assess":
+		runAssessment(ctx, movieRepo)
 	default:
-		log.Fatal().Str("mode", *mode).Msg("unknown mode; use full, delta, enrich-only, or plot-recovery")
+		log.Fatal().Str("mode", *mode).Msg("unknown mode; use full, delta, enrich-only, plot-recovery, or assess")
 	}
 
 	log.Info().Msg("ingestion complete")
@@ -780,6 +783,115 @@ func runPlotRecovery(ctx context.Context, wikiClient *wikidata.Client, repo *gra
 	}
 
 	log.Info().Int("total", total).Int("skipped", skipped).Str("elapsed", time.Since(start).Round(time.Second).String()).Msg("plot-recovery complete")
+}
+
+// runAssessment is an independent quality assessor for fully-enriched nodes.
+// It only evaluates nodes where cinova_synopsis is populated (both phase 1 and
+// phase 2 complete), giving a true picture of end-to-end data quality.
+// Run with: --mode assess
+func runAssessment(ctx context.Context, repo *graph.MovieRepository) {
+	const sampleSize = 100
+
+	pct := func(n, total int) string {
+		if total == 0 { return "n/a" }
+		return fmt.Sprintf("%.1f%%", 100.0*float64(total-n)/float64(total))
+	}
+	bar := func(rate float64) string {
+		filled := int(rate * 20)
+		b := ""
+		for i := 0; i < 20; i++ {
+			if i < filled { b += "█" } else { b += "░" }
+		}
+		return b
+	}
+
+	// ── Movies ────────────────────────────────────────────────────────────────
+	mRep, err := repo.AssessEnrichedMovies(ctx, sampleSize)
+	if err != nil {
+		log.Error().Err(err).Msg("assessment: movies failed")
+	} else {
+		log.Info().
+			Int("total_enriched", mRep.TotalEnriched).
+			Int("sampled", mRep.Sampled).
+			Str("pass_phase1_metadata", fmt.Sprintf("%.1f%%", mRep.PassRatePhase1*100)).
+			Str("pass_phase2_enrichment", fmt.Sprintf("%.1f%%", mRep.PassRatePhase2*100)).
+			Str("pass_content_quality", fmt.Sprintf("%.1f%%", mRep.PassRateContent*100)).
+			Str("pass_overall", fmt.Sprintf("%.1f%%", mRep.PassRateOverall*100)).
+			Msg("ASSESSMENT: movies")
+
+		fmt.Printf("\n╔══════════════════════════════════════════════════════════════╗\n")
+		fmt.Printf("║  MOVIE QUALITY ASSESSMENT  (enriched nodes only)             ║\n")
+		fmt.Printf("╠══════════════════════════════════════════════════════════════╣\n")
+		fmt.Printf("║  Total enriched: %-8d  Sampled: %-8d               ║\n", mRep.TotalEnriched, mRep.Sampled)
+		fmt.Printf("╠══════════════════════════════════════════════════════════════╣\n")
+		fmt.Printf("║  Phase 1 — Metadata                                          ║\n")
+		fmt.Printf("║    title          %s / %d         ║\n", pct(mRep.MissingTitle, mRep.Sampled), mRep.Sampled)
+		fmt.Printf("║    overview       %s / %d         ║\n", pct(mRep.MissingOverview, mRep.Sampled), mRep.Sampled)
+		fmt.Printf("║    cinova_score   %s / %d         ║\n", pct(mRep.ZeroCinovaScore, mRep.Sampled), mRep.Sampled)
+		fmt.Printf("║    providers (US) %s / %d         ║\n", pct(mRep.MissingProviders, mRep.Sampled), mRep.Sampled)
+		fmt.Printf("║    plot_summary   %s / %d  (wikidata-linked only) ║\n", pct(mRep.MissingPlot, mRep.Sampled), mRep.Sampled)
+		fmt.Printf("║  Phase 1 pass rate:  %s  %.1f%%               ║\n", bar(mRep.PassRatePhase1), mRep.PassRatePhase1*100)
+		fmt.Printf("╠══════════════════════════════════════════════════════════════╣\n")
+		fmt.Printf("║  Phase 2 — Enrichment                                        ║\n")
+		fmt.Printf("║    editorial      %s / %d         ║\n", pct(mRep.MissingEditorial, mRep.Sampled), mRep.Sampled)
+		fmt.Printf("║    themes         %s / %d         ║\n", pct(mRep.MissingThemes, mRep.Sampled), mRep.Sampled)
+		fmt.Printf("║    moods          %s / %d         ║\n", pct(mRep.MissingMoods, mRep.Sampled), mRep.Sampled)
+		fmt.Printf("║  Phase 2 pass rate:  %s  %.1f%%               ║\n", bar(mRep.PassRatePhase2), mRep.PassRatePhase2*100)
+		fmt.Printf("╠══════════════════════════════════════════════════════════════╣\n")
+		fmt.Printf("║  Content Quality                                              ║\n")
+		fmt.Printf("║    editorial < 150w  %d / %d                           ║\n", mRep.EditorialTooShort, mRep.Sampled)
+		fmt.Printf("║    editorial > 250w  %d / %d                           ║\n", mRep.EditorialTooLong, mRep.Sampled)
+		fmt.Printf("║    synopsis < 3 sent %d / %d                           ║\n", mRep.SynopsisTooShort, mRep.Sampled)
+		fmt.Printf("║  Content pass rate:  %s  %.1f%%               ║\n", bar(mRep.PassRateContent), mRep.PassRateContent*100)
+		fmt.Printf("╠══════════════════════════════════════════════════════════════╣\n")
+		fmt.Printf("║  OVERALL:  %s  %.1f%%                    ║\n", bar(mRep.PassRateOverall), mRep.PassRateOverall*100)
+		fmt.Printf("╚══════════════════════════════════════════════════════════════╝\n\n")
+	}
+
+	// ── TV Shows ──────────────────────────────────────────────────────────────
+	tvRep, err := repo.AssessEnrichedTVShows(ctx, sampleSize)
+	if err != nil {
+		log.Error().Err(err).Msg("assessment: tv shows failed")
+	} else if tvRep.TotalEnriched == 0 {
+		log.Info().Msg("ASSESSMENT: no enriched TV shows yet")
+	} else {
+		log.Info().
+			Int("total_enriched", tvRep.TotalEnriched).
+			Int("sampled", tvRep.Sampled).
+			Str("pass_phase1_metadata", fmt.Sprintf("%.1f%%", tvRep.PassRatePhase1*100)).
+			Str("pass_phase2_enrichment", fmt.Sprintf("%.1f%%", tvRep.PassRatePhase2*100)).
+			Str("pass_content_quality", fmt.Sprintf("%.1f%%", tvRep.PassRateContent*100)).
+			Str("pass_overall", fmt.Sprintf("%.1f%%", tvRep.PassRateOverall*100)).
+			Msg("ASSESSMENT: tv shows")
+
+		fmt.Printf("\n╔══════════════════════════════════════════════════════════════╗\n")
+		fmt.Printf("║  TV SHOW QUALITY ASSESSMENT  (enriched nodes only)           ║\n")
+		fmt.Printf("╠══════════════════════════════════════════════════════════════╣\n")
+		fmt.Printf("║  Total enriched: %-8d  Sampled: %-8d               ║\n", tvRep.TotalEnriched, tvRep.Sampled)
+		fmt.Printf("╠══════════════════════════════════════════════════════════════╣\n")
+		fmt.Printf("║  Phase 1 — Metadata                                          ║\n")
+		fmt.Printf("║    title          %s / %d         ║\n", pct(tvRep.MissingTitle, tvRep.Sampled), tvRep.Sampled)
+		fmt.Printf("║    overview       %s / %d         ║\n", pct(tvRep.MissingOverview, tvRep.Sampled), tvRep.Sampled)
+		fmt.Printf("║    cinova_score   %s / %d         ║\n", pct(tvRep.ZeroCinovaScore, tvRep.Sampled), tvRep.Sampled)
+		fmt.Printf("║    providers (US) %s / %d         ║\n", pct(tvRep.MissingProviders, tvRep.Sampled), tvRep.Sampled)
+		fmt.Printf("║    plot_summary   %s / %d  (wikidata-linked only) ║\n", pct(tvRep.MissingPlot, tvRep.Sampled), tvRep.Sampled)
+		fmt.Printf("║  Phase 1 pass rate:  %s  %.1f%%               ║\n", bar(tvRep.PassRatePhase1), tvRep.PassRatePhase1*100)
+		fmt.Printf("╠══════════════════════════════════════════════════════════════╣\n")
+		fmt.Printf("║  Phase 2 — Enrichment                                        ║\n")
+		fmt.Printf("║    editorial      %s / %d         ║\n", pct(tvRep.MissingEditorial, tvRep.Sampled), tvRep.Sampled)
+		fmt.Printf("║    themes         %s / %d         ║\n", pct(tvRep.MissingThemes, tvRep.Sampled), tvRep.Sampled)
+		fmt.Printf("║    moods          %s / %d         ║\n", pct(tvRep.MissingMoods, tvRep.Sampled), tvRep.Sampled)
+		fmt.Printf("║  Phase 2 pass rate:  %s  %.1f%%               ║\n", bar(tvRep.PassRatePhase2), tvRep.PassRatePhase2*100)
+		fmt.Printf("╠══════════════════════════════════════════════════════════════╣\n")
+		fmt.Printf("║  Content Quality                                              ║\n")
+		fmt.Printf("║    editorial < 150w  %d / %d                           ║\n", tvRep.EditorialTooShort, tvRep.Sampled)
+		fmt.Printf("║    editorial > 250w  %d / %d                           ║\n", tvRep.EditorialTooLong, tvRep.Sampled)
+		fmt.Printf("║    synopsis < 3 sent %d / %d                           ║\n", tvRep.SynopsisTooShort, tvRep.Sampled)
+		fmt.Printf("║  Content pass rate:  %s  %.1f%%               ║\n", bar(tvRep.PassRateContent), tvRep.PassRateContent*100)
+		fmt.Printf("╠══════════════════════════════════════════════════════════════╣\n")
+		fmt.Printf("║  OVERALL:  %s  %.1f%%                    ║\n", bar(tvRep.PassRateOverall), tvRep.PassRateOverall*100)
+		fmt.Printf("╚══════════════════════════════════════════════════════════════╝\n\n")
+	}
 }
 
 // runQualityCheck samples recently ingested Movie nodes and logs a structured
