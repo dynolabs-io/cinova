@@ -244,24 +244,11 @@ func (s *Service) Chat(
 		MinScore:   minScore,
 	}
 
-	// ── Query Neo4j for candidates ────────────────────────────────────────
-	candidates, err := s.repo.GetChatCandidates(ctx, filters, country)
-	if err != nil {
-		log.Error().Err(err).Msg("chat: candidate query failed")
-		candidates = []models.MovieSummary{}
-	}
-
-	// Fallback: if too few candidates, relax filters and retry
-	if len(candidates) < 3 {
-		log.Info().Int("candidates", len(candidates)).Msg("chat: too few candidates, relaxing filters")
-		relaxed := graph.ChatFilters{MinScore: defaultMinScore, ExcludeIDs: filters.ExcludeIDs}
-		if moreCandidates, err2 := s.repo.GetChatCandidates(ctx, relaxed, country); err2 == nil && len(moreCandidates) > len(candidates) {
-			candidates = moreCandidates
-		}
-	}
+	// ── Query Neo4j for candidates (tiered fallback) ──────────────────────
+	candidates, providerDropped := s.fetchCandidates(ctx, filters, country)
 
 	// ── Pass 2: write recommendations ─────────────────────────────────────
-	recOut, err := s.writeRecommendations(ctx, history, newMessage, userCtx, candidates, country)
+	recOut, err := s.writeRecommendations(ctx, history, newMessage, userCtx, candidates, country, filters.Providers, providerDropped)
 	if err != nil {
 		log.Error().Err(err).Msg("chat: recommendation generation failed")
 		// Graceful fallback: return candidate titles without AI commentary
@@ -316,7 +303,8 @@ func (s *Service) extractIntent(ctx context.Context, history []models.ChatMessag
 }
 
 // writeRecommendations builds the candidate list and calls Claude to produce
-// natural language recommendations.
+// natural language recommendations. requestedProviders and providerDropped let
+// Claude acknowledge when requested streaming services had no matches.
 func (s *Service) writeRecommendations(
 	ctx context.Context,
 	history []models.ChatMessage,
@@ -324,6 +312,8 @@ func (s *Service) writeRecommendations(
 	userCtx *graph.UserChatContext,
 	candidates []models.MovieSummary,
 	country string,
+	requestedProviders []string,
+	providerDropped bool,
 ) (*recOutput, error) {
 
 	// Build user context section
@@ -376,12 +366,24 @@ func (s *Service) writeRecommendations(
 		candidateSB.WriteString(line + "\n")
 	}
 
+	// If the user asked for a specific provider but it couldn't be satisfied,
+	// prepend a note so Claude doesn't falsely claim the films are on that service.
+	providerNote := ""
+	if providerDropped && len(requestedProviders) > 0 {
+		providerNote = fmt.Sprintf(
+			"[System note: No titles matching %s were found in this region. "+
+				"The candidates below are from other services. Acknowledge this briefly and "+
+				"still recommend the best matches.]\n\n",
+			strings.Join(requestedProviders, "/"),
+		)
+	}
+
 	// Combine history + new message + candidates
 	messages := []axonMessage{{Role: "system", Content: sysPrompt}}
 	for _, h := range history {
 		messages = append(messages, axonMessage{Role: h.Role, Content: h.Content})
 	}
-	userContent := newMsg + "\n\n" + candidateSB.String()
+	userContent := providerNote + newMsg + "\n\n" + candidateSB.String()
 	messages = append(messages, axonMessage{Role: "user", Content: userContent})
 
 	raw, err := s.callAxon(ctx, messages, 1500)
@@ -529,18 +531,8 @@ func (s *Service) StreamChat(
 
 	sendSSE(map[string]string{"type": "status", "text": "Searching films…"})
 
-	// Neo4j query
-	candidates, err := s.repo.GetChatCandidates(ctx, filters, country)
-	if err != nil {
-		log.Error().Err(err).Msg("chat stream: candidate query failed")
-		candidates = []models.MovieSummary{}
-	}
-	if len(candidates) < 3 {
-		relaxed := graph.ChatFilters{MinScore: defaultMinScore}
-		if more, err2 := s.repo.GetChatCandidates(ctx, relaxed, country); err2 == nil && len(more) > len(candidates) {
-			candidates = more
-		}
-	}
+	// Neo4j query (tiered fallback)
+	candidates, providerDropped := s.fetchCandidates(ctx, filters, country)
 
 	sendSSE(map[string]string{"type": "status", "text": "Writing recommendations…"})
 
@@ -551,7 +543,7 @@ func (s *Service) StreamChat(
 	}
 
 	// Build Axon messages (history truncated to prevent context bloat)
-	messages := s.buildStreamMessages(history, newMessage, userCtx, candidates)
+	messages := s.buildStreamMessages(history, newMessage, userCtx, candidates, filters.Providers, providerDropped)
 
 	// Stream recommendation — deltas forwarded to client as text arrives
 	replyCtx, cancel := context.WithTimeout(ctx, recommendTimeout)
@@ -604,6 +596,8 @@ func (s *Service) buildStreamMessages(
 	newMsg string,
 	userCtx *graph.UserChatContext,
 	candidates []models.MovieSummary,
+	requestedProviders []string,
+	providerDropped bool,
 ) []axonMessage {
 	var ctxParts []string
 	if userCtx != nil {
@@ -662,11 +656,20 @@ func (s *Service) buildStreamMessages(
 		}
 		msgs = append(msgs, axonMessage{Role: h.Role, Content: content})
 	}
-	msgs = append(msgs, axonMessage{Role: "user", Content: newMsg + "\n\n" + sb.String()})
+	providerNote := ""
+	if providerDropped && len(requestedProviders) > 0 {
+		providerNote = fmt.Sprintf(
+			"[System note: No titles matching %s were found in this region. "+
+				"The candidates below are from other services. Acknowledge this briefly and "+
+				"still recommend the best matches.]\n\n",
+			strings.Join(requestedProviders, "/"),
+		)
+	}
+	msgs = append(msgs, axonMessage{Role: "user", Content: providerNote + newMsg + "\n\n" + sb.String()})
 	return msgs
 }
 
-// streamAxonToSSE sends a streaming request to Axon and:
+/// streamAxonToSSE sends a streaming request to Axon and:
 //   - Forwards text deltas (before the "|||" separator) to the SSE client immediately
 //   - Collects the JSON recommendations (after "|||") and returns them
 //
@@ -814,6 +817,46 @@ func (s *Service) streamAxonToSSE(
 	}
 
 	return replyText, afterSep, nil
+}
+
+// fetchCandidates runs a tiered fallback to always return ≥3 candidates:
+//  1. Full filters (genres + providers + score)
+//  2. Provider kept, content filters relaxed (if < 3)
+//  3. All filters dropped (if still < 3) — providerDropped=true so the caller
+//     can tell Claude the provider couldn't be satisfied
+func (s *Service) fetchCandidates(ctx context.Context, filters graph.ChatFilters, country string) (candidates []models.MovieSummary, providerDropped bool) {
+	var err error
+	candidates, err = s.repo.GetChatCandidates(ctx, filters, country)
+	if err != nil {
+		log.Error().Err(err).Msg("chat: candidate query failed")
+		candidates = []models.MovieSummary{}
+	}
+
+	// Tier 2: keep provider, relax content filters
+	if len(candidates) < 3 && len(filters.Providers) > 0 {
+		log.Info().Int("n", len(candidates)).Msg("chat: relaxing content filters, keeping provider")
+		providerOnly := graph.ChatFilters{
+			Providers:  filters.Providers,
+			MinScore:   defaultMinScore,
+			ExcludeIDs: filters.ExcludeIDs,
+		}
+		if more, err2 := s.repo.GetChatCandidates(ctx, providerOnly, country); err2 == nil && len(more) > len(candidates) {
+			candidates = more
+		}
+	}
+
+	// Tier 3: drop all filters — flag it so Claude can acknowledge the gap
+	if len(candidates) < 3 {
+		log.Info().Int("n", len(candidates)).Msg("chat: dropping all filters")
+		bare := graph.ChatFilters{MinScore: defaultMinScore, ExcludeIDs: filters.ExcludeIDs}
+		if more, err2 := s.repo.GetChatCandidates(ctx, bare, country); err2 == nil && len(more) > len(candidates) {
+			if len(filters.Providers) > 0 {
+				providerDropped = true
+			}
+			candidates = more
+		}
+	}
+	return candidates, providerDropped
 }
 
 // buildFallbackResponse produces a plain list response when AI generation fails.

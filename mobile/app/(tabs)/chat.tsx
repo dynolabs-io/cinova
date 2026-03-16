@@ -63,21 +63,29 @@ export default function ChatScreen() {
     const assistantId = `a-${Date.now()}`;
     const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '' };
 
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    // Pre-fill assistant bubble with the initial status so it's visible inline
+    const initialStatus = 'Analyzing your request…';
+    setMessages((prev) => [...prev, userMsg, { ...assistantMsg, content: initialStatus }]);
     setInput('');
-    setStatusText('Thinking…');
+    setStatusText(initialStatus);
     setLoading(true);
     scrollToBottom();
+
+    let firstDelta = true;
 
     streamChatMessage(
       trimmed,
       convId,
       'US',
-      // onDelta — append text chunk to the assistant bubble
+      // onDelta — first delta clears the status text, then appends real content
       (chunk) => {
         setMessages((prev) =>
-          prev.map((m) => m.id === assistantId ? { ...m, content: m.content + chunk } : m)
+          prev.map((m) => {
+            if (m.id !== assistantId) return m;
+            return { ...m, content: firstDelta ? chunk : m.content + chunk };
+          })
         );
+        firstDelta = false;
       },
       // onSuggestions — attach movie cards to the assistant bubble
       (suggestions, newConvId) => {
@@ -103,8 +111,15 @@ export default function ChatScreen() {
         );
         setLoading(false);
       },
-      // onStatus — update typing indicator label
-      (text) => setStatusText(text),
+      // onStatus — update both the inline bubble and the bottom spinner label
+      (text) => {
+        setStatusText(text);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId && firstDelta ? { ...m, content: text } : m
+          )
+        );
+      },
     );
   }, [loading, convId, scrollToBottom]);
 
@@ -162,10 +177,7 @@ export default function ChatScreen() {
         {/* Typing indicator */}
         {loading && (
           <View style={styles.typingRow}>
-            <View style={styles.typingBubble}>
-              <ActivityIndicator size="small" color="#60a5fa" />
-              <Text style={styles.typingText}>{statusText}</Text>
-            </View>
+            <ActivityIndicator size="small" color="#3b82f6" />
           </View>
         )}
 
