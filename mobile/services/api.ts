@@ -275,7 +275,7 @@ export async function sendChatMessage(
   const { data } = await api.post<ChatApiResponse>(
     '/api/v1/me/chat',
     { message, conv_id: convId ?? '' },
-    { params: { country } }
+    { params: { country }, timeout: 90_000 }
   );
   return camelizeKeys(data) as unknown as ChatApiResponse;
 }
