@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/rs/zerolog/log"
 
@@ -268,7 +269,15 @@ func (s *Service) Chat(
 		}
 	}
 
-	s.persistMessages(ctx, userID, sessionID, newMessage, recOut.Reply)
+	assistantRecord := recOut.Reply
+	if len(suggestions) > 0 {
+		titles := make([]string, 0, len(suggestions))
+		for _, sg := range suggestions {
+			titles = append(titles, sg.Title)
+		}
+		assistantRecord += "\n\n[Recommended: " + strings.Join(titles, ", ") + "]"
+	}
+	s.persistMessages(ctx, userID, sessionID, newMessage, assistantRecord)
 
 	return &models.ChatResponse{
 		Reply:       recOut.Reply,
@@ -585,7 +594,18 @@ func (s *Service) StreamChat(
 
 	sendSSE(map[string]interface{}{"type": "suggestions", "items": suggestions, "conv_id": convID})
 	sendSSE(map[string]string{"type": "done"})
-	s.persistMessages(ctx, userID, sessionID, newMessage, reply)
+
+	// Persist with recommended titles appended so future history turns
+	// let Claude know which specific films were already shown.
+	assistantRecord := reply
+	if len(suggestions) > 0 {
+		titles := make([]string, 0, len(suggestions))
+		for _, sg := range suggestions {
+			titles = append(titles, sg.Title)
+		}
+		assistantRecord += "\n\n[Recommended: " + strings.Join(titles, ", ") + "]"
+	}
+	s.persistMessages(ctx, userID, sessionID, newMessage, assistantRecord)
 	return nil
 }
 
@@ -772,9 +792,14 @@ func (s *Service) streamAxonToSSE(
 				sentBytes = sepIdx
 			}
 		} else {
-			// Separator not yet found — forward new content (keep last 2 bytes
-			// buffered to avoid splitting "|||" across chunks)
+			// Separator not yet found — forward new content, keeping last 2 bytes
+			// buffered to avoid splitting "|||" across chunks.
+			// Retreat safeEnd to a valid UTF-8 rune start to avoid sending
+			// incomplete multibyte characters (which show as diamond question marks).
 			safeEnd := len(full) - (len(separator) - 1)
+			for safeEnd > sentBytes && safeEnd < len(full) && !utf8.RuneStart(full[safeEnd]) {
+				safeEnd--
+			}
 			if safeEnd > sentBytes {
 				delta := full[sentBytes:safeEnd]
 				if delta != "" {

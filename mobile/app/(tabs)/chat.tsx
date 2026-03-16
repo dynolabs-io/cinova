@@ -73,6 +73,21 @@ export default function ChatScreen() {
     scrollToBottom();
 
     let firstDelta = true;
+    let cycleInterval: ReturnType<typeof setInterval> | null = null;
+
+    const WRITING_CYCLE = [
+      'Writing recommendations…',
+      'Thinking about what you\'d enjoy…',
+      'Crafting personalised picks…',
+      'Almost there…',
+    ];
+
+    const clearCycle = () => {
+      if (cycleInterval !== null) {
+        clearInterval(cycleInterval);
+        cycleInterval = null;
+      }
+    };
 
     streamChatMessage(
       trimmed,
@@ -80,6 +95,8 @@ export default function ChatScreen() {
       'US',
       // onDelta — first delta switches out of status phase, then appends real content
       (chunk) => {
+        clearCycle();
+        const wasFirst = firstDelta;
         if (firstDelta) {
           setIsStatusPhase(false);
           firstDelta = false;
@@ -87,7 +104,7 @@ export default function ChatScreen() {
         setMessages((prev) =>
           prev.map((m) => {
             if (m.id !== assistantId) return m;
-            return { ...m, content: firstDelta ? chunk : m.content + chunk };
+            return { ...m, content: wasFirst ? chunk : m.content + chunk };
           })
         );
       },
@@ -101,6 +118,7 @@ export default function ChatScreen() {
       },
       // onDone
       () => {
+        clearCycle();
         setLoading(false);
         setStreamingMsgId(null);
         setIsStatusPhase(false);
@@ -108,6 +126,7 @@ export default function ChatScreen() {
       },
       // onError
       () => {
+        clearCycle();
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
@@ -119,11 +138,23 @@ export default function ChatScreen() {
         setStreamingMsgId(null);
         setIsStatusPhase(false);
       },
-      // onStatus — update the bubble content while still in status phase
-      (text) => {
+      // onStatus — update the bubble content while still in status phase; start
+      // cycling messages when we reach the slow "Writing recommendations…" phase
+      (statusText) => {
+        clearCycle();
         setMessages((prev) =>
-          prev.map((m) => m.id === assistantId ? { ...m, content: text } : m)
+          prev.map((m) => m.id === assistantId ? { ...m, content: statusText } : m)
         );
+        if (statusText === 'Writing recommendations…') {
+          let idx = 1;
+          cycleInterval = setInterval(() => {
+            const next = WRITING_CYCLE[idx % WRITING_CYCLE.length];
+            idx++;
+            setMessages((prev) =>
+              prev.map((m) => m.id === assistantId ? { ...m, content: next } : m)
+            );
+          }, 4500);
+        }
       },
     );
   }, [loading, convId, scrollToBottom]);
