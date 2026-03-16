@@ -4,7 +4,7 @@
     "slug": "cinova",
     "owner": "emrahbaysal",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "scheme": "cinova",
     "userInterfaceStyle": "dark",
@@ -48,6 +48,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-screen-orientation",
       "expo-secure-store",
       "expo-av",
       [

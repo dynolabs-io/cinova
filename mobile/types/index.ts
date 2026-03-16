@@ -37,6 +37,7 @@ export interface Movie {
   providers: WatchProvider[];
   cast: CastMember[];
   trailer?: Trailer;
+  trailerYoutubeKey?: string;
   plotSummary?: string;
   cinovaSynopsis?: string;
   /** @deprecated use cinovaSynopsis */
@@ -67,6 +68,7 @@ export interface TVShow {
   popularity: number;
   providers: WatchProvider[];
   seasons: number;
+  trailerYoutubeKey?: string;
   plotSummary?: string;
   cinovaSynopsis?: string;
   /** @deprecated use cinovaSynopsis */

@@ -5,7 +5,7 @@
  * action column. Bottom content strip.
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import CinovaScore from './CinovaScore';
 import StreamingBadge from './StreamingBadge';
+import TrailerPlayer from './TrailerPlayer';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import { getProviderById } from '../../constants/providers';
 import { hapticSuccess, hapticMedium, hapticLight } from '../../services/haptics';
@@ -69,6 +70,7 @@ export default function ReelItem({
   const primaryProvider = movie.providers?.[0] ?? null;
   const genreLabel = movie.genres.slice(0, 2).map((g) => g.name).join(' · ');
   const runtimeLabel = movie.runtime ? `${movie.runtime}m` : '';
+  const [trailerVisible, setTrailerVisible] = useState(false);
 
   const handleTap = useCallback(() => {
     router.push(`/movie/${movie.id}`);
@@ -80,7 +82,24 @@ export default function ReelItem({
     }
   }, [primaryProvider, movie.tmdbId]);
 
+  const handleTrailer = useCallback(() => {
+    hapticMedium();
+    setTrailerVisible(true);
+  }, []);
+
+  const trailerKey = movie.trailerYoutubeKey ?? movie.trailer?.key;
+
   return (
+    <>
+    {trailerVisible && trailerKey && (
+      <TrailerPlayer
+        youtubeKey={trailerKey}
+        title={movie.title}
+        primaryProvider={primaryProvider}
+        tmdbId={movie.tmdbId}
+        onClose={() => setTrailerVisible(false)}
+      />
+    )}
     <TouchableOpacity
       activeOpacity={1}
       onPress={handleTap}
@@ -135,10 +154,18 @@ export default function ReelItem({
           color={Colors.textSecondary}
           onPress={() => { hapticLight(); onDismiss?.(movie); }}
         />
-        {primaryProvider && (
+        {trailerKey && (
           <ActionButton
             label="▶"
-            sublabel="Watch"
+            sublabel="Trailer"
+            color="#e50914"
+            onPress={handleTrailer}
+          />
+        )}
+        {primaryProvider && (
+          <ActionButton
+            label="↗"
+            sublabel={primaryProvider.providerName.split(' ')[0]}
             color={Colors.scoreHigh}
             onPress={handleWatch}
           />
@@ -146,7 +173,7 @@ export default function ReelItem({
       </View>
 
       {/* Bottom content */}
-      <View style={[styles.bottomContent, { pointerEvents: 'box-none' }]}>
+      <View style={[styles.bottomContent, { pointerEvents: 'box-none' }]} >
         {/* Streaming badges row */}
         {movie.providers.length > 0 && (
           <View style={styles.providerRow}>
@@ -188,6 +215,7 @@ export default function ReelItem({
         ) : null}
       </View>
     </TouchableOpacity>
+    </>
   );
 }
 
