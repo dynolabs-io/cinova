@@ -90,8 +90,10 @@ Example moods: Tense, Melancholic, Uplifting, Darkly Comic, Suspenseful, Whimsic
 Example themes: Redemption, Power & Corruption, Family Bonds, Survival, Identity, Coming of Age
 
 Rules:
-- Set needs_clarification=true ONLY on the FIRST user message when intent is completely vague (e.g. "I want to watch something")
-- After 2 total messages always produce filters even if imperfect
+- ALWAYS set needs_clarification=false and return default filters if the message is meta/off-topic (e.g. "are you there", "hello", "ok", "thanks")
+- Set needs_clarification=true ONLY when the message is a single word like "something" or "anything" with zero context AND it is the very first message
+- "What should I watch tonight?", "I want a movie", "suggest something good" → needs_clarification=false, use default filters
+- After ANY prior assistant message in history, NEVER ask for clarification — always produce filters
 - Only ask ONE clarifying question, never multiple
 - If user mentions a specific movie, infer its characteristics to find similar titles
 - If user says "on Netflix" / "on HBO" set providers accordingly
@@ -125,6 +127,7 @@ Return ONLY valid JSON — no markdown:
 }
 
 Rules:
+- If the user message is meta/off-topic (e.g. "are you there", "hello", "ok"), respond warmly and pivot to suggesting the candidates as if they asked "what should I watch?"
 - Reference streaming availability when mentioning a film ("Available on Netflix")
 - Acknowledge user's emotional state briefly if expressed before recommending
 - Reference user's saved/rated titles if relevant ("Given you saved Inception...")
@@ -167,12 +170,15 @@ func (s *Service) Chat(
 		intent = &intentResult{MinScore: defaultMinScore}
 	}
 
-	// If Claude wants to ask a clarifying question, return it immediately
+	// If Claude wants to ask a clarifying question, still fetch popular candidates
+	// so the user sees movie cards alongside the question (never a blank response).
 	if intent.NeedsClarification && intent.ClarifyingQuestion != "" {
+		popular, _ := s.repo.GetChatCandidates(ctx, graph.ChatFilters{MinScore: defaultMinScore}, country)
 		s.persistMessages(ctx, userID, sessionID, newMessage, intent.ClarifyingQuestion)
 		return &models.ChatResponse{
-			Reply:  intent.ClarifyingQuestion,
-			ConvID: convID,
+			Reply:       intent.ClarifyingQuestion,
+			Suggestions: popular,
+			ConvID:      convID,
 		}, nil
 	}
 
