@@ -26,7 +26,8 @@ import (
 
 const (
 	chatModel       = "claude-sonnet-4-6"
-	intentTimeout   = 30 * time.Second
+	intentModel     = "claude-haiku-4-5-20251001" // fast + cheap for JSON extraction
+	intentTimeout   = 15 * time.Second
 	recommendTimeout = 60 * time.Second
 	historyLimit    = 10 // turns kept as context
 	defaultMinScore = 60.0
@@ -266,7 +267,7 @@ func (s *Service) extractIntent(ctx context.Context, history []models.ChatMessag
 	intentCtx, cancel := context.WithTimeout(ctx, intentTimeout)
 	defer cancel()
 
-	raw, err := s.callAxon(intentCtx, messages, 400)
+	raw, err := s.callAxonWithModel(intentCtx, messages, 400, intentModel)
 	if err != nil {
 		return nil, err
 	}
@@ -321,9 +322,14 @@ func (s *Service) writeRecommendations(
 				seen[p.ProviderName] = true
 			}
 		}
+		// Use a short teaser (first 2 sentences) to keep prompt tokens low.
+		// The full synopsis is returned to the client separately.
 		synopsis := c.CinovaSynopsis
 		if synopsis == "" {
 			synopsis = c.Overview
+		}
+		if sentences := strings.SplitN(synopsis, ". ", 3); len(sentences) >= 2 {
+			synopsis = sentences[0] + ". " + sentences[1] + "."
 		}
 		line := fmt.Sprintf("- [%d] %s (%s) Score:%.0f Genres:%s Streaming:%s | %s",
 			c.TMDBID, c.Title, c.ReleaseYear, c.CinovaScore,
@@ -356,8 +362,12 @@ func (s *Service) writeRecommendations(
 
 // callAxon sends a chat completions request and returns the text content.
 func (s *Service) callAxon(ctx context.Context, messages []axonMessage, maxTokens int) (string, error) {
+	return s.callAxonWithModel(ctx, messages, maxTokens, chatModel)
+}
+
+func (s *Service) callAxonWithModel(ctx context.Context, messages []axonMessage, maxTokens int, model string) (string, error) {
 	reqBody := axonRequest{
-		Model:     chatModel,
+		Model:     model,
 		Messages:  messages,
 		MaxTokens: maxTokens,
 	}
