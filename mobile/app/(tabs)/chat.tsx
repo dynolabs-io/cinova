@@ -47,6 +47,7 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [statusText, setStatusText] = useState('Thinking…');
   const [convId, setConvId] = useState<string | undefined>();
   const listRef = useRef<FlatList>(null);
 
@@ -64,6 +65,7 @@ export default function ChatScreen() {
 
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setInput('');
+    setStatusText('Thinking…');
     setLoading(true);
     scrollToBottom();
 
@@ -101,6 +103,8 @@ export default function ChatScreen() {
         );
         setLoading(false);
       },
+      // onStatus — update typing indicator label
+      (text) => setStatusText(text),
     );
   }, [loading, convId, scrollToBottom]);
 
@@ -160,7 +164,7 @@ export default function ChatScreen() {
           <View style={styles.typingRow}>
             <View style={styles.typingBubble}>
               <ActivityIndicator size="small" color="#60a5fa" />
-              <Text style={styles.typingText}>Thinking…</Text>
+              <Text style={styles.typingText}>{statusText}</Text>
             </View>
           </View>
         )}

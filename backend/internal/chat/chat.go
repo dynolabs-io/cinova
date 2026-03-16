@@ -484,6 +484,9 @@ func (s *Service) StreamChat(
 		flusher.Flush()
 	}
 
+	// Send initial status so the client knows we're working
+	sendSSE(map[string]string{"type": "status", "text": "Analyzing your request…"})
+
 	// Pass 1: extract intent
 	intent, err := s.extractIntent(ctx, history, newMessage)
 	if err != nil {
@@ -524,6 +527,8 @@ func (s *Service) StreamChat(
 		MinScore:   minScore,
 	}
 
+	sendSSE(map[string]string{"type": "status", "text": "Searching films…"})
+
 	// Neo4j query
 	candidates, err := s.repo.GetChatCandidates(ctx, filters, country)
 	if err != nil {
@@ -536,6 +541,8 @@ func (s *Service) StreamChat(
 			candidates = more
 		}
 	}
+
+	sendSSE(map[string]string{"type": "status", "text": "Writing recommendations…"})
 
 	// Build candidate lookup map
 	suggMap := make(map[int64]models.MovieSummary, len(candidates))

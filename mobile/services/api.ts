@@ -292,6 +292,7 @@ export function streamChatMessage(
   onSuggestions: (suggestions: ChatSuggestion[], convId: string) => void,
   onDone: () => void,
   onError: (err: Error) => void,
+  onStatus?: (text: string) => void,
 ): () => void {
   const xhr = new XMLHttpRequest();
   let lastLen = 0;
@@ -307,7 +308,9 @@ export function streamChatMessage(
       if (!data) continue;
       try {
         const event = JSON.parse(data) as { type: string; text?: string; items?: unknown[]; conv_id?: string };
-        if (event.type === 'delta' && event.text) {
+        if (event.type === 'status' && event.text) {
+          onStatus?.(event.text);
+        } else if (event.type === 'delta' && event.text) {
           onDelta(event.text);
         } else if (event.type === 'suggestions') {
           const items = (event.items ?? []).map(normalizeMedia) as unknown as ChatSuggestion[];
