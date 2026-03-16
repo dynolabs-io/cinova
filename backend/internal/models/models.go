@@ -112,6 +112,7 @@ type TVShow struct {
 	Cast             []Person   `json:"cast,omitempty"`
 	Creators         []Person   `json:"creators,omitempty"`
 	Providers        []Provider `json:"providers,omitempty"`
+	TrailerYouTubeKey string    `json:"trailer_youtube_key,omitempty"`
 	PlotSummary      string     `json:"plot_summary,omitempty"`
 	CinovaSynopsis   string     `json:"cinova_synopsis,omitempty"`
 	CinovaEditorial  string     `json:"cinova_editorial,omitempty"`

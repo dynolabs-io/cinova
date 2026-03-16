@@ -262,6 +262,26 @@ func (t *TMDBShow) ToModel() *models.TVShow {
 		}
 	}
 
+	// First official YouTube trailer (fall back to teaser) — same logic as movies
+	if t.Videos != nil {
+		var teaserKey string
+		for _, v := range t.Videos.Results {
+			if v.Site != "YouTube" {
+				continue
+			}
+			if v.Type == "Trailer" && v.Official {
+				show.TrailerYouTubeKey = v.Key
+				break
+			}
+			if v.Type == "Teaser" && v.Official && teaserKey == "" {
+				teaserKey = v.Key
+			}
+		}
+		if show.TrailerYouTubeKey == "" {
+			show.TrailerYouTubeKey = teaserKey
+		}
+	}
+
 	for _, c := range t.CreatedBy {
 		show.Creators = append(show.Creators, models.Person{
 			TMDBID: int64(c.ID),

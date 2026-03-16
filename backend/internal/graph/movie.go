@@ -577,6 +577,7 @@ func tvNodeToModel(v interface{}) *models.TVShow {
 	t.OriginalLanguage = strVal(props["original_language"])
 	t.Status = strVal(props["status"])
 	t.CinovaScore = float64Val(props["cinova_score"])
+	t.TrailerYouTubeKey = strVal(props["trailer_youtube_key"])
 	t.PlotSummary = strVal(props["plot_summary"])
 	t.CinovaSynopsis = strVal(props["cinova_synopsis"])
 	t.CinovaEditorial = strVal(props["cinova_editorial"])
@@ -737,6 +738,7 @@ func (r *MovieRepository) UpsertTVShow(ctx context.Context, show *models.TVShow)
 		    s.status             = $status,
 		    s.cinova_score       = $cinova_score,
 		    s.plot_summary       = CASE WHEN $plot_summary <> '' THEN $plot_summary ELSE coalesce(s.plot_summary, '') END,
+		    s.trailer_youtube_key = CASE WHEN $trailer_youtube_key <> '' THEN $trailer_youtube_key ELSE coalesce(s.trailer_youtube_key, '') END,
 		    s.cinova_synopsis    = CASE WHEN $cinova_synopsis <> '' THEN $cinova_synopsis ELSE coalesce(s.cinova_synopsis, '') END,
 		    s.cinova_editorial   = CASE WHEN $cinova_editorial <> '' THEN $cinova_editorial ELSE coalesce(s.cinova_editorial, '') END
 	`, map[string]interface{}{
@@ -757,10 +759,11 @@ func (r *MovieRepository) UpsertTVShow(ctx context.Context, show *models.TVShow)
 		"backdrop_path":      show.BackdropPath,
 		"original_language":  show.OriginalLanguage,
 		"status":             show.Status,
-		"cinova_score":       show.CinovaScore,
-		"plot_summary":       show.PlotSummary,
-		"cinova_synopsis":    show.CinovaSynopsis,
-		"cinova_editorial":   show.CinovaEditorial,
+		"cinova_score":        show.CinovaScore,
+		"trailer_youtube_key": show.TrailerYouTubeKey,
+		"plot_summary":        show.PlotSummary,
+		"cinova_synopsis":     show.CinovaSynopsis,
+		"cinova_editorial":    show.CinovaEditorial,
 	})
 	if err != nil {
 		return fmt.Errorf("UpsertTVShow: %w", err)
