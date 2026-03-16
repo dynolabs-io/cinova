@@ -16,6 +16,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/foundrylab-app/cinova/backend/internal/auth"
+	"github.com/foundrylab-app/cinova/backend/internal/chat"
 	"github.com/foundrylab-app/cinova/backend/internal/config"
 	"github.com/foundrylab-app/cinova/backend/internal/graph"
 	"github.com/foundrylab-app/cinova/backend/internal/handlers"
@@ -82,6 +83,10 @@ func main() {
 
 	// Search
 	searchHandler := search.NewHandler(neo, rdb, cfg)
+
+	// Chat
+	chatSvc := chat.New(movieRepo, pg, cfg)
+	chatHandler := handlers.NewChatHandler(chatSvc, pg)
 
 	// Router
 	r := chi.NewRouter()
@@ -169,6 +174,7 @@ func main() {
 				r.Post("/push-token", pushTokenHandler.RegisterPushToken)
 				r.Get("/scoring-profile", scoringHandler.GetScoringProfile)
 				r.Put("/scoring-profile", scoringHandler.SetScoringProfile)
+				r.Post("/chat", chatHandler.Chat)
 			})
 		})
 	})

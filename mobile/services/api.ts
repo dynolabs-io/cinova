@@ -245,6 +245,41 @@ export async function setScoringProfile(profile: Pick<ScoringProfile, 'preset' |
   return data;
 }
 
+// ── Chat (require auth) ───────────────────────────────────────────────────────
+
+export interface ChatSuggestion {
+  tmdbId: number;
+  mediaType: string;
+  title: string;
+  posterPath?: string;
+  releaseYear?: string;
+  cinovaScore?: number;
+  overview?: string;
+  genres?: { id: number; name: string }[];
+  providers?: { providerId: number; providerName: string; logoPath?: string; type: string }[];
+  cinovaSynopsis?: string;
+  reason?: string;
+}
+
+export interface ChatApiResponse {
+  reply: string;
+  suggestions?: ChatSuggestion[];
+  convId: string;
+}
+
+export async function sendChatMessage(
+  message: string,
+  convId?: string,
+  country = 'US'
+): Promise<ChatApiResponse> {
+  const { data } = await api.post<ChatApiResponse>(
+    '/api/v1/me/chat',
+    { message, conv_id: convId ?? '' },
+    { params: { country } }
+  );
+  return camelizeKeys(data) as unknown as ChatApiResponse;
+}
+
 /** Aliases matching screen import names */
 export const login = authLogin;
 export const signUp = authSignup;

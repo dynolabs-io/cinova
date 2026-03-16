@@ -7,7 +7,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 
 interface Props {
-  name: 'home' | 'discover' | 'search' | 'watchlist' | 'profile';
+  name: 'home' | 'discover' | 'search' | 'watchlist' | 'profile' | 'chat';
   color: string;
   size?: number;
 }
@@ -17,6 +17,7 @@ export default function TabIcon({ name, color, size = 22 }: Props) {
     case 'home':    return <HomeIcon color={color} size={size} />;
     case 'discover': return <DiscoverIcon color={color} size={size} />;
     case 'search':  return <SearchIcon color={color} size={size} />;
+    case 'chat':    return <ChatIcon color={color} size={size} />;
     case 'watchlist': return <WatchlistIcon color={color} size={size} />;
     case 'profile': return <ProfileIcon color={color} size={size} />;
   }
@@ -76,6 +77,37 @@ function DiscoverIcon({ color, size }: { color: string; size: number }) {
           borderLeftColor: color,
         }} />
       </View>
+    </View>
+  );
+}
+
+// ── Chat (speech bubble) ──────────────────────────────────────────────────────
+function ChatIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Bubble body */}
+      <View style={{
+        position: 'absolute',
+        top: size * 0.04,
+        left: 0,
+        width: size * 0.94,
+        height: size * 0.72,
+        borderRadius: size * 0.18,
+        borderWidth: 2.5,
+        borderColor: color,
+      }} />
+      {/* Tail */}
+      <View style={{
+        position: 'absolute',
+        bottom: size * 0.04,
+        left: size * 0.12,
+        width: 0,
+        height: 0,
+        borderTopWidth: size * 0.22,
+        borderRightWidth: size * 0.16,
+        borderTopColor: color,
+        borderRightColor: 'transparent',
+      }} />
     </View>
   );
 }

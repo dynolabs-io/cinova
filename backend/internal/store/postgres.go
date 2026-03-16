@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/foundrylab-app/cinova/backend/internal/models"
 )
 
 // PostgresStore wraps a pgxpool connection pool and provides Cinova-specific
@@ -99,9 +101,66 @@ CREATE TABLE IF NOT EXISTS push_tokens (
 );
 
 CREATE INDEX IF NOT EXISTS idx_push_tokens_token ON push_tokens (token);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id         BIGSERIAL    PRIMARY KEY,
+    user_id    TEXT,
+    session_id TEXT         NOT NULL,
+    role       TEXT         NOT NULL CHECK (role IN ('user', 'assistant')),
+    content    TEXT         NOT NULL,
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages (session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_user    ON chat_messages (user_id,    created_at);
 `
 	_, err := s.pool.Exec(ctx, ddl)
 	return err
+}
+
+// SaveChatMessage persists a single chat turn. Returns the new row ID.
+func (s *PostgresStore) SaveChatMessage(ctx context.Context, userID, sessionID, role, content string) (int64, error) {
+	var uid *string
+	if userID != "" {
+		uid = &userID
+	}
+	var id int64
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO chat_messages (user_id, session_id, role, content)
+		 VALUES ($1, $2, $3, $4) RETURNING id`,
+		uid, sessionID, role, content,
+	).Scan(&id)
+	return id, err
+}
+
+// GetChatHistory returns the last n messages for a session, oldest first.
+func (s *PostgresStore) GetChatHistory(ctx context.Context, sessionID string, n int) ([]models.ChatMessage, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, role, content, created_at
+		 FROM (
+		     SELECT id, role, content, created_at
+		     FROM chat_messages
+		     WHERE session_id = $1
+		     ORDER BY created_at DESC
+		     LIMIT $2
+		 ) sub
+		 ORDER BY created_at ASC`,
+		sessionID, n,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var msgs []models.ChatMessage
+	for rows.Next() {
+		var m models.ChatMessage
+		if err := rows.Scan(&m.ID, &m.Role, &m.Content, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		msgs = append(msgs, m)
+	}
+	return msgs, rows.Err()
 }
 
 // ---- User operations ----

@@ -1,13 +1,168 @@
 package graph
 
 import (
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j/dbtype"
-
 	"context"
 	"fmt"
+	"strings"
+
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j/dbtype"
 
 	"github.com/foundrylab-app/cinova/backend/internal/models"
 )
+
+// ChatFilters holds intent extracted by the AI from the conversation.
+type ChatFilters struct {
+	Genres     []string
+	Themes     []string
+	Moods      []string
+	Providers  []string
+	MaxRuntime int
+	MinYear    int
+	MaxYear    int
+	MinScore   float64
+	ExcludeIDs []int64
+}
+
+// UserChatContext holds personalisation data injected into the chat prompt.
+type UserChatContext struct {
+	TopThemes   []string // top 5 themes from rated/saved history
+	SavedTitles []string // last 5 saved movie titles
+}
+
+// GetChatCandidates fetches up to 20 movies matching the given chat filters.
+// Candidates are returned with genres, themes, moods, providers, and synopsis
+// so Claude has rich context for writing recommendations.
+func (r *MovieRepository) GetChatCandidates(ctx context.Context, f ChatFilters, country string) ([]models.MovieSummary, error) {
+	params := map[string]interface{}{
+		"country":     country,
+		"min_score":   f.MinScore,
+		"exclude_ids": f.ExcludeIDs,
+	}
+
+	// Build optional WHERE conditions
+	var conds []string
+	conds = append(conds, "m.cinova_score >= $min_score")
+	conds = append(conds, "NOT m.tmdb_id IN $exclude_ids")
+
+	if len(f.Genres) > 0 {
+		params["genres"] = f.Genres
+		conds = append(conds, "EXISTS { MATCH (m)-[:IN_GENRE]->(g:Genre) WHERE g.name IN $genres }")
+	}
+	if len(f.Themes) > 0 {
+		params["themes"] = f.Themes
+		conds = append(conds, "EXISTS { MATCH (m)-[:HAS_THEME]->(t:Theme) WHERE any(th IN $themes WHERE toLower(t.name) CONTAINS toLower(th)) }")
+	}
+	if len(f.Moods) > 0 {
+		params["moods"] = f.Moods
+		conds = append(conds, "EXISTS { MATCH (m)-[:HAS_MOOD]->(mo:Mood) WHERE any(md IN $moods WHERE toLower(mo.name) CONTAINS toLower(md)) }")
+	}
+	if len(f.Providers) > 0 {
+		params["providers"] = f.Providers
+		conds = append(conds, "EXISTS { MATCH (m)-[:AVAILABLE_ON {country: $country}]->(p:Provider) WHERE any(pv IN $providers WHERE toLower(p.provider_name) CONTAINS toLower(pv)) }")
+	}
+	if f.MaxRuntime > 0 {
+		params["max_runtime"] = f.MaxRuntime
+		conds = append(conds, "m.runtime > 0 AND m.runtime <= $max_runtime")
+	}
+	if f.MinYear > 0 {
+		params["min_year"] = fmt.Sprintf("%d-01-01", f.MinYear)
+		conds = append(conds, "m.release_date >= $min_year")
+	}
+	if f.MaxYear > 0 {
+		params["max_year"] = fmt.Sprintf("%d-12-31", f.MaxYear)
+		conds = append(conds, "m.release_date <= $max_year")
+	}
+
+	cypher := fmt.Sprintf(`
+		MATCH (m:Movie)
+		WHERE %s
+		WITH m ORDER BY m.cinova_score DESC, m.popularity DESC LIMIT 20
+		OPTIONAL MATCH (m)-[:IN_GENRE]->(g:Genre)
+		OPTIONAL MATCH (m)-[:HAS_THEME]->(t:Theme)
+		OPTIONAL MATCH (m)-[:HAS_MOOD]->(mo:Mood)
+		OPTIONAL MATCH (m)-[avail:AVAILABLE_ON {country: $country}]->(prov:Provider)
+		RETURN m,
+		       collect(DISTINCT {id: g.id, name: g.name})             AS genres,
+		       collect(DISTINCT t.name)                                AS themes,
+		       collect(DISTINCT mo.name)                               AS moods,
+		       collect(DISTINCT {provider_id: prov.provider_id,
+		                          provider_name: prov.provider_name,
+		                          logo_path: prov.logo_path,
+		                          type: avail.type})                   AS providers
+	`, strings.Join(conds, "\n  AND "))
+
+	records, err := r.driver.RunQuery(ctx, cypher, params)
+	if err != nil {
+		return nil, fmt.Errorf("GetChatCandidates: %w", err)
+	}
+
+	candidates := make([]models.MovieSummary, 0, len(records))
+	for _, rec := range records {
+		node, _ := rec.Get("m")
+		m := movieNodeToModel(node)
+		if m == nil {
+			continue
+		}
+		s := models.MovieSummary{
+			TMDBID:         m.TMDBID,
+			MediaType:      "movie",
+			Title:          m.Title,
+			PosterPath:     m.PosterPath,
+			CinovaScore:    m.CinovaScore,
+			Overview:       m.Overview,
+			CinovaSynopsis: m.CinovaSynopsis,
+		}
+		if rd := m.ReleaseDate; len(rd) >= 4 {
+			s.ReleaseYear = rd[:4]
+		}
+		if v, ok := rec.Get("genres"); ok {
+			s.Genres = toGenres(v)
+		}
+		if v, ok := rec.Get("providers"); ok {
+			s.Providers = toProviders(v)
+		}
+		candidates = append(candidates, s)
+	}
+	return candidates, nil
+}
+
+// GetUserChatContext fetches lightweight personalisation signals for the chat prompt.
+func (r *MovieRepository) GetUserChatContext(ctx context.Context, ownerID, ownerType string) (*UserChatContext, error) {
+	uc := &UserChatContext{}
+
+	// Top 5 themes from the user's rated/saved history
+	themeCypher := fmt.Sprintf(`
+		MATCH (o:%s {id: $uid})-[:RATED|:SAVED]->(m:Movie)-[:HAS_THEME]->(t:Theme)
+		WITH t.name AS theme, count(*) AS cnt
+		ORDER BY cnt DESC LIMIT 5
+		RETURN theme
+	`, ownerType)
+	themeRecs, err := r.driver.RunQuery(ctx, themeCypher, map[string]interface{}{"uid": ownerID})
+	if err == nil {
+		for _, rec := range themeRecs {
+			if v, ok := rec.Get("theme"); ok {
+				uc.TopThemes = append(uc.TopThemes, strVal(v))
+			}
+		}
+	}
+
+	// Last 5 saved movie titles
+	savedCypher := fmt.Sprintf(`
+		MATCH (o:%s {id: $uid})-[s:SAVED]->(m:Movie)
+		RETURN m.title AS title
+		ORDER BY s.saved_at DESC LIMIT 5
+	`, ownerType)
+	savedRecs, err := r.driver.RunQuery(ctx, savedCypher, map[string]interface{}{"uid": ownerID})
+	if err == nil {
+		for _, rec := range savedRecs {
+			if v, ok := rec.Get("title"); ok {
+				uc.SavedTitles = append(uc.SavedTitles, strVal(v))
+			}
+		}
+	}
+
+	return uc, nil
+}
 
 // GetPopular returns popular movies in a country ordered by popularity, with pagination.
 func (r *MovieRepository) GetPopular(ctx context.Context, country string, limit, offset int) ([]models.Movie, error) {

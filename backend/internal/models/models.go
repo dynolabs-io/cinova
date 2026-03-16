@@ -2,6 +2,44 @@ package models
 
 import "time"
 
+// ---- Chat ----
+
+// ChatMessage is a single turn stored in postgres.
+type ChatMessage struct {
+	ID        int64     `json:"id"`
+	Role      string    `json:"role"` // "user" | "assistant"
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ChatRequest is the POST body for /api/v1/me/chat.
+type ChatRequest struct {
+	Message   string `json:"message"`
+	ConvID    string `json:"conv_id,omitempty"` // client-side conversation thread ID
+}
+
+// ChatResponse is the body returned from /api/v1/me/chat.
+type ChatResponse struct {
+	Reply       string        `json:"reply"`
+	Suggestions []MovieSummary `json:"suggestions,omitempty"`
+	ConvID      string        `json:"conv_id"`
+}
+
+// MovieSummary is a lightweight movie shape embedded in chat suggestions.
+type MovieSummary struct {
+	TMDBID      int64    `json:"tmdb_id"`
+	MediaType   string   `json:"media_type"`
+	Title       string   `json:"title"`
+	PosterPath  string   `json:"poster_path,omitempty"`
+	ReleaseYear string   `json:"release_year,omitempty"`
+	CinovaScore float64  `json:"cinova_score,omitempty"`
+	Overview    string   `json:"overview,omitempty"`
+	Genres      []Genre  `json:"genres,omitempty"`
+	Providers   []Provider `json:"providers,omitempty"`
+	CinovaSynopsis string `json:"cinova_synopsis,omitempty"`
+	Reason      string   `json:"reason,omitempty"` // AI-generated personalised reason
+}
+
 // ---- Media ----
 
 // Movie represents a movie node in the graph database.
