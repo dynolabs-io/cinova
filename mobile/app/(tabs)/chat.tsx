@@ -17,7 +17,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { sendChatMessage } from '../../services/api';
+import { streamChatMessage } from '../../services/api';
 import type { ChatSuggestion } from '../../services/api';
 import ChatBubble from '../../components/ui/ChatBubble';
 import { Colors } from '../../constants/theme';
@@ -54,42 +54,54 @@ export default function ChatScreen() {
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
   }, []);
 
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback((text: string) => {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
 
-    const userMsg: Message = {
-      id: `u-${Date.now()}`,
-      role: 'user',
-      content: trimmed,
-    };
-    setMessages((prev) => [...prev, userMsg]);
+    const userMsg: Message = { id: `u-${Date.now()}`, role: 'user', content: trimmed };
+    const assistantId = `a-${Date.now()}`;
+    const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '' };
+
+    setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setInput('');
     setLoading(true);
     scrollToBottom();
 
-    try {
-      const resp = await sendChatMessage(trimmed, convId);
-      if (resp.convId) setConvId(resp.convId);
-
-      const assistantMsg: Message = {
-        id: `a-${Date.now()}`,
-        role: 'assistant',
-        content: resp.reply,
-        suggestions: resp.suggestions,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-    } catch (err) {
-      const errorMsg: Message = {
-        id: `e-${Date.now()}`,
-        role: 'assistant',
-        content: "Sorry, I'm having trouble connecting right now. Please try again.",
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setLoading(false);
-      scrollToBottom();
-    }
+    streamChatMessage(
+      trimmed,
+      convId,
+      'US',
+      // onDelta — append text chunk to the assistant bubble
+      (chunk) => {
+        setMessages((prev) =>
+          prev.map((m) => m.id === assistantId ? { ...m, content: m.content + chunk } : m)
+        );
+      },
+      // onSuggestions — attach movie cards to the assistant bubble
+      (suggestions, newConvId) => {
+        if (newConvId) setConvId(newConvId);
+        setMessages((prev) =>
+          prev.map((m) => m.id === assistantId ? { ...m, suggestions: suggestions as ChatSuggestion[] } : m)
+        );
+        scrollToBottom();
+      },
+      // onDone
+      () => {
+        setLoading(false);
+        scrollToBottom();
+      },
+      // onError
+      () => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: "Sorry, I'm having trouble connecting right now. Please try again." }
+              : m
+          )
+        );
+        setLoading(false);
+      },
+    );
   }, [loading, convId, scrollToBottom]);
 
   const isEmpty = messages.length === 0;

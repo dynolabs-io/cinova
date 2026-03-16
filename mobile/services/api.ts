@@ -280,6 +280,68 @@ export async function sendChatMessage(
   return camelizeKeys(data) as unknown as ChatApiResponse;
 }
 
+/**
+ * SSE streaming chat — fires callbacks as events arrive.
+ * Returns an abort function.
+ */
+export function streamChatMessage(
+  message: string,
+  convId: string | undefined,
+  country: string,
+  onDelta: (text: string) => void,
+  onSuggestions: (suggestions: ChatSuggestion[], convId: string) => void,
+  onDone: () => void,
+  onError: (err: Error) => void,
+): () => void {
+  const xhr = new XMLHttpRequest();
+  let lastLen = 0;
+  let aborted = false;
+
+  const processChunk = (responseText: string) => {
+    const newText = responseText.slice(lastLen);
+    lastLen = responseText.length;
+    const lines = newText.split('\n');
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (!data) continue;
+      try {
+        const event = JSON.parse(data) as { type: string; text?: string; items?: unknown[]; conv_id?: string };
+        if (event.type === 'delta' && event.text) {
+          onDelta(event.text);
+        } else if (event.type === 'suggestions') {
+          const items = (event.items ?? []).map(normalizeMedia) as unknown as ChatSuggestion[];
+          onSuggestions(items, event.conv_id ?? '');
+        } else if (event.type === 'done') {
+          onDone();
+        }
+      } catch { /* ignore malformed chunk */ }
+    }
+  };
+
+  const setup = async () => {
+    const [token, sessionId] = await Promise.all([getToken(), getSessionId()]);
+    if (aborted) return;
+
+    xhr.open('POST', `${BASE_URL}/api/v1/me/chat/stream?country=${encodeURIComponent(country)}`);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('Accept', 'text/event-stream');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    if (sessionId) xhr.setRequestHeader('X-Session-ID', sessionId);
+    xhr.timeout = 120_000;
+
+    xhr.onprogress = () => processChunk(xhr.responseText);
+    xhr.onload = () => processChunk(xhr.responseText);
+    xhr.onerror = () => onError(new Error('Network error'));
+    xhr.ontimeout = () => onError(new Error('Request timed out'));
+
+    xhr.send(JSON.stringify({ message, conv_id: convId ?? '' }));
+  };
+
+  setup().catch(onError);
+  return () => { aborted = true; xhr.abort(); };
+}
+
 /** Aliases matching screen import names */
 export const login = authLogin;
 export const signUp = authSignup;

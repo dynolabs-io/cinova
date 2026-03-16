@@ -6,6 +6,7 @@
 package chat
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -51,6 +52,22 @@ type axonResponse struct {
 		Message struct {
 			Content string `json:"content"`
 		} `json:"message"`
+	} `json:"choices"`
+}
+
+type axonStreamRequest struct {
+	Model     string        `json:"model"`
+	Messages  []axonMessage `json:"messages"`
+	MaxTokens int           `json:"max_tokens"`
+	Stream    bool          `json:"stream"`
+}
+
+type axonStreamChunk struct {
+	Choices []struct {
+		Delta struct {
+			Content string `json:"content"`
+		} `json:"delta"`
+		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
 }
 
@@ -112,6 +129,25 @@ type recOutput struct {
 	Reply           string     `json:"reply"`
 	Recommendations []recEntry `json:"recommendations"`
 }
+
+// recStreamSystemPromptTemplate is the streaming variant — reply text precedes
+// the "|||" separator, JSON array follows. This lets us forward text deltas
+// immediately while collecting the JSON silently.
+const recStreamSystemPromptTemplate = `You are Cinova's AI film concierge — knowledgeable, warm, and opinionated.
+
+%s
+
+From the candidate films below select 3-5 that best match the conversation.
+
+Respond in EXACTLY this format — nothing else:
+Write a warm 1-2 sentence intro (plain text).|||
+[{"tmdb_id":123,"title":"Title","reason":"2-3 sentence personalised reason"}]
+
+Rules:
+- If the user message is meta/off-topic (e.g. "are you there", "hello"), respond warmly and pivot to suggesting the candidates as if they asked "what should I watch?"
+- Reference streaming availability when mentioning a film ("Available on Netflix")
+- Be specific and opinionated — never say just "it's a great movie"
+- Do NOT reveal major spoilers or endings`
 
 const recSystemPromptTemplate = `You are Cinova's AI film concierge — knowledgeable, warm, and opinionated.
 
@@ -425,6 +461,352 @@ func (s *Service) persistMessages(ctx context.Context, userID, sessionID, userMs
 	if _, err := s.pg.SaveChatMessage(ctx, userID, sessionID, "assistant", assistantMsg); err != nil {
 		log.Warn().Err(err).Msg("chat: failed to save assistant message")
 	}
+}
+
+// ── Streaming ─────────────────────────────────────────────────────────────────
+
+// StreamChat runs the full chat pipeline and writes SSE events to w:
+//
+//	data: {"type":"delta","text":"..."}                — reply text chunks
+//	data: {"type":"suggestions","items":[...],"conv_id":"..."}
+//	data: {"type":"done"}
+func (s *Service) StreamChat(
+	ctx context.Context,
+	userID, sessionID, convID, country string,
+	history []models.ChatMessage,
+	newMessage string,
+	w http.ResponseWriter,
+	flusher http.Flusher,
+) error {
+	sendSSE := func(v interface{}) {
+		b, _ := json.Marshal(v)
+		fmt.Fprintf(w, "data: %s\n\n", b)
+		flusher.Flush()
+	}
+
+	// Pass 1: extract intent
+	intent, err := s.extractIntent(ctx, history, newMessage)
+	if err != nil {
+		log.Warn().Err(err).Msg("chat stream: intent extraction failed, using defaults")
+		intent = &intentResult{MinScore: defaultMinScore}
+	}
+
+	// Clarification path — stream the question then send popular suggestions
+	if intent.NeedsClarification && intent.ClarifyingQuestion != "" {
+		popular, _ := s.repo.GetChatCandidates(ctx, graph.ChatFilters{MinScore: defaultMinScore}, country)
+		sendSSE(map[string]string{"type": "delta", "text": intent.ClarifyingQuestion})
+		sendSSE(map[string]interface{}{"type": "suggestions", "items": popular, "conv_id": convID})
+		sendSSE(map[string]string{"type": "done"})
+		s.persistMessages(ctx, userID, sessionID, newMessage, intent.ClarifyingQuestion)
+		return nil
+	}
+
+	// Personalisation context
+	ownerType, ownerID := "Session", sessionID
+	if userID != "" {
+		ownerType, ownerID = "User", userID
+	}
+	userCtx, _ := s.repo.GetUserChatContext(ctx, ownerID, ownerType)
+
+	// Build filters
+	minScore := intent.MinScore
+	if minScore <= 0 {
+		minScore = defaultMinScore
+	}
+	filters := graph.ChatFilters{
+		Genres:     intent.Genres,
+		Themes:     intent.Themes,
+		Moods:      intent.Moods,
+		Providers:  intent.Providers,
+		MaxRuntime: intent.MaxRuntime,
+		MinYear:    intent.MinYear,
+		MaxYear:    intent.MaxYear,
+		MinScore:   minScore,
+	}
+
+	// Neo4j query
+	candidates, err := s.repo.GetChatCandidates(ctx, filters, country)
+	if err != nil {
+		log.Error().Err(err).Msg("chat stream: candidate query failed")
+		candidates = []models.MovieSummary{}
+	}
+	if len(candidates) < 3 {
+		relaxed := graph.ChatFilters{MinScore: defaultMinScore}
+		if more, err2 := s.repo.GetChatCandidates(ctx, relaxed, country); err2 == nil && len(more) > len(candidates) {
+			candidates = more
+		}
+	}
+
+	// Build candidate lookup map
+	suggMap := make(map[int64]models.MovieSummary, len(candidates))
+	for _, c := range candidates {
+		suggMap[c.TMDBID] = c
+	}
+
+	// Build Axon messages (history truncated to prevent context bloat)
+	messages := s.buildStreamMessages(history, newMessage, userCtx, candidates)
+
+	// Stream recommendation — deltas forwarded to client as text arrives
+	replyCtx, cancel := context.WithTimeout(ctx, recommendTimeout)
+	defer cancel()
+
+	reply, recJSONStr, err := s.streamAxonToSSE(replyCtx, messages, 1500, w, flusher)
+	if err != nil {
+		log.Error().Err(err).Msg("chat stream: axon error, sending fallback")
+		fallback := s.buildFallbackResponse(candidates)
+		sendSSE(map[string]string{"type": "delta", "text": fallback.Reply})
+		sendSSE(map[string]interface{}{"type": "suggestions", "items": candidates[:min(5, len(candidates))], "conv_id": convID})
+		sendSSE(map[string]string{"type": "done"})
+		return nil
+	}
+
+	// Parse recommendations JSON
+	var recs []recEntry
+	if err := json.Unmarshal([]byte(recJSONStr), &recs); err != nil {
+		log.Warn().Err(err).Str("raw", recJSONStr[:min(200, len(recJSONStr))]).Msg("chat stream: parse recs failed, sending candidates as-is")
+	}
+
+	// Map recs to enriched candidates
+	suggestions := make([]models.MovieSummary, 0, len(recs))
+	for _, rec := range recs {
+		if c, ok := suggMap[rec.TMDBID]; ok {
+			c.Reason = rec.Reason
+			suggestions = append(suggestions, c)
+		}
+	}
+	// Fallback if no matching recs
+	if len(suggestions) == 0 {
+		for i, c := range candidates {
+			if i >= 5 {
+				break
+			}
+			suggestions = append(suggestions, c)
+		}
+	}
+
+	sendSSE(map[string]interface{}{"type": "suggestions", "items": suggestions, "conv_id": convID})
+	sendSSE(map[string]string{"type": "done"})
+	s.persistMessages(ctx, userID, sessionID, newMessage, reply)
+	return nil
+}
+
+// buildStreamMessages constructs Axon messages using the streaming prompt
+// format and truncated history to prevent context bloat.
+func (s *Service) buildStreamMessages(
+	history []models.ChatMessage,
+	newMsg string,
+	userCtx *graph.UserChatContext,
+	candidates []models.MovieSummary,
+) []axonMessage {
+	var ctxParts []string
+	if userCtx != nil {
+		if len(userCtx.TopThemes) > 0 {
+			ctxParts = append(ctxParts, "User's favourite themes: "+strings.Join(userCtx.TopThemes, ", "))
+		}
+		if len(userCtx.SavedTitles) > 0 {
+			ctxParts = append(ctxParts, "User's watchlist includes: "+strings.Join(userCtx.SavedTitles, ", "))
+		}
+	}
+	ctxSection := ""
+	if len(ctxParts) > 0 {
+		ctxSection = "User context:\n" + strings.Join(ctxParts, "\n")
+	}
+	sysPrompt := fmt.Sprintf(recStreamSystemPromptTemplate, ctxSection)
+
+	var sb strings.Builder
+	sb.WriteString("Candidate films:\n")
+	for _, c := range candidates {
+		genres := make([]string, 0, len(c.Genres))
+		for _, g := range c.Genres {
+			genres = append(genres, g.Name)
+		}
+		providers := make([]string, 0)
+		seen := map[string]bool{}
+		for _, p := range c.Providers {
+			if p.Type == "flatrate" && !seen[p.ProviderName] {
+				providers = append(providers, p.ProviderName)
+				seen[p.ProviderName] = true
+			}
+		}
+		synopsis := c.CinovaSynopsis
+		if synopsis == "" {
+			synopsis = c.Overview
+		}
+		if parts := strings.SplitN(synopsis, ". ", 3); len(parts) >= 2 {
+			synopsis = parts[0] + ". " + parts[1] + "."
+		}
+		line := fmt.Sprintf("- [%d] %s (%s) Score:%.0f Genres:%s Streaming:%s | %s",
+			c.TMDBID, c.Title, c.ReleaseYear, c.CinovaScore,
+			strings.Join(genres, "/"),
+			strings.Join(providers, "/"),
+			synopsis,
+		)
+		sb.WriteString(line + "\n")
+	}
+
+	msgs := []axonMessage{{Role: "system", Content: sysPrompt}}
+	for _, h := range history {
+		content := h.Content
+		// Truncate prior assistant messages to 2 sentences to prevent context bloat
+		if h.Role == "assistant" {
+			if parts := strings.SplitN(content, ". ", 3); len(parts) >= 2 {
+				content = parts[0] + ". " + parts[1] + "."
+			}
+		}
+		msgs = append(msgs, axonMessage{Role: h.Role, Content: content})
+	}
+	msgs = append(msgs, axonMessage{Role: "user", Content: newMsg + "\n\n" + sb.String()})
+	return msgs
+}
+
+// streamAxonToSSE sends a streaming request to Axon and:
+//   - Forwards text deltas (before the "|||" separator) to the SSE client immediately
+//   - Collects the JSON recommendations (after "|||") and returns them
+//
+// Returns (replyText, recJSON, error).
+func (s *Service) streamAxonToSSE(
+	ctx context.Context,
+	messages []axonMessage,
+	maxTokens int,
+	w http.ResponseWriter,
+	flusher http.Flusher,
+) (reply string, recJSON string, err error) {
+	reqBody := axonStreamRequest{
+		Model:     chatModel,
+		Messages:  messages,
+		MaxTokens: maxTokens,
+		Stream:    true,
+	}
+	payload, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", "", fmt.Errorf("marshal stream request: %w", err)
+	}
+
+	endpoint, err := url.JoinPath(s.cfg.AxonURL, "/v1/chat/completions")
+	if err != nil {
+		return "", "", fmt.Errorf("build axon url: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return "", "", fmt.Errorf("build stream request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	if s.cfg.AxonAPIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+s.cfg.AxonAPIKey)
+	}
+
+	// No global timeout on streaming client — context controls it
+	streamClient := &http.Client{}
+	resp, err := streamClient.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("axon stream http: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", "", fmt.Errorf("axon stream returned %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+	}
+
+	const separator = "|||"
+	var accumulated strings.Builder
+	sentBytes := 0      // bytes of accumulated text already forwarded as deltas
+	foundSep := false   // true once "|||" detected
+	separatorPos := -1  // byte offset of "|||" in accumulated
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "[DONE]" {
+			break
+		}
+
+		var chunk axonStreamChunk
+		if jsonErr := json.Unmarshal([]byte(data), &chunk); jsonErr != nil {
+			continue
+		}
+		if len(chunk.Choices) == 0 {
+			continue
+		}
+		text := chunk.Choices[0].Delta.Content
+		if text == "" {
+			continue
+		}
+
+		accumulated.WriteString(text)
+		full := accumulated.String()
+
+		if foundSep {
+			// After separator — just accumulate, don't forward
+			continue
+		}
+
+		sepIdx := strings.Index(full, separator)
+		if sepIdx >= 0 {
+			// Found separator — send any remaining pre-separator text
+			foundSep = true
+			separatorPos = sepIdx
+			if sepIdx > sentBytes {
+				delta := strings.TrimSpace(full[sentBytes:sepIdx])
+				if delta != "" {
+					b, _ := json.Marshal(map[string]string{"type": "delta", "text": delta})
+					fmt.Fprintf(w, "data: %s\n\n", b)
+					flusher.Flush()
+				}
+				sentBytes = sepIdx
+			}
+		} else {
+			// Separator not yet found — forward new content (keep last 2 bytes
+			// buffered to avoid splitting "|||" across chunks)
+			safeEnd := len(full) - (len(separator) - 1)
+			if safeEnd > sentBytes {
+				delta := full[sentBytes:safeEnd]
+				if delta != "" {
+					b, _ := json.Marshal(map[string]string{"type": "delta", "text": delta})
+					fmt.Fprintf(w, "data: %s\n\n", b)
+					flusher.Flush()
+					sentBytes = safeEnd
+				}
+			}
+		}
+	}
+
+	if scanErr := scanner.Err(); scanErr != nil {
+		return "", "", fmt.Errorf("stream scan: %w", scanErr)
+	}
+
+	full := accumulated.String()
+
+	if !foundSep {
+		// No separator — treat all content as reply text
+		remaining := strings.TrimSpace(full[sentBytes:])
+		if remaining != "" {
+			b, _ := json.Marshal(map[string]string{"type": "delta", "text": remaining})
+			fmt.Fprintf(w, "data: %s\n\n", b)
+			flusher.Flush()
+		}
+		return strings.TrimSpace(full), "", nil
+	}
+
+	replyText := strings.TrimSpace(full[:separatorPos])
+	afterSep := strings.TrimSpace(full[separatorPos+len(separator):])
+
+	// Extract JSON array from after-separator content
+	jsonStart := strings.Index(afterSep, "[")
+	jsonEnd := strings.LastIndex(afterSep, "]")
+	if jsonStart >= 0 && jsonEnd > jsonStart {
+		afterSep = afterSep[jsonStart : jsonEnd+1]
+	} else {
+		afterSep = ""
+	}
+
+	return replyText, afterSep, nil
 }
 
 // buildFallbackResponse produces a plain list response when AI generation fails.

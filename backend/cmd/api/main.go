@@ -175,6 +175,7 @@ func main() {
 				r.Get("/scoring-profile", scoringHandler.GetScoringProfile)
 				r.Put("/scoring-profile", scoringHandler.SetScoringProfile)
 				r.Post("/chat", chatHandler.Chat)
+				r.Post("/chat/stream", chatHandler.ChatStream)
 			})
 		})
 	})
@@ -183,7 +184,7 @@ func main() {
 		Addr:         ":" + cfg.Port,
 		Handler:      r,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 90 * time.Second,
+		WriteTimeout: 120 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 

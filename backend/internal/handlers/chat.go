@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/rs/zerolog/log"
 
@@ -68,4 +69,61 @@ func (h *ChatHandler) Chat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// ChatStream handles POST /api/v1/me/chat/stream — SSE streaming variant.
+// Sends delta text chunks immediately as Claude generates them, then fires
+// a "suggestions" event once recommendations are ready.
+func (h *ChatHandler) ChatStream(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, "streaming_unsupported", "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	var req models.ChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, "invalid_request", "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	if req.Message == "" {
+		writeError(w, "invalid_request", "message is required", http.StatusBadRequest)
+		return
+	}
+
+	country := r.URL.Query().Get("country")
+	if country == "" {
+		country = "US"
+	}
+
+	var userID string
+	sessionID := auth.SessionIDFromCtx(r.Context())
+	if !auth.IsAnonymousFromCtx(r.Context()) {
+		userID = auth.UserIDFromCtx(r.Context())
+	}
+
+	convID := req.ConvID
+	if convID == "" {
+		convID = sessionID
+	}
+
+	history, err := h.pg.GetChatHistory(r.Context(), convID, 10)
+	if err != nil {
+		log.Warn().Err(err).Str("conv_id", convID).Msg("chat stream: failed to load history")
+		history = []models.ChatMessage{}
+	}
+
+	// SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // disable nginx proxy buffering
+
+	// Disable write deadline for long-lived streaming connection
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Time{})
+
+	if err := h.svc.StreamChat(r.Context(), userID, sessionID, convID, country, history, req.Message, w, flusher); err != nil {
+		log.Error().Err(err).Msg("chat stream: service error")
+	}
 }
