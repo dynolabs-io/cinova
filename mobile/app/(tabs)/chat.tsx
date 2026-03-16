@@ -3,7 +3,7 @@
  * Two-pass backend: intent extraction → Neo4j candidates → Claude recommendation.
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
+  Animated,
   SafeAreaView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -47,7 +47,8 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [statusText, setStatusText] = useState('Thinking…');
+  const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
+  const [isStatusPhase, setIsStatusPhase] = useState(false);
   const [convId, setConvId] = useState<string | undefined>();
   const listRef = useRef<FlatList>(null);
 
@@ -63,12 +64,12 @@ export default function ChatScreen() {
     const assistantId = `a-${Date.now()}`;
     const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '' };
 
-    // Pre-fill assistant bubble with the initial status so it's visible inline
     const initialStatus = 'Analyzing your request…';
     setMessages((prev) => [...prev, userMsg, { ...assistantMsg, content: initialStatus }]);
     setInput('');
-    setStatusText(initialStatus);
     setLoading(true);
+    setStreamingMsgId(assistantId);
+    setIsStatusPhase(true);
     scrollToBottom();
 
     let firstDelta = true;
@@ -77,15 +78,18 @@ export default function ChatScreen() {
       trimmed,
       convId,
       'US',
-      // onDelta — first delta clears the status text, then appends real content
+      // onDelta — first delta switches out of status phase, then appends real content
       (chunk) => {
+        if (firstDelta) {
+          setIsStatusPhase(false);
+          firstDelta = false;
+        }
         setMessages((prev) =>
           prev.map((m) => {
             if (m.id !== assistantId) return m;
             return { ...m, content: firstDelta ? chunk : m.content + chunk };
           })
         );
-        firstDelta = false;
       },
       // onSuggestions — attach movie cards to the assistant bubble
       (suggestions, newConvId) => {
@@ -98,6 +102,8 @@ export default function ChatScreen() {
       // onDone
       () => {
         setLoading(false);
+        setStreamingMsgId(null);
+        setIsStatusPhase(false);
         scrollToBottom();
       },
       // onError
@@ -110,14 +116,13 @@ export default function ChatScreen() {
           )
         );
         setLoading(false);
+        setStreamingMsgId(null);
+        setIsStatusPhase(false);
       },
-      // onStatus — update both the inline bubble and the bottom spinner label
+      // onStatus — update the bubble content while still in status phase
       (text) => {
-        setStatusText(text);
         setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId && firstDelta ? { ...m, content: text } : m
-          )
+          prev.map((m) => m.id === assistantId ? { ...m, content: text } : m)
         );
       },
     );
@@ -143,13 +148,18 @@ export default function ChatScreen() {
           ref={listRef}
           data={messages}
           keyExtractor={(m) => m.id}
-          renderItem={({ item }) => (
-            <ChatBubble
-              role={item.role}
-              content={item.content}
-              suggestions={item.suggestions}
-            />
-          )}
+          renderItem={({ item }) => {
+            if (item.id === streamingMsgId && isStatusPhase) {
+              return <StatusBubble text={item.content} />;
+            }
+            return (
+              <ChatBubble
+                role={item.role}
+                content={item.content}
+                suggestions={item.suggestions}
+              />
+            );
+          }}
           contentContainerStyle={[
             styles.listContent,
             isEmpty && styles.listContentEmpty,
@@ -175,11 +185,6 @@ export default function ChatScreen() {
         )}
 
         {/* Typing indicator */}
-        {loading && (
-          <View style={styles.typingRow}>
-            <ActivityIndicator size="small" color="#3b82f6" />
-          </View>
-        )}
 
         {/* Input bar */}
         <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -206,6 +211,71 @@ export default function ChatScreen() {
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+// ── Animated status bubble ────────────────────────────────────────────────────
+
+function AnimatedDots() {
+  const d1 = useRef(new Animated.Value(0)).current;
+  const d2 = useRef(new Animated.Value(0)).current;
+  const d3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Each dot: delay → bounce up → bounce down → pause. All 1500ms cycles.
+    const bounce = (d: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(d, { toValue: -5, duration: 280, useNativeDriver: true }),
+          Animated.timing(d, { toValue: 0, duration: 280, useNativeDriver: true }),
+          Animated.delay(940 - delay),
+        ])
+      );
+
+    const a1 = bounce(d1, 0);
+    const a2 = bounce(d2, 200);
+    const a3 = bounce(d3, 400);
+    a1.start(); a2.start(); a3.start();
+    return () => { a1.stop(); a2.stop(); a3.stop(); };
+  }, []);
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 5 }}>
+      {[d1, d2, d3].map((d, i) => (
+        <Animated.View
+          key={i}
+          style={{
+            width: 6, height: 6, borderRadius: 3,
+            backgroundColor: '#3b82f6',
+            transform: [{ translateY: d }],
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+function StatusBubble({ text }: { text: string }) {
+  return (
+    <View style={{ flexDirection: 'row', marginVertical: 6, paddingHorizontal: 12, alignItems: 'flex-start' }}>
+      <View style={{
+        width: 28, height: 28, borderRadius: 14, backgroundColor: '#2563EB',
+        alignItems: 'center', justifyContent: 'center',
+        marginRight: 8, marginTop: 2, flexShrink: 0,
+      }}>
+        <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>C</Text>
+      </View>
+      <View style={{
+        backgroundColor: '#1a1a1a', borderRadius: 18, borderBottomLeftRadius: 4,
+        paddingHorizontal: 14, paddingVertical: 12,
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+        maxWidth: '80%',
+      }}>
+        <Text style={{ color: '#888', fontSize: 14 }}>{text}</Text>
+        <AnimatedDots />
+      </View>
+    </View>
   );
 }
 
@@ -314,24 +384,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
   },
   chipText: { color: '#ccc', fontSize: 13 },
-
-  typingRow: {
-    paddingHorizontal: 12,
-    paddingBottom: 4,
-  },
-  typingBubble: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    alignSelf: 'flex-start',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  typingText: { color: '#888', fontSize: 13 },
 
   inputBar: {
     flexDirection: 'row',
