@@ -22,7 +22,10 @@
         "NSCameraUsageDescription": "Cinova does not use the camera.",
         "NSMicrophoneUsageDescription": "Cinova does not use the microphone.",
         "NSLocationWhenInUseUsageDescription": "Cinova uses your location to show content available in your region.",
-        "UIBackgroundModes": ["audio", "fetch"]
+        "UIBackgroundModes": [
+          "audio",
+          "fetch"
+        ]
       }
     },
     "android": {
@@ -65,7 +68,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "YOUR_EAS_PROJECT_ID"
+        "projectId": "0463a8c8-cd5d-4234-9418-caa2468a3a8e"
       }
     }
   }
