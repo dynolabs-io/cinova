@@ -36,9 +36,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'POST_NOTIFICATIONS',
     ],
   },
+  owner: 'emrahbaysal',
   extra: {
     eas: {
-      projectId: '',
+      projectId: '0463a8c8-cd5d-4234-9418-caa2468a3a8e',
     },
   },
   plugins: [
