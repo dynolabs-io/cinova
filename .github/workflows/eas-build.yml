@@ -67,7 +67,7 @@ jobs:
             echo "platform=all" >> $GITHUB_OUTPUT
           else
             echo "profile=preview" >> $GITHUB_OUTPUT
-            echo "platform=all" >> $GITHUB_OUTPUT
+            echo "platform=android" >> $GITHUB_OUTPUT
           fi
 
       - name: Build
