@@ -22,6 +22,7 @@ import (
 	"github.com/foundrylab-app/cinova/backend/internal/handlers"
 	"github.com/foundrylab-app/cinova/backend/internal/search"
 	"github.com/foundrylab-app/cinova/backend/internal/store"
+	"github.com/foundrylab-app/cinova/backend/internal/workflow"
 )
 
 func main() {
@@ -84,9 +85,17 @@ func main() {
 	// Search
 	searchHandler := search.NewHandler(neo, rdb, cfg)
 
-	// Chat
+	// Chat service
 	chatSvc := chat.New(movieRepo, pg, cfg)
-	chatHandler := handlers.NewChatHandler(chatSvc, pg)
+
+	// Temporal worker (optional — disabled when TEMPORAL_ADDRESS is unset)
+	temporalShutdown, temporalClient, err := workflow.Start(cfg.TemporalAddress, chatSvc)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to start temporal worker")
+	}
+	defer temporalShutdown()
+
+	chatHandler := handlers.NewChatHandler(chatSvc, pg, temporalClient)
 
 	// Router
 	r := chi.NewRouter()
