@@ -11,9 +11,9 @@ import (
 // Start creates a Temporal client + worker, registers the chat workflow and
 // activities, and starts the worker polling loop.
 //
-// Returns a shutdown func (stop the worker + close the client) and an error.
-// If temporalAddress is empty, returns a no-op shutdown and nil error so the
-// API starts normally without Temporal.
+// Returns a shutdown func (stop the worker + close the client) and a nil error.
+// Temporal startup failures are non-fatal: the API continues without workflow
+// routing and falls back to direct execution.
 func Start(temporalAddress string, chatSvc *chat.Service) (func(), client.Client, error) {
 	if temporalAddress == "" {
 		log.Warn().Msg("temporal: address not configured — workflow engine disabled")
@@ -25,7 +25,8 @@ func Start(temporalAddress string, chatSvc *chat.Service) (func(), client.Client
 		Namespace: "default",
 	})
 	if err != nil {
-		return nil, nil, err
+		log.Warn().Err(err).Str("address", temporalAddress).Msg("temporal: dial failed — falling back to direct execution")
+		return func() {}, nil, nil
 	}
 
 	w := worker.New(c, TaskQueue, worker.Options{
@@ -38,7 +39,8 @@ func Start(temporalAddress string, chatSvc *chat.Service) (func(), client.Client
 
 	if err := w.Start(); err != nil {
 		c.Close()
-		return nil, nil, err
+		log.Warn().Err(err).Str("address", temporalAddress).Msg("temporal: worker start failed — falling back to direct execution")
+		return func() {}, nil, nil
 	}
 
 	log.Info().Str("address", temporalAddress).Str("task_queue", TaskQueue).Msg("temporal worker started")
