@@ -49,6 +49,8 @@ type FetchCandidatesOutput struct {
 type WriteRecsInput struct {
 	History            []models.ChatMessage
 	Message            string
+	UserID             string // empty for anonymous
+	SessionID          string
 	UserOwnerType      string
 	UserOwnerID        string
 	Candidates         []models.MovieSummary
@@ -105,6 +107,8 @@ func (s *Service) FetchCandidatesActivity(ctx context.Context, input FetchCandid
 }
 
 // WriteRecsActivity wraps writeRecommendations for Temporal activity use.
+// It also persists the user + assistant messages to Postgres so that
+// conversation history is available in subsequent workflow runs.
 func (s *Service) WriteRecsActivity(ctx context.Context, input WriteRecsInput) (*WriteRecsOutput, error) {
 	userCtx, _ := s.repo.GetUserChatContext(ctx, input.UserOwnerID, input.UserOwnerType)
 
@@ -120,6 +124,15 @@ func (s *Service) WriteRecsActivity(ctx context.Context, input WriteRecsInput) (
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	// Persist conversation so history is available in subsequent turns.
+	if _, err := s.pg.SaveChatMessage(ctx, input.UserID, input.SessionID, "user", input.Message); err != nil {
+		// Non-fatal — log but don't fail the activity.
+		_ = err
+	}
+	if _, err := s.pg.SaveChatMessage(ctx, input.UserID, input.SessionID, "assistant", out.Reply); err != nil {
+		_ = err
 	}
 
 	recs := make([]RecEntry, len(out.Recommendations))

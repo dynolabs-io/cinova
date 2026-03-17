@@ -129,6 +129,8 @@ func ChatWorkflow(ctx workflow.Context, input ChatInput) (*ChatOutput, error) {
 		chat.WriteRecsInput{
 			History:            input.History,
 			Message:            input.Message,
+			UserID:             input.UserID,
+			SessionID:          input.SessionID,
 			UserOwnerType:      ownerType,
 			UserOwnerID:        ownerID,
 			Candidates:         fetchOut.Candidates,
