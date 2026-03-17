@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -176,7 +178,101 @@ func (h *ChatHandler) ChatStream(w http.ResponseWriter, r *http.Request) {
 	rc := http.NewResponseController(w)
 	_ = rc.SetWriteDeadline(time.Time{})
 
+	if h.temporalClient != nil {
+		h.streamViaWorkflow(r.Context(), w, flusher, userID, sessionID, convID, country, history, req.Message)
+		return
+	}
+
 	if err := h.svc.StreamChat(r.Context(), userID, sessionID, convID, country, history, req.Message, w, flusher); err != nil {
 		log.Error().Err(err).Msg("chat stream: service error")
+	}
+}
+
+// streamViaWorkflow runs a ChatWorkflow and emits SSE progress events at each
+// activity boundary, then sends the full reply + suggestions when done.
+// Token-by-token streaming is NOT available — the full reply arrives at once.
+func (h *ChatHandler) streamViaWorkflow(
+	ctx context.Context,
+	w http.ResponseWriter,
+	flusher http.Flusher,
+	userID, sessionID, convID, country string,
+	history []models.ChatMessage,
+	message string,
+) {
+	sendSSE := func(v interface{}) {
+		b, _ := json.Marshal(v)
+		fmt.Fprintf(w, "data: %s\n\n", b)
+		flusher.Flush()
+	}
+
+	wfOptions := temporalclient.StartWorkflowOptions{
+		TaskQueue:                workflow.TaskQueue,
+		WorkflowExecutionTimeout: 120 * time.Second,
+	}
+	wfInput := workflow.ChatInput{
+		UserID: userID, SessionID: sessionID, ConvID: convID,
+		Country: country, History: history, Message: message,
+	}
+
+	run, err := h.temporalClient.ExecuteWorkflow(ctx, wfOptions, workflow.ChatWorkflow, wfInput)
+	if err != nil {
+		log.Error().Err(err).Msg("chat stream workflow: failed to start")
+		sendSSE(map[string]string{"type": "error", "text": "workflow unavailable"})
+		sendSSE(map[string]string{"type": "done"})
+		return
+	}
+
+	// Collect result in background goroutine.
+	type result struct {
+		out workflow.ChatOutput
+		err error
+	}
+	resultCh := make(chan result, 1)
+	go func() {
+		var out workflow.ChatOutput
+		err := run.Get(context.Background(), &out)
+		resultCh <- result{out, err}
+	}()
+
+	stepLabels := map[string]string{
+		"extracting_intent":        "Analyzing your request…",
+		"fetching_candidates":      "Searching films…",
+		"generating_recommendations": "Writing recommendations…",
+	}
+	var lastStep string
+	ticker := time.NewTicker(400 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case r := <-resultCh:
+			if r.err != nil {
+				log.Error().Err(r.err).Str("workflow_id", run.GetID()).Msg("chat stream workflow: failed")
+				sendSSE(map[string]string{"type": "error", "text": "workflow execution failed"})
+				sendSSE(map[string]string{"type": "done"})
+				return
+			}
+			sendSSE(map[string]string{"type": "delta", "text": r.out.Reply})
+			sendSSE(map[string]interface{}{"type": "suggestions", "items": r.out.Suggestions, "conv_id": r.out.ConvID})
+			sendSSE(map[string]string{"type": "done"})
+			return
+
+		case <-ctx.Done():
+			return
+
+		case <-ticker.C:
+			val, err := h.temporalClient.QueryWorkflow(ctx, run.GetID(), run.GetRunID(), "progress")
+			if err != nil {
+				continue
+			}
+			var step string
+			if err := val.Get(&step); err != nil || step == lastStep {
+				continue
+			}
+			lastStep = step
+			if label, ok := stepLabels[step]; ok {
+				sendSSE(map[string]string{"type": "status", "text": label})
+			}
+		}
 	}
 }

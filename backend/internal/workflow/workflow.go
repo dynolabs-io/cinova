@@ -43,6 +43,12 @@ func ChatWorkflow(ctx workflow.Context, input ChatInput) (*ChatOutput, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("ChatWorkflow started", "session_id", input.SessionID)
 
+	// ── Progress query handler (used by SSE streaming path) ───────────────
+	progress := "extracting_intent"
+	_ = workflow.SetQueryHandler(ctx, "progress", func() (string, error) {
+		return progress, nil
+	})
+
 	// ── Activity 1: Extract Intent ────────────────────────────────────────
 	intentAO := workflow.ActivityOptions{
 		StartToCloseTimeout: 20 * time.Second,
@@ -62,6 +68,7 @@ func ChatWorkflow(ctx workflow.Context, input ChatInput) (*ChatOutput, error) {
 		logger.Warn("intent extraction failed, using defaults", "error", err)
 		intentOut = chat.ExtractIntentOutput{MinScore: 40}
 	}
+	progress = "fetching_candidates"
 
 	// ── Build ChatFilters (mirrors logic in chat.Service) ─────────────────
 	minScore := intentOut.MinScore
@@ -101,6 +108,7 @@ func ChatWorkflow(ctx workflow.Context, input ChatInput) (*ChatOutput, error) {
 	).Get(ctx, &fetchOut); err != nil {
 		return nil, err
 	}
+	progress = "generating_recommendations"
 
 	// ── Activity 3: Generate Recommendations ─────────────────────────────
 	ownerType, ownerID := "Session", input.SessionID
