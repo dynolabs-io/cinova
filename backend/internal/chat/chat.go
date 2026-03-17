@@ -18,10 +18,12 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
 	"github.com/foundrylab-app/cinova/backend/internal/config"
 	"github.com/foundrylab-app/cinova/backend/internal/graph"
+	"github.com/foundrylab-app/cinova/backend/internal/langfuse"
 	"github.com/foundrylab-app/cinova/backend/internal/models"
 	"github.com/foundrylab-app/cinova/backend/internal/store"
 )
@@ -186,10 +188,11 @@ Rules:
 
 // Service is the AI film concierge chat service.
 type Service struct {
-	repo   *graph.MovieRepository
-	pg     *store.PostgresStore
-	cfg    *config.Config
-	client *http.Client
+	repo     *graph.MovieRepository
+	pg       *store.PostgresStore
+	cfg      *config.Config
+	client   *http.Client
+	tracer   *langfuse.Client
 }
 
 // New creates a new chat Service.
@@ -199,6 +202,7 @@ func New(repo *graph.MovieRepository, pg *store.PostgresStore, cfg *config.Confi
 		pg:     pg,
 		cfg:    cfg,
 		client: &http.Client{Timeout: recommendTimeout},
+		tracer: langfuse.NewClient(cfg.LangfuseURL, cfg.LangfusePublicKey, cfg.LangfuseSecretKey),
 	}
 }
 
@@ -507,6 +511,17 @@ func (s *Service) StreamChat(
 	w http.ResponseWriter,
 	flusher http.Flusher,
 ) error {
+	traceID := uuid.NewString()
+	trace := langfuse.ChatTrace{
+		TraceID:      traceID,
+		UserID:       userID,
+		SessionID:    sessionID,
+		Country:      country,
+		UserMessage:  newMessage,
+		RecommendModel: chatModel,
+		IntentModel:    intentModel,
+	}
+
 	sendSSE := func(v interface{}) {
 		b, _ := json.Marshal(v)
 		fmt.Fprintf(w, "data: %s\n\n", b)
@@ -517,10 +532,17 @@ func (s *Service) StreamChat(
 	sendSSE(map[string]string{"type": "status", "text": "Analyzing your request…"})
 
 	// Pass 1: extract intent
+	intentStart := time.Now()
 	intent, err := s.extractIntent(ctx, history, newMessage)
+	trace.IntentStart = intentStart
+	trace.IntentEnd = time.Now()
+	trace.IntentInput = map[string]interface{}{"history_len": len(history), "message": newMessage}
 	if err != nil {
 		log.Warn().Err(err).Msg("chat stream: intent extraction failed, using defaults")
 		intent = &intentResult{MinScore: defaultMinScore}
+		trace.IntentOutput = map[string]string{"error": err.Error()}
+	} else {
+		trace.IntentOutput = intent
 	}
 
 	// Clarification path — stream the question then send popular suggestions
@@ -566,7 +588,13 @@ func (s *Service) StreamChat(
 	sendSSE(map[string]string{"type": "status", "text": "Searching films…"})
 
 	// Neo4j query (tiered fallback)
+	candidateStart := time.Now()
 	candidates, providerDropped := s.fetchCandidates(ctx, filters, country)
+	trace.CandidateStart = candidateStart
+	trace.CandidateEnd = time.Now()
+	trace.CandidateFilters = filters
+	trace.CandidateCount = len(candidates)
+	trace.ProviderDropped = providerDropped
 
 	sendSSE(map[string]string{"type": "status", "text": "Writing recommendations…"})
 
@@ -583,9 +611,19 @@ func (s *Service) StreamChat(
 	replyCtx, cancel := context.WithTimeout(ctx, recommendTimeout)
 	defer cancel()
 
+	trace.RecommendInput = map[string]interface{}{
+		"candidate_count": len(candidates),
+		"history_len":     len(history),
+		"provider_dropped": providerDropped,
+	}
+	recommendStart := time.Now()
 	reply, recJSONStr, err := s.streamAxonToSSE(replyCtx, messages, 1500, w, flusher)
+	trace.RecommendStart = recommendStart
+	trace.RecommendEnd = time.Now()
 	if err != nil {
 		log.Error().Err(err).Msg("chat stream: axon error, sending fallback")
+		trace.Error = err.Error()
+		s.tracer.Send(trace)
 		fallback := s.buildFallbackResponse(candidates)
 		sendSSE(map[string]string{"type": "delta", "text": fallback.Reply})
 		sendSSE(map[string]interface{}{"type": "suggestions", "items": candidates[:min(5, len(candidates))], "conv_id": convID})
@@ -623,14 +661,25 @@ func (s *Service) StreamChat(
 	// Persist with recommended titles appended so future history turns
 	// let Claude know which specific films were already shown.
 	assistantRecord := reply
-	if len(suggestions) > 0 {
-		titles := make([]string, 0, len(suggestions))
-		for _, sg := range suggestions {
-			titles = append(titles, sg.Title)
-		}
+	titles := make([]string, 0, len(suggestions))
+	for _, sg := range suggestions {
+		titles = append(titles, sg.Title)
+	}
+	if len(titles) > 0 {
 		assistantRecord += "\n\n[Recommended: " + strings.Join(titles, ", ") + "]"
 	}
 	s.persistMessages(ctx, userID, sessionID, newMessage, assistantRecord)
+
+	// Fire trace to Langfuse (async, non-blocking)
+	trace.Reply = reply
+	trace.SuggestionCount = len(suggestions)
+	trace.RecommendOutput = map[string]interface{}{
+		"reply":         reply,
+		"titles":        titles,
+		"rec_json_size": len(recJSONStr),
+	}
+	s.tracer.Send(trace)
+
 	return nil
 }
 

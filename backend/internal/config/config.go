@@ -28,6 +28,10 @@ type Config struct {
 	AxonAPIKey string
 	AxonModel  string
 
+	LangfuseURL       string
+	LangfusePublicKey string
+	LangfuseSecretKey string
+
 	LogLevel string
 }
 
@@ -43,10 +47,13 @@ func Load() (*Config, error) {
 		RedisURL:         mustGetEnv("REDIS_URL"),
 		JWTSecret:        mustGetEnv("JWT_SECRET"),
 		TMDBAPIKey:       getEnv("TMDB_API_KEY", ""), // optional at startup; required only for ingestion
-		AxonURL:          mustGetEnv("AXON_URL"),
-		AxonAPIKey:       getEnv("AXON_API_KEY", ""),
-		AxonModel:        getEnv("AXON_MODEL", "claude-opus-4-6"),
-		LogLevel:         getEnv("LOG_LEVEL", "info"),
+		AxonURL:           mustGetEnv("AXON_URL"),
+		AxonAPIKey:        getEnv("AXON_API_KEY", ""),
+		AxonModel:         getEnv("AXON_MODEL", "claude-opus-4-6"),
+		LangfuseURL:       getEnv("LANGFUSE_URL", ""),
+		LangfusePublicKey: getEnv("LANGFUSE_PUBLIC_KEY", ""),
+		LangfuseSecretKey: getEnv("LANGFUSE_SECRET_KEY", ""),
+		LogLevel:          getEnv("LOG_LEVEL", "info"),
 		JWTAccessTTLSec:  getEnvInt("JWT_ACCESS_TTL_SEC", 900),   // 15 min
 		JWTRefreshTTLSec: getEnvInt("JWT_REFRESH_TTL_SEC", 2592000), // 30 days
 	}
