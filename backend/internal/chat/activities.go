@@ -2,8 +2,10 @@ package chat
 
 import (
 	"context"
+	"time"
 
 	"github.com/foundrylab-app/cinova/backend/internal/graph"
+	"github.com/foundrylab-app/cinova/backend/internal/langfuse"
 	"github.com/foundrylab-app/cinova/backend/internal/models"
 )
 
@@ -31,6 +33,9 @@ type ExtractIntentOutput struct {
 	MinYear            int
 	MaxYear            int
 	MinScore           float64
+	// Trace timing — set by the activity, forwarded to WriteRecsInput.
+	Start time.Time
+	End   time.Time
 }
 
 // FetchCandidatesInput is the input for the FetchCandidates activity.
@@ -43,6 +48,9 @@ type FetchCandidatesInput struct {
 type FetchCandidatesOutput struct {
 	Candidates      []models.MovieSummary
 	ProviderDropped bool
+	// Trace timing — forwarded to WriteRecsInput.
+	Start time.Time
+	End   time.Time
 }
 
 // WriteRecsInput is the input for the WriteRecommendations activity.
@@ -57,6 +65,17 @@ type WriteRecsInput struct {
 	Country            string
 	RequestedProviders []string
 	ProviderDropped    bool
+
+	// Trace fields — collected by the workflow and forwarded here so
+	// WriteRecsActivity can send the full Langfuse trace in one shot.
+	TraceID           string
+	IntentStart       time.Time
+	IntentEnd         time.Time
+	IntentOutput      interface{}
+	CandidateStart    time.Time
+	CandidateEnd      time.Time
+	CandidateFilters  interface{}
+	CandidateCount    int
 }
 
 // WriteRecsOutput is the result of the WriteRecommendations activity.
@@ -76,11 +95,15 @@ type RecEntry struct {
 
 // ExtractIntentActivity wraps extractIntent for Temporal activity use.
 func (s *Service) ExtractIntentActivity(ctx context.Context, input ExtractIntentInput) (*ExtractIntentOutput, error) {
+	start := time.Now()
 	result, err := s.extractIntent(ctx, input.History, input.Message)
+	end := time.Now()
 	if err != nil {
 		return nil, err
 	}
 	return &ExtractIntentOutput{
+		Start: start,
+		End:   end,
 		NeedsClarification: result.NeedsClarification,
 		ClarifyingQuestion: result.ClarifyingQuestion,
 		Genres:             result.Genres,
@@ -99,10 +122,13 @@ func (s *Service) ExtractIntentActivity(ctx context.Context, input ExtractIntent
 
 // FetchCandidatesActivity wraps fetchCandidates for Temporal activity use.
 func (s *Service) FetchCandidatesActivity(ctx context.Context, input FetchCandidatesInput) (*FetchCandidatesOutput, error) {
+	start := time.Now()
 	candidates, providerDropped := s.fetchCandidates(ctx, input.Filters, input.Country)
 	return &FetchCandidatesOutput{
 		Candidates:      candidates,
 		ProviderDropped: providerDropped,
+		Start:           start,
+		End:             time.Now(),
 	}, nil
 }
 
@@ -128,11 +154,37 @@ func (s *Service) WriteRecsActivity(ctx context.Context, input WriteRecsInput) (
 
 	// Persist conversation so history is available in subsequent turns.
 	if _, err := s.pg.SaveChatMessage(ctx, input.UserID, input.SessionID, "user", input.Message); err != nil {
-		// Non-fatal — log but don't fail the activity.
 		_ = err
 	}
 	if _, err := s.pg.SaveChatMessage(ctx, input.UserID, input.SessionID, "assistant", out.Reply); err != nil {
 		_ = err
+	}
+
+	// Send Langfuse trace (non-blocking, best-effort).
+	if input.TraceID != "" {
+		recommendEnd := time.Now()
+		s.tracer.Send(langfuse.ChatTrace{
+			TraceID:        input.TraceID,
+			UserID:         input.UserID,
+			SessionID:      input.SessionID,
+			Country:        input.Country,
+			UserMessage:    input.Message,
+			IntentModel:    intentModel,
+			RecommendModel: chatModel,
+			IntentStart:    input.IntentStart,
+			IntentEnd:      input.IntentEnd,
+			IntentInput:    map[string]interface{}{"history_len": len(input.History), "message": input.Message},
+			IntentOutput:   input.IntentOutput,
+			CandidateStart:   input.CandidateStart,
+			CandidateEnd:     input.CandidateEnd,
+			CandidateFilters: input.CandidateFilters,
+			CandidateCount:   input.CandidateCount,
+			ProviderDropped:  input.ProviderDropped,
+			RecommendStart:  recommendEnd, // approximate — activity start not tracked separately
+			RecommendEnd:    recommendEnd,
+			Reply:           out.Reply,
+			SuggestionCount: len(out.Recommendations),
+		})
 	}
 
 	recs := make([]RecEntry, len(out.Recommendations))

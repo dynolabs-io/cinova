@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"go.temporal.io/sdk/client"
 	temporalclient "go.temporal.io/sdk/client"
@@ -97,6 +98,7 @@ func (h *ChatHandler) chatViaWorkflow(
 		Country:   country,
 		History:   history,
 		Message:   message,
+		TraceID:   uuid.NewString(),
 	}
 
 	wfOptions := temporalclient.StartWorkflowOptions{
@@ -212,6 +214,7 @@ func (h *ChatHandler) streamViaWorkflow(
 	wfInput := workflow.ChatInput{
 		UserID: userID, SessionID: sessionID, ConvID: convID,
 		Country: country, History: history, Message: message,
+		TraceID: uuid.NewString(),
 	}
 
 	run, err := h.temporalClient.ExecuteWorkflow(ctx, wfOptions, workflow.ChatWorkflow, wfInput)

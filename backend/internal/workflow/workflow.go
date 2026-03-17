@@ -28,6 +28,7 @@ type ChatInput struct {
 	Country   string
 	History   []models.ChatMessage
 	Message   string
+	TraceID   string // Langfuse trace ID, propagated to WriteRecsActivity
 }
 
 // ChatOutput is the result of a complete chat pipeline run.
@@ -137,6 +138,14 @@ func ChatWorkflow(ctx workflow.Context, input ChatInput) (*ChatOutput, error) {
 			Country:            input.Country,
 			RequestedProviders: filters.Providers,
 			ProviderDropped:    fetchOut.ProviderDropped,
+			TraceID:          input.TraceID,
+			IntentStart:      intentOut.Start,
+			IntentEnd:        intentOut.End,
+			IntentOutput:     intentOut,
+			CandidateStart:   fetchOut.Start,
+			CandidateEnd:     fetchOut.End,
+			CandidateFilters: filters,
+			CandidateCount:   len(fetchOut.Candidates),
 		},
 	).Get(ctx, &recOut)
 	if recErr != nil {
