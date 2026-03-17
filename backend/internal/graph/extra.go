@@ -16,6 +16,9 @@ type ChatFilters struct {
 	Themes     []string
 	Moods      []string
 	Providers  []string
+	Directors  []string // director name substrings (case-insensitive)
+	Actors     []string // actor name substrings (case-insensitive)
+	Language   string   // ISO 639-1 language code e.g. "tr", "fr", "ja"
 	MaxRuntime int
 	MinYear    int
 	MaxYear    int
@@ -59,6 +62,18 @@ func (r *MovieRepository) GetChatCandidates(ctx context.Context, f ChatFilters, 
 	if len(f.Providers) > 0 {
 		params["providers"] = f.Providers
 		conds = append(conds, "EXISTS { MATCH (m)-[:AVAILABLE_ON {country: $country}]->(p:Provider) WHERE any(pv IN $providers WHERE toLower(p.provider_name) CONTAINS toLower(pv)) }")
+	}
+	if len(f.Directors) > 0 {
+		params["directors"] = f.Directors
+		conds = append(conds, "EXISTS { MATCH (d:Person)-[:DIRECTED]->(m) WHERE any(dn IN $directors WHERE toLower(d.name) CONTAINS toLower(dn)) }")
+	}
+	if len(f.Actors) > 0 {
+		params["actors"] = f.Actors
+		conds = append(conds, "EXISTS { MATCH (a:Person)-[:ACTED_IN]->(m) WHERE any(an IN $actors WHERE toLower(a.name) CONTAINS toLower(an)) }")
+	}
+	if f.Language != "" {
+		params["language"] = strings.ToLower(f.Language)
+		conds = append(conds, "toLower(m.original_language) = $language")
 	}
 	if f.MaxRuntime > 0 {
 		params["max_runtime"] = f.MaxRuntime

@@ -1056,25 +1056,177 @@ func (r *MovieRepository) ComputeAndUpdatePageRank(ctx context.Context) error {
 		return nil
 	}
 
-	// Step 4: rewrite cinova_score incorporating prestige signal.
-	// Full formula weights: audience=0.40, critic=0.25 (fallback to audience), award=0.20 (neutral=0.5),
-	// prestige=0.10, commercial=0.05 (neutral=0.5).
-	// Simplified Cypher approximation using available stored fields:
-	//   audience = bayesian(vote_average, vote_count) / 10
-	//   commercial = neutral 0.5 when budget/revenue unknown
-	//   award = neutral 0.5 (no stored aggregate yet)
+	// Step 4: rewrite cinova_score using actual award graph data + prestige signal.
+	// award_sig rules:
+	//   - wikidata_id not set (not yet checked): neutral 0.50
+	//   - wikidata checked, wins found: 0.20 + wins*0.05 capped at 0.85
+	//   - wikidata checked, nominations only: 0.15 + noms*0.03 capped at 0.60
+	//   - wikidata checked, no awards found: 0.30 (slightly below neutral — known no awards)
 	_, err = r.driver.RunWrite(ctx, `
 		MATCH (n) WHERE n:Movie OR n:TVShow
-		WITH n, n.raw_graph_signal / $max_signal AS norm_prestige
-		WITH n, norm_prestige,
-		     (toFloat(n.vote_count) * n.vote_average + 1000.0 * 6.5) / (toFloat(n.vote_count) + 1000.0) / 10.0 AS audience
-		SET n.cinova_score = (audience * 0.65 + 0.5 * 0.20 + norm_prestige * 0.10 + 0.5 * 0.05) * 100
+		WITH n,
+		     CASE WHEN $max_signal > 0 THEN n.raw_graph_signal / $max_signal ELSE 0.0 END AS norm_prestige,
+		     (toFloat(n.vote_count) * n.vote_average + 1000.0 * 6.5) / (toFloat(n.vote_count) + 1000.0) / 10.0 AS audience,
+		     size([(n)-[:HAS_WON]->(:Award) | 1]) AS wins,
+		     size([(n)-[:HAS_NOMINATION]->(:Award) | 1]) AS noms
+		WITH n, norm_prestige, audience, wins, noms,
+		     CASE
+		       WHEN (n.wikidata_id IS NULL OR n.wikidata_id = '') THEN 0.50
+		       WHEN wins > 0 THEN least(0.20 + toFloat(wins) * 0.05, 0.85)
+		       WHEN noms > 0 THEN least(0.15 + toFloat(noms) * 0.03, 0.60)
+		       ELSE 0.30
+		     END AS award_sig
+		SET n.cinova_score = round((audience * 0.65 + award_sig * 0.20 + norm_prestige * 0.10 + 0.5 * 0.05) * 100, 1)
 	`, map[string]interface{}{"max_signal": maxSignal})
 	if err != nil {
 		return fmt.Errorf("ComputePageRank score update: %w", err)
 	}
 
 	return nil
+}
+
+// ScoreRecomputeItem holds the raw signals needed to recompute a title's CinovaScore
+// using the Go scoring package (proper AwardTier string-matching, etc.).
+type ScoreRecomputeItem struct {
+	TMDBID         int64
+	VoteAverage    float64
+	VoteCount      int
+	RawGraphSignal float64
+	WikidataID     string
+	Budget         int64
+	Revenue        int64
+	Awards         []models.Award
+}
+
+// GetMaxRawGraphSignal returns the maximum raw_graph_signal across all Movie and TVShow nodes.
+func (r *MovieRepository) GetMaxRawGraphSignal(ctx context.Context) (float64, error) {
+	records, err := r.driver.RunQuery(ctx, `
+		MATCH (n) WHERE n:Movie OR n:TVShow
+		RETURN max(n.raw_graph_signal) AS max_signal
+	`, nil)
+	if err != nil || len(records) == 0 {
+		return 0, fmt.Errorf("GetMaxRawGraphSignal: %w", err)
+	}
+	v, _ := records[0].Get("max_signal")
+	return float64Val(v), nil
+}
+
+// GetMoviesForScoreRecompute returns a paginated batch of movies with their award data
+// for Go-side score recomputation using the full scoring package.
+func (r *MovieRepository) GetMoviesForScoreRecompute(ctx context.Context, skip, limit int) ([]ScoreRecomputeItem, error) {
+	records, err := r.driver.RunQuery(ctx, `
+		MATCH (m:Movie)
+		WITH m ORDER BY m.tmdb_id ASC SKIP $skip LIMIT $limit
+		OPTIONAL MATCH (m)-[rel:HAS_WON|HAS_NOMINATION]->(aw:Award)
+		WITH m, collect({
+		     award_name: aw.award_name,
+		     ceremony_name: aw.ceremony_name,
+		     year: rel.year,
+		     recipient_name: rel.recipient_name,
+		     is_nomination: (type(rel) = 'HAS_NOMINATION'),
+		     wikidata_id: aw.wikidata_id
+		}) AS awards
+		RETURN m.tmdb_id          AS tmdb_id,
+		       m.vote_average     AS vote_average,
+		       m.vote_count       AS vote_count,
+		       m.raw_graph_signal AS raw_graph_signal,
+		       m.wikidata_id      AS wikidata_id,
+		       m.budget           AS budget,
+		       m.revenue          AS revenue,
+		       awards
+	`, map[string]interface{}{"skip": skip, "limit": limit})
+	if err != nil {
+		return nil, fmt.Errorf("GetMoviesForScoreRecompute: %w", err)
+	}
+	items := make([]ScoreRecomputeItem, 0, len(records))
+	for _, rec := range records {
+		item := ScoreRecomputeItem{}
+		if v, ok := rec.Get("tmdb_id"); ok {
+			item.TMDBID = int64Val(v)
+		}
+		if v, ok := rec.Get("vote_average"); ok {
+			item.VoteAverage = float64Val(v)
+		}
+		if v, ok := rec.Get("vote_count"); ok {
+			item.VoteCount = int(int64Val(v))
+		}
+		if v, ok := rec.Get("raw_graph_signal"); ok {
+			item.RawGraphSignal = float64Val(v)
+		}
+		if v, ok := rec.Get("wikidata_id"); ok {
+			item.WikidataID = strVal(v)
+		}
+		if v, ok := rec.Get("budget"); ok {
+			item.Budget = int64Val(v)
+		}
+		if v, ok := rec.Get("revenue"); ok {
+			item.Revenue = int64Val(v)
+		}
+		if v, ok := rec.Get("awards"); ok {
+			item.Awards = toAwards(v)
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// GetTVShowsForScoreRecompute returns a paginated batch of TV shows for score recomputation.
+func (r *MovieRepository) GetTVShowsForScoreRecompute(ctx context.Context, skip, limit int) ([]ScoreRecomputeItem, error) {
+	records, err := r.driver.RunQuery(ctx, `
+		MATCH (s:TVShow)
+		WITH s ORDER BY s.tmdb_id ASC SKIP $skip LIMIT $limit
+		OPTIONAL MATCH (s)-[rel:HAS_WON|HAS_NOMINATION]->(aw:Award)
+		WITH s, collect({
+		     award_name: aw.award_name,
+		     ceremony_name: aw.ceremony_name,
+		     year: rel.year,
+		     recipient_name: rel.recipient_name,
+		     is_nomination: (type(rel) = 'HAS_NOMINATION'),
+		     wikidata_id: aw.wikidata_id
+		}) AS awards
+		RETURN s.tmdb_id          AS tmdb_id,
+		       s.vote_average     AS vote_average,
+		       s.vote_count       AS vote_count,
+		       s.raw_graph_signal AS raw_graph_signal,
+		       s.wikidata_id      AS wikidata_id,
+		       awards
+	`, map[string]interface{}{"skip": skip, "limit": limit})
+	if err != nil {
+		return nil, fmt.Errorf("GetTVShowsForScoreRecompute: %w", err)
+	}
+	items := make([]ScoreRecomputeItem, 0, len(records))
+	for _, rec := range records {
+		item := ScoreRecomputeItem{}
+		if v, ok := rec.Get("tmdb_id"); ok {
+			item.TMDBID = int64Val(v)
+		}
+		if v, ok := rec.Get("vote_average"); ok {
+			item.VoteAverage = float64Val(v)
+		}
+		if v, ok := rec.Get("vote_count"); ok {
+			item.VoteCount = int(int64Val(v))
+		}
+		if v, ok := rec.Get("raw_graph_signal"); ok {
+			item.RawGraphSignal = float64Val(v)
+		}
+		if v, ok := rec.Get("wikidata_id"); ok {
+			item.WikidataID = strVal(v)
+		}
+		if v, ok := rec.Get("awards"); ok {
+			item.Awards = toAwards(v)
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// UpdateNodeScore writes a new cinova_score to a Movie or TVShow node identified by tmdb_id.
+func (r *MovieRepository) UpdateNodeScore(ctx context.Context, label string, tmdbID int64, score float64) error {
+	cypher := fmt.Sprintf(`MATCH (n:%s {tmdb_id: $tmdb_id}) SET n.cinova_score = $score`, label)
+	return r.driver.RunWriteUnit(ctx, cypher, map[string]interface{}{
+		"tmdb_id": tmdbID,
+		"score":   score,
+	})
 }
 
 // GetMoviesWithoutSynopsis returns up to limit Movie nodes that lack a cinova_synopsis,

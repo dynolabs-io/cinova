@@ -111,8 +111,13 @@ func main() {
 		runPlotRecovery(ctx, wikiClient, movieRepo)
 	case "assess":
 		runAssessment(ctx, movieRepo)
+	case "score-recompute":
+		log.Info().Msg("recomputing CinovaScores using actual award + prestige data")
+		if err := runScoreRecompute(ctx, movieRepo); err != nil {
+			log.Fatal().Err(err).Msg("score recompute failed")
+		}
 	default:
-		log.Fatal().Str("mode", *mode).Msg("unknown mode; use full, delta, enrich-only, plot-recovery, or assess")
+		log.Fatal().Str("mode", *mode).Msg("unknown mode; use full, delta, enrich-only, plot-recovery, assess, or score-recompute")
 	}
 
 	log.Info().Msg("ingestion complete")
@@ -929,4 +934,94 @@ func runQualityCheck(ctx context.Context, repo *graph.MovieRepository, phase str
 		Msg("QUALITY CHECK")
 
 	return rep.PassRate >= qualityMinPass
+}
+
+// ── Score Recompute ────────────────────────────────────────────────────────────
+
+// runScoreRecompute fetches every Movie and TVShow in batches, computes the
+// full CinovaScore using Go's scoring package (real AwardTier string matching,
+// Bayesian audience signal, prestige normalisation), and writes it back.
+// This fixes stale scores where awards arrived after the initial ingestion.
+func runScoreRecompute(ctx context.Context, repo *graph.MovieRepository) error {
+	const batchSize = 500
+
+	maxSignal, err := repo.GetMaxRawGraphSignal(ctx)
+	if err != nil || maxSignal <= 0 {
+		log.Warn().Float64("max_signal", maxSignal).Msg("score-recompute: no graph signal yet, prestige will be zero")
+	}
+
+	weights := scoring.DefaultWeights()
+	var total int64
+
+	// Movies
+	for skip := 0; ; skip += batchSize {
+		items, err := repo.GetMoviesForScoreRecompute(ctx, skip, batchSize)
+		if err != nil {
+			return fmt.Errorf("GetMoviesForScoreRecompute skip=%d: %w", skip, err)
+		}
+		if len(items) == 0 {
+			break
+		}
+		for _, item := range items {
+			prestige := 0.0
+			if maxSignal > 0 {
+				prestige = item.RawGraphSignal / maxSignal
+			}
+			// If Wikidata not checked yet, use neutral award signal
+			awardSig := 0.5
+			if item.WikidataID != "" {
+				awardSig = scoring.ComputeAwardScore(item.Awards)
+			}
+			score := scoring.ComputeFullScore(scoring.ScoreParams{
+				VoteAverage:   item.VoteAverage,
+				VoteCount:     item.VoteCount,
+				CriticScore:   -1,
+				AwardScore:    awardSig,
+				GraphPrestige: prestige,
+				Budget:        item.Budget,
+				Revenue:       item.Revenue,
+			}, weights)
+			if err := repo.UpdateNodeScore(ctx, "Movie", item.TMDBID, score); err != nil {
+				log.Warn().Err(err).Int64("tmdb_id", item.TMDBID).Msg("score-recompute: update failed")
+			}
+			total++
+		}
+		log.Info().Int("skip", skip).Int64("updated", total).Msg("score-recompute: movies progress")
+	}
+
+	// TV Shows
+	for skip := 0; ; skip += batchSize {
+		items, err := repo.GetTVShowsForScoreRecompute(ctx, skip, batchSize)
+		if err != nil {
+			return fmt.Errorf("GetTVShowsForScoreRecompute skip=%d: %w", skip, err)
+		}
+		if len(items) == 0 {
+			break
+		}
+		for _, item := range items {
+			prestige := 0.0
+			if maxSignal > 0 {
+				prestige = item.RawGraphSignal / maxSignal
+			}
+			awardSig := 0.5
+			if item.WikidataID != "" {
+				awardSig = scoring.ComputeAwardScore(item.Awards)
+			}
+			score := scoring.ComputeFullScore(scoring.ScoreParams{
+				VoteAverage:   item.VoteAverage,
+				VoteCount:     item.VoteCount,
+				CriticScore:   -1,
+				AwardScore:    awardSig,
+				GraphPrestige: prestige,
+			}, weights)
+			if err := repo.UpdateNodeScore(ctx, "TVShow", item.TMDBID, score); err != nil {
+				log.Warn().Err(err).Int64("tmdb_id", item.TMDBID).Msg("score-recompute: tv update failed")
+			}
+			total++
+		}
+		log.Info().Int("skip", skip).Int64("updated", total).Msg("score-recompute: tv shows progress")
+	}
+
+	log.Info().Int64("total_updated", total).Msg("score-recompute: complete")
+	return nil
 }

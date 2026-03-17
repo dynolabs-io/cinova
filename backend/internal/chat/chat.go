@@ -32,7 +32,7 @@ const (
 	intentTimeout   = 15 * time.Second
 	recommendTimeout = 60 * time.Second
 	historyLimit    = 10 // turns kept as context
-	defaultMinScore = 60.0
+	defaultMinScore = 40.0
 )
 
 // ── Axon wire types ──────────────────────────────────────────────────────────
@@ -81,6 +81,9 @@ type intentResult struct {
 	Themes             []string `json:"themes,omitempty"`
 	Moods              []string `json:"moods,omitempty"`
 	Providers          []string `json:"providers,omitempty"`
+	Directors          []string `json:"directors,omitempty"`
+	Actors             []string `json:"actors,omitempty"`
+	Language           string   `json:"language,omitempty"`
 	MaxRuntime         int      `json:"max_runtime,omitempty"`
 	MinYear            int      `json:"min_year,omitempty"`
 	MaxYear            int      `json:"max_year,omitempty"`
@@ -98,10 +101,13 @@ Return ONLY valid JSON — no markdown, no code blocks:
   "themes": [],
   "moods": [],
   "providers": [],
+  "directors": [],
+  "actors": [],
+  "language": "",
   "max_runtime": 0,
   "min_year": 0,
   "max_year": 0,
-  "min_score": 60.0
+  "min_score": 40.0
 }
 
 Available genres: Action, Adventure, Animation, Comedy, Crime, Documentary, Drama, Fantasy, Horror, Mystery, Romance, Science Fiction, Thriller, Western
@@ -116,7 +122,11 @@ Rules:
 - Only ask ONE clarifying question, never multiple
 - If user mentions a specific movie, infer its characteristics to find similar titles
 - If user says "on Netflix" / "on HBO" set providers accordingly
-- Default min_score is 60; raise to 70+ if user says "great" or "best"`
+- Default min_score is 40; raise to 70+ if user says "great" or "best"
+- If user names a DIRECTOR (e.g. "Nuri Bilge Ceylan films", "Kubrick movies", "directed by Tarkovsky"), set directors to their name; do NOT filter by genre/mood unless also specified
+- If user names an ACTOR (e.g. "movies with Tom Hanks", "starring Cate Blanchett"), set actors to their name
+- If user asks for films in a specific language (e.g. "Turkish films", "French cinema", "Japanese movies"), set language to the ISO 639-1 code: tr, fr, ja, ko, it, de, es, pt, ar, zh, etc.
+- When directors, actors, or language are set, do NOT raise min_score — keep it at 40 or lower so niche/arthouse films are included`
 
 // ── Recommendation output ────────────────────────────────────────────────────
 
@@ -234,11 +244,19 @@ func (s *Service) Chat(
 	if minScore <= 0 {
 		minScore = defaultMinScore
 	}
+	// No score floor when the user is searching by specific person or language —
+	// every ingested title by that director/actor/in that language must be shown.
+	if len(intent.Directors) > 0 || len(intent.Actors) > 0 || intent.Language != "" {
+		minScore = 0
+	}
 	filters := graph.ChatFilters{
 		Genres:     intent.Genres,
 		Themes:     intent.Themes,
 		Moods:      intent.Moods,
 		Providers:  intent.Providers,
+		Directors:  intent.Directors,
+		Actors:     intent.Actors,
+		Language:   intent.Language,
 		MaxRuntime: intent.MaxRuntime,
 		MinYear:    intent.MinYear,
 		MaxYear:    intent.MaxYear,
@@ -527,11 +545,18 @@ func (s *Service) StreamChat(
 	if minScore <= 0 {
 		minScore = defaultMinScore
 	}
+	// No score floor for director/actor/language searches
+	if len(intent.Directors) > 0 || len(intent.Actors) > 0 || intent.Language != "" {
+		minScore = 0
+	}
 	filters := graph.ChatFilters{
 		Genres:     intent.Genres,
 		Themes:     intent.Themes,
 		Moods:      intent.Moods,
 		Providers:  intent.Providers,
+		Directors:  intent.Directors,
+		Actors:     intent.Actors,
+		Language:   intent.Language,
 		MaxRuntime: intent.MaxRuntime,
 		MinYear:    intent.MinYear,
 		MaxYear:    intent.MaxYear,
