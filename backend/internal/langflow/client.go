@@ -53,9 +53,10 @@ type PipelineOutput struct {
 
 // runRequest mirrors the Langflow /api/v1/run/{flow_id} body.
 type runRequest struct {
-	InputValue string `json:"input_value"`
-	OutputType string `json:"output_type"`
-	InputType  string `json:"input_type"`
+	InputValue string                       `json:"input_value"`
+	OutputType string                       `json:"output_type"`
+	InputType  string                       `json:"input_type"`
+	Tweaks     map[string]map[string]string `json:"tweaks,omitempty"`
 }
 
 // runResponse is the shape of the Langflow run response.
@@ -75,10 +76,16 @@ func (c *Client) Run(ctx context.Context, input PipelineInput) (*PipelineOutput,
 		return nil, fmt.Errorf("langflow: marshal pipeline input: %w", err)
 	}
 
+	inputStr := string(inputJSON)
 	body, err := json.Marshal(runRequest{
-		InputValue: string(inputJSON),
+		InputValue: inputStr,
 		OutputType: "text",
 		InputType:  "text",
+		// Pass the input explicitly as a tweak so the component receives it
+		// regardless of the flow's default routing.
+		Tweaks: map[string]map[string]string{
+			"CinovaChatPipeline-0001": {"input_value": inputStr},
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("langflow: marshal run request: %w", err)
