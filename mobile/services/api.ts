@@ -322,26 +322,44 @@ export function streamChatMessage(
     }
   };
 
-  const setup = async () => {
+  const doRequest = async (retry = false) => {
     const [token, sessionId] = await Promise.all([getToken(), getSessionId()]);
     if (aborted) return;
 
-    xhr.open('POST', `${BASE_URL}/api/v1/me/chat/stream?country=${encodeURIComponent(country)}`);
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.setRequestHeader('Accept', 'text/event-stream');
-    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    if (sessionId) xhr.setRequestHeader('X-Session-ID', sessionId);
-    xhr.timeout = 120_000;
+    // Fresh XHR on retry (can't reuse after open); reset chunk cursor
+    if (retry) lastLen = 0;
+    const req = retry ? new XMLHttpRequest() : xhr;
 
-    xhr.onprogress = () => processChunk(xhr.responseText);
-    xhr.onload = () => processChunk(xhr.responseText);
-    xhr.onerror = () => onError(new Error('Network error'));
-    xhr.ontimeout = () => onError(new Error('Request timed out'));
+    req.open('POST', `${BASE_URL}/api/v1/me/chat/stream?country=${encodeURIComponent(country)}`);
+    req.setRequestHeader('Content-Type', 'application/json');
+    req.setRequestHeader('Accept', 'text/event-stream');
+    if (token) req.setRequestHeader('Authorization', `Bearer ${token}`);
+    if (sessionId) req.setRequestHeader('X-Session-ID', sessionId);
+    req.timeout = 120_000;
 
-    xhr.send(JSON.stringify({ message, conv_id: convId ?? '' }));
+    req.onprogress = () => processChunk(req.responseText);
+    req.onload = async () => {
+      if (req.status === 401 && !retry) {
+        // Token expired — refresh anonymously then retry once
+        try {
+          const sid = await getSessionId();
+          const res = await authAnonymous(sid ?? undefined);
+          await saveToken(res.access_token);
+          await doRequest(true);
+        } catch (e) {
+          onError(e instanceof Error ? e : new Error('Auth refresh failed'));
+        }
+        return;
+      }
+      processChunk(req.responseText);
+    };
+    req.onerror = () => onError(new Error('Network error'));
+    req.ontimeout = () => onError(new Error('Request timed out'));
+
+    req.send(JSON.stringify({ message, conv_id: convId ?? '' }));
   };
 
-  setup().catch(onError);
+  doRequest().catch(onError);
   return () => { aborted = true; xhr.abort(); };
 }
 

@@ -30,7 +30,7 @@ import (
 
 const (
 	chatModel       = "claude-sonnet-4-6"
-	intentModel     = "claude-haiku-4-5-20251001" // fast + cheap for JSON extraction
+	intentModel     = "claude-sonnet-4-6"
 	intentTimeout   = 15 * time.Second
 	recommendTimeout = 60 * time.Second
 	historyLimit    = 10 // turns kept as context

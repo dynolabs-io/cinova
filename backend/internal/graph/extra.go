@@ -10,6 +10,29 @@ import (
 	"github.com/foundrylab-app/cinova/backend/internal/models"
 )
 
+// latinize converts Turkish (and common accented) characters to their ASCII
+// equivalents so name searches work even when the model omits diacritics.
+func latinize(s string) string {
+	r := strings.ToLower(s)
+	for _, pair := range [][2]string{
+		{"ı", "i"}, {"ğ", "g"}, {"ü", "u"}, {"ş", "s"}, {"ö", "o"}, {"ç", "c"},
+		{"â", "a"}, {"î", "i"}, {"û", "u"}, {"é", "e"}, {"è", "e"}, {"ê", "e"},
+		{"à", "a"}, {"á", "a"}, {"ñ", "n"}, {"ô", "o"}, {"ò", "o"}, {"ó", "o"},
+	} {
+		r = strings.ReplaceAll(r, pair[0], pair[1])
+	}
+	return r
+}
+
+// latinizeAll applies latinize to every element of a slice.
+func latinizeAll(ss []string) []string {
+	out := make([]string, len(ss))
+	for i, s := range ss {
+		out[i] = latinize(s)
+	}
+	return out
+}
+
 // ChatFilters holds intent extracted by the AI from the conversation.
 type ChatFilters struct {
 	Genres     []string
@@ -64,12 +87,13 @@ func (r *MovieRepository) GetChatCandidates(ctx context.Context, f ChatFilters, 
 		conds = append(conds, "EXISTS { MATCH (m)-[:AVAILABLE_ON {country: $country}]->(p:Provider) WHERE any(pv IN $providers WHERE toLower(p.provider_name) CONTAINS toLower(pv)) }")
 	}
 	if len(f.Directors) > 0 {
-		params["directors"] = f.Directors
-		conds = append(conds, "EXISTS { MATCH (d:Person)-[:DIRECTED]->(m) WHERE any(dn IN $directors WHERE toLower(d.name) CONTAINS toLower(dn)) }")
+		params["directors"] = latinizeAll(f.Directors)
+		// Normalize stored name the same way so Turkish diacritics match ASCII queries
+		conds = append(conds, "EXISTS { MATCH (d:Person)-[:DIRECTED]->(m) WHERE any(dn IN $directors WHERE replace(replace(replace(replace(replace(replace(toLower(d.name),'ı','i'),'ğ','g'),'ü','u'),'ş','s'),'ö','o'),'ç','c') CONTAINS dn) }")
 	}
 	if len(f.Actors) > 0 {
-		params["actors"] = f.Actors
-		conds = append(conds, "EXISTS { MATCH (a:Person)-[:ACTED_IN]->(m) WHERE any(an IN $actors WHERE toLower(a.name) CONTAINS toLower(an)) }")
+		params["actors"] = latinizeAll(f.Actors)
+		conds = append(conds, "EXISTS { MATCH (a:Person)-[:ACTED_IN]->(m) WHERE any(an IN $actors WHERE replace(replace(replace(replace(replace(replace(toLower(a.name),'ı','i'),'ğ','g'),'ü','u'),'ş','s'),'ö','o'),'ç','c') CONTAINS an) }")
 	}
 	if f.Language != "" {
 		params["language"] = strings.ToLower(f.Language)
