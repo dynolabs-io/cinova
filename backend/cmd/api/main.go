@@ -20,6 +20,7 @@ import (
 	"github.com/foundrylab-app/cinova/backend/internal/config"
 	"github.com/foundrylab-app/cinova/backend/internal/graph"
 	"github.com/foundrylab-app/cinova/backend/internal/handlers"
+	"github.com/foundrylab-app/cinova/backend/internal/langflow"
 	"github.com/foundrylab-app/cinova/backend/internal/search"
 	"github.com/foundrylab-app/cinova/backend/internal/store"
 	"github.com/foundrylab-app/cinova/backend/internal/workflow"
@@ -88,14 +89,22 @@ func main() {
 	// Chat service
 	chatSvc := chat.New(movieRepo, pg, cfg)
 
-	// Temporal worker (optional — disabled when TEMPORAL_ADDRESS is unset)
+	// Langflow client (optional — preferred runtime when LANGFLOW_URL + LANGFLOW_FLOW_ID are set)
+	var langflowClient *langflow.Client
+	if cfg.LangflowURL != "" && cfg.LangflowFlowID != "" {
+		langflowClient = langflow.New(cfg.LangflowURL, cfg.LangflowFlowID, cfg.LangflowAPIKey)
+		log.Info().Str("url", cfg.LangflowURL).Str("flow_id", cfg.LangflowFlowID).Msg("langflow: chat pipeline enabled")
+	}
+
+	// Temporal worker (optional — disabled when TEMPORAL_ADDRESS is unset or Langflow is active)
 	temporalShutdown, temporalClient, err := workflow.Start(cfg.TemporalAddress, chatSvc)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to start temporal worker")
 	}
 	defer temporalShutdown()
 
-	chatHandler := handlers.NewChatHandler(chatSvc, pg, temporalClient)
+	candidatesHandler := handlers.NewCandidatesHandler(chatSvc)
+	chatHandler := handlers.NewChatHandler(chatSvc, pg, langflowClient, temporalClient)
 
 	// Router
 	r := chi.NewRouter()
@@ -116,6 +125,11 @@ func main() {
 	r.Use(zerologMiddleware)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(90 * time.Second))
+
+	// Internal routes (cluster-only — not exposed via ingress)
+	r.Route("/internal/v1", func(r chi.Router) {
+		r.Post("/candidates", candidatesHandler.GetCandidates)
+	})
 
 	// Health endpoints (no auth)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {

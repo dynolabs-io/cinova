@@ -32,6 +32,10 @@ type Config struct {
 	LangfusePublicKey string
 	LangfuseSecretKey string
 
+	LangflowURL    string
+	LangflowFlowID string
+	LangflowAPIKey string
+
 	TemporalAddress string
 
 	LogLevel string
@@ -55,6 +59,9 @@ func Load() (*Config, error) {
 		LangfuseURL:       getEnv("LANGFUSE_URL", ""),
 		LangfusePublicKey: getEnv("LANGFUSE_PUBLIC_KEY", ""),
 		LangfuseSecretKey: getEnv("LANGFUSE_SECRET_KEY", ""),
+		LangflowURL:       getEnv("LANGFLOW_URL", ""),
+		LangflowFlowID:    getEnv("LANGFLOW_FLOW_ID", ""),
+		LangflowAPIKey:    getEnv("LANGFLOW_API_KEY", ""),
 		TemporalAddress:   getEnv("TEMPORAL_ADDRESS", ""),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),
 		JWTAccessTTLSec:  getEnvInt("JWT_ACCESS_TTL_SEC", 900),   // 15 min

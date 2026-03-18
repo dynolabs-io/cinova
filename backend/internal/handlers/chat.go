@@ -14,6 +14,7 @@ import (
 
 	"github.com/foundrylab-app/cinova/backend/internal/auth"
 	"github.com/foundrylab-app/cinova/backend/internal/chat"
+	"github.com/foundrylab-app/cinova/backend/internal/langflow"
 	"github.com/foundrylab-app/cinova/backend/internal/models"
 	"github.com/foundrylab-app/cinova/backend/internal/store"
 	"github.com/foundrylab-app/cinova/backend/internal/workflow"
@@ -23,13 +24,15 @@ import (
 type ChatHandler struct {
 	svc            *chat.Service
 	pg             *store.PostgresStore
+	langflowClient *langflow.Client     // preferred — nil falls back to Temporal or direct
 	temporalClient temporalclient.Client // optional — nil means direct execution
 }
 
 // NewChatHandler creates a new ChatHandler.
-// Pass a non-nil temporalClient to route non-streaming Chat through Temporal.
-func NewChatHandler(svc *chat.Service, pg *store.PostgresStore, temporalClient client.Client) *ChatHandler {
-	return &ChatHandler{svc: svc, pg: pg, temporalClient: temporalClient}
+// Pass a non-nil langflowClient to route chat through Langflow.
+// Pass a non-nil temporalClient to route chat through Temporal (legacy).
+func NewChatHandler(svc *chat.Service, pg *store.PostgresStore, lf *langflow.Client, temporalClient client.Client) *ChatHandler {
+	return &ChatHandler{svc: svc, pg: pg, langflowClient: lf, temporalClient: temporalClient}
 }
 
 // Chat handles a single conversation turn.
@@ -66,6 +69,11 @@ func (h *ChatHandler) Chat(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Warn().Err(err).Str("conv_id", convID).Msg("chat: failed to load history")
 		history = []models.ChatMessage{}
+	}
+
+	if h.langflowClient != nil {
+		h.chatViaLangflow(w, r, userID, sessionID, convID, country, history, req.Message)
+		return
 	}
 
 	if h.temporalClient != nil {
@@ -180,6 +188,11 @@ func (h *ChatHandler) ChatStream(w http.ResponseWriter, r *http.Request) {
 	rc := http.NewResponseController(w)
 	_ = rc.SetWriteDeadline(time.Time{})
 
+	if h.langflowClient != nil {
+		h.streamViaLangflow(r.Context(), w, flusher, userID, sessionID, convID, country, history, req.Message)
+		return
+	}
+
 	if h.temporalClient != nil {
 		h.streamViaWorkflow(r.Context(), w, flusher, userID, sessionID, convID, country, history, req.Message)
 		return
@@ -275,6 +288,121 @@ func (h *ChatHandler) streamViaWorkflow(
 			lastStep = step
 			if label, ok := stepLabels[step]; ok {
 				sendSSE(map[string]string{"type": "status", "text": label})
+			}
+		}
+	}
+}
+
+// ── Langflow-backed methods ────────────────────────────────────────────────────
+
+// chatViaLangflow runs the chat pipeline through Langflow and returns JSON.
+func (h *ChatHandler) chatViaLangflow(
+	w http.ResponseWriter,
+	r *http.Request,
+	userID, sessionID, convID, country string,
+	history []models.ChatMessage,
+	message string,
+) {
+	input := langflow.PipelineInput{
+		Message:   message,
+		Country:   country,
+		SessionID: sessionID,
+		ConvID:    convID,
+		UserID:    userID,
+		History:   history,
+	}
+
+	ctx := r.Context()
+	out, err := h.langflowClient.Run(ctx, input)
+	if err != nil {
+		log.Error().Err(err).Msg("chat langflow: pipeline failed")
+		writeError(w, "internal_error", "chat pipeline unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	// Persist conversation history.
+	h.svc.PersistMessages(ctx, userID, sessionID, message, out.Reply)
+
+	writeJSON(w, http.StatusOK, &models.ChatResponse{
+		Reply:       out.Reply,
+		Suggestions: out.Suggestions,
+		ConvID:      convID,
+	})
+}
+
+// streamViaLangflow runs the Langflow pipeline and emits SSE events.
+// Sends status events during execution, then the full reply + suggestions.
+func (h *ChatHandler) streamViaLangflow(
+	ctx context.Context,
+	w http.ResponseWriter,
+	flusher http.Flusher,
+	userID, sessionID, convID, country string,
+	history []models.ChatMessage,
+	message string,
+) {
+	sendSSE := func(v interface{}) {
+		b, _ := json.Marshal(v)
+		fmt.Fprintf(w, "data: %s\n\n", b)
+		flusher.Flush()
+	}
+
+	sendSSE(map[string]string{"type": "status", "text": "Analyzing your request…"})
+
+	input := langflow.PipelineInput{
+		Message:   message,
+		Country:   country,
+		SessionID: sessionID,
+		ConvID:    convID,
+		UserID:    userID,
+		History:   history,
+	}
+
+	// Run Langflow in a goroutine so we can send intermediate status events.
+	type result struct {
+		out *langflow.PipelineOutput
+		err error
+	}
+	resultCh := make(chan result, 1)
+	go func() {
+		out, err := h.langflowClient.Run(ctx, input)
+		resultCh <- result{out, err}
+	}()
+
+	// Send status updates while waiting.
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	statuses := []string{"Searching films…", "Writing recommendations…"}
+	statusIdx := 0
+
+	for {
+		select {
+		case r := <-resultCh:
+			if r.err != nil {
+				log.Error().Err(r.err).Msg("chat stream langflow: pipeline failed")
+				sendSSE(map[string]string{"type": "error", "text": "pipeline execution failed"})
+				sendSSE(map[string]string{"type": "done"})
+				return
+			}
+
+			// Persist conversation history.
+			h.svc.PersistMessages(ctx, userID, sessionID, message, r.out.Reply)
+
+			sendSSE(map[string]string{"type": "delta", "text": r.out.Reply})
+			sendSSE(map[string]interface{}{
+				"type":    "suggestions",
+				"items":   r.out.Suggestions,
+				"conv_id": convID,
+			})
+			sendSSE(map[string]string{"type": "done"})
+			return
+
+		case <-ctx.Done():
+			return
+
+		case <-ticker.C:
+			if statusIdx < len(statuses) {
+				sendSSE(map[string]string{"type": "status", "text": statuses[statusIdx]})
+				statusIdx++
 			}
 		}
 	}

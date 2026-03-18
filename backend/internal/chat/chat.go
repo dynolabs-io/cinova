@@ -487,6 +487,11 @@ func (s *Service) callAxonWithModel(ctx context.Context, messages []axonMessage,
 	return strings.TrimSpace(content), nil
 }
 
+// PersistMessages is the exported version of persistMessages for use by external handlers.
+func (s *Service) PersistMessages(ctx context.Context, userID, sessionID, userMsg, assistantMsg string) {
+	s.persistMessages(ctx, userID, sessionID, userMsg, assistantMsg)
+}
+
 // persistMessages saves the user message and assistant reply to postgres.
 // Errors are logged but not returned — persistence failure should not block the user.
 func (s *Service) persistMessages(ctx context.Context, userID, sessionID, userMsg, assistantMsg string) {
@@ -958,6 +963,12 @@ func (s *Service) fetchCandidates(ctx context.Context, filters graph.ChatFilters
 		}
 	}
 	return candidates, providerDropped
+}
+
+// FetchCandidates is the exported version of fetchCandidates for use by the
+// internal candidates endpoint (called by Langflow during pipeline execution).
+func (s *Service) FetchCandidates(ctx context.Context, filters graph.ChatFilters, country string) ([]models.MovieSummary, bool) {
+	return s.fetchCandidates(ctx, filters, country)
 }
 
 // buildFallbackResponse produces a plain list response when AI generation fails.
