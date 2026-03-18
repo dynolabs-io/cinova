@@ -217,7 +217,7 @@ func (s *Service) Chat(
 ) (*models.ChatResponse, error) {
 
 	// ── Pass 1: extract intent ─────────────────────────────────────────────
-	intent, err := s.extractIntent(ctx, history, newMessage)
+	intent, _, err := s.extractIntent(ctx, history, newMessage)
 	if err != nil {
 		log.Warn().Err(err).Msg("chat: intent extraction failed, using defaults")
 		intent = &intentResult{MinScore: defaultMinScore}
@@ -312,7 +312,8 @@ func (s *Service) Chat(
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
 // extractIntent calls Claude to parse the conversation into structured filters.
-func (s *Service) extractIntent(ctx context.Context, history []models.ChatMessage, newMsg string) (*intentResult, error) {
+// It also returns the full messages array sent to Axon so callers can attach it to traces.
+func (s *Service) extractIntent(ctx context.Context, history []models.ChatMessage, newMsg string) (*intentResult, []axonMessage, error) {
 	messages := []axonMessage{{Role: "system", Content: intentSystemPrompt}}
 	for _, h := range history {
 		messages = append(messages, axonMessage{Role: h.Role, Content: h.Content})
@@ -324,14 +325,14 @@ func (s *Service) extractIntent(ctx context.Context, history []models.ChatMessag
 
 	raw, err := s.callAxonWithModel(intentCtx, messages, 400, intentModel)
 	if err != nil {
-		return nil, err
+		return nil, messages, err
 	}
 
 	var result intentResult
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
-		return nil, fmt.Errorf("parse intent: %w (raw: %.200s)", err, raw)
+		return nil, messages, fmt.Errorf("parse intent: %w (raw: %.200s)", err, raw)
 	}
-	return &result, nil
+	return &result, messages, nil
 }
 
 // writeRecommendations builds the candidate list and calls Claude to produce
@@ -534,10 +535,10 @@ func (s *Service) StreamChat(
 
 	// Pass 1: extract intent
 	intentStart := time.Now()
-	intent, err := s.extractIntent(ctx, history, newMessage)
+	intent, intentMessages, err := s.extractIntent(ctx, history, newMessage)
 	trace.IntentStart = intentStart
 	trace.IntentEnd = time.Now()
-	trace.IntentInput = map[string]interface{}{"history_len": len(history), "message": newMessage}
+	trace.IntentInput = intentMessages // full messages array — visible in Langfuse
 	if err != nil {
 		log.Warn().Err(err).Msg("chat stream: intent extraction failed, using defaults")
 		intent = &intentResult{MinScore: defaultMinScore}
