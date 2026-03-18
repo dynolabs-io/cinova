@@ -35,7 +35,11 @@ func Start(temporalAddress string, chatSvc *chat.Service) (func(), client.Client
 	})
 
 	w.RegisterWorkflow(ChatWorkflow)
-	w.RegisterActivity(chatSvc)
+	// Register only the three Temporal activity methods — registering chatSvc as a whole
+	// would also pick up helpers like FetchCandidates that don't return (T, error).
+	w.RegisterActivity(chatSvc.ExtractIntentActivity)
+	w.RegisterActivity(chatSvc.FetchCandidatesActivity)
+	w.RegisterActivity(chatSvc.WriteRecsActivity)
 
 	if err := w.Start(); err != nil {
 		c.Close()
