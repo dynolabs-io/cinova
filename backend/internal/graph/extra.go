@@ -4,33 +4,86 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
+
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j/dbtype"
 
 	"github.com/foundrylab-app/cinova/backend/internal/models"
 )
 
-// latinize converts Turkish (and common accented) characters to their ASCII
-// equivalents so name searches work even when the model omits diacritics.
-func latinize(s string) string {
-	r := strings.ToLower(s)
-	for _, pair := range [][2]string{
-		{"ı", "i"}, {"ğ", "g"}, {"ü", "u"}, {"ş", "s"}, {"ö", "o"}, {"ç", "c"},
-		{"â", "a"}, {"î", "i"}, {"û", "u"}, {"é", "e"}, {"è", "e"}, {"ê", "e"},
-		{"à", "a"}, {"á", "a"}, {"ñ", "n"}, {"ô", "o"}, {"ò", "o"}, {"ó", "o"},
-	} {
-		r = strings.ReplaceAll(r, pair[0], pair[1])
-	}
-	return r
+// asciiName normalises a person name to lowercase ASCII for fuzzy matching.
+//
+// Strategy:
+//  1. NFD-decompose: é→e+combining_acute, ü→u+combining_diaeresis, ç→c+combining_cedilla, etc.
+//  2. Strip all Unicode combining/mark characters (the accent/diacritic glyphs).
+//  3. Handle the few characters that do NOT decompose via NFD and need manual mapping:
+//     - ı (U+0131, Turkish dotless-i) → i
+//     - ß (U+00DF, German sharp-s)    → ss
+//     - æ (U+00E6)                    → ae
+//     - ø (U+00F8)                    → o
+//     - å (U+00E5) decomposes, handled by step 2
+//
+// This covers virtually all Latin-script diacritics (Turkish, French, German, Spanish,
+// Portuguese, Scandinavian, Eastern European, etc.) without a hand-picked character list.
+var asciiNameTransformer = transform.Chain(norm.NFD, transform.RemoveFunc(unicode.IsMark))
+
+func asciiName(s string) string {
+	lower := strings.ToLower(s)
+	result, _, _ := transform.String(asciiNameTransformer, lower)
+	// Non-decomposable characters — manual pass
+	result = strings.ReplaceAll(result, "ı", "i")  // Turkish dotless-i (U+0131)
+	result = strings.ReplaceAll(result, "ß", "ss") // German sharp-s
+	result = strings.ReplaceAll(result, "æ", "ae") // ae ligature
+	result = strings.ReplaceAll(result, "ø", "o")  // Nordic o-slash
+	return result
 }
 
-// latinizeAll applies latinize to every element of a slice.
-func latinizeAll(ss []string) []string {
+// asciiNames applies asciiName to every element of a slice.
+func asciiNames(ss []string) []string {
 	out := make([]string, len(ss))
 	for i, s := range ss {
-		out[i] = latinize(s)
+		out[i] = asciiName(s)
 	}
 	return out
+}
+
+// cypherDiacriticReplacements is the same set of mappings as asciiName() but expressed
+// as Cypher replace() calls. Neo4j has no built-in NFD decomposition, so we chain replace()
+// for each diacritic that appears in TMDB person names.
+var cypherDiacriticReplacements = [][2]string{
+	// Non-decomposable via NFD — must be first so subsequent passes see plain letters
+	{"ı", "i"},   // Turkish dotless-i
+	{"ß", "ss"},  // German sharp-s (expands to two chars)
+	{"æ", "ae"},  // ae ligature
+	{"ø", "o"},   // Nordic o-slash
+	// Vowels with diacritics (all decompose via NFD in Go but not in Cypher)
+	{"à", "a"}, {"á", "a"}, {"â", "a"}, {"ã", "a"}, {"ä", "a"}, {"å", "a"},
+	{"è", "e"}, {"é", "e"}, {"ê", "e"}, {"ë", "e"},
+	{"ì", "i"}, {"í", "i"}, {"î", "i"}, {"ï", "i"},
+	{"ò", "o"}, {"ó", "o"}, {"ô", "o"}, {"õ", "o"}, {"ö", "o"}, {"ő", "o"},
+	{"ù", "u"}, {"ú", "u"}, {"û", "u"}, {"ü", "u"}, {"ű", "u"},
+	{"ý", "y"}, {"ÿ", "y"},
+	// Consonants with diacritics
+	{"ñ", "n"},
+	{"ğ", "g"}, {"ş", "s"}, {"ç", "c"}, // Turkish
+	{"ć", "c"}, {"č", "c"}, {"š", "s"}, {"ž", "z"}, // Slavic
+	{"ř", "r"}, {"ě", "e"}, {"ď", "d"}, {"ť", "t"},
+	{"ľ", "l"}, {"ĺ", "l"}, {"ń", "n"}, {"ź", "z"}, {"ż", "z"},
+	// Long vowels (Baltic, Maori, etc.)
+	{"ā", "a"}, {"ē", "e"}, {"ī", "i"}, {"ō", "o"}, {"ū", "u"},
+}
+
+// buildCypherAsciiName wraps a Cypher expression with chained replace() calls that
+// normalise diacritics to ASCII — the Cypher equivalent of asciiName().
+func buildCypherAsciiName(expr string) string {
+	result := fmt.Sprintf("toLower(%s)", expr)
+	for _, pair := range cypherDiacriticReplacements {
+		result = fmt.Sprintf("replace(%s,'%s','%s')", result, pair[0], pair[1])
+	}
+	return result
 }
 
 // ChatFilters holds intent extracted by the AI from the conversation.
@@ -87,13 +140,18 @@ func (r *MovieRepository) GetChatCandidates(ctx context.Context, f ChatFilters, 
 		conds = append(conds, "EXISTS { MATCH (m)-[:AVAILABLE_ON {country: $country}]->(p:Provider) WHERE any(pv IN $providers WHERE toLower(p.provider_name) CONTAINS toLower(pv)) }")
 	}
 	if len(f.Directors) > 0 {
-		params["directors"] = latinizeAll(f.Directors)
-		// Normalize stored name the same way so Turkish diacritics match ASCII queries
-		conds = append(conds, "EXISTS { MATCH (d:Person)-[:DIRECTED]->(m) WHERE any(dn IN $directors WHERE replace(replace(replace(replace(replace(replace(toLower(d.name),'ı','i'),'ğ','g'),'ü','u'),'ş','s'),'ö','o'),'ç','c') CONTAINS dn) }")
+		params["directors"] = asciiNames(f.Directors)
+		conds = append(conds, fmt.Sprintf(
+			"EXISTS { MATCH (d:Person)-[:DIRECTED]->(m) WHERE any(dn IN $directors WHERE %s CONTAINS dn) }",
+			buildCypherAsciiName("d.name"),
+		))
 	}
 	if len(f.Actors) > 0 {
-		params["actors"] = latinizeAll(f.Actors)
-		conds = append(conds, "EXISTS { MATCH (a:Person)-[:ACTED_IN]->(m) WHERE any(an IN $actors WHERE replace(replace(replace(replace(replace(replace(toLower(a.name),'ı','i'),'ğ','g'),'ü','u'),'ş','s'),'ö','o'),'ç','c') CONTAINS an) }")
+		params["actors"] = asciiNames(f.Actors)
+		conds = append(conds, fmt.Sprintf(
+			"EXISTS { MATCH (a:Person)-[:ACTED_IN]->(m) WHERE any(an IN $actors WHERE %s CONTAINS an) }",
+			buildCypherAsciiName("a.name"),
+		))
 	}
 	if f.Language != "" {
 		params["language"] = strings.ToLower(f.Language)

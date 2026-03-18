@@ -127,6 +127,7 @@ Rules:
 - Default min_score is 40; raise to 70+ if user says "great" or "best"
 - If user names a DIRECTOR (e.g. "Nuri Bilge Ceylan films", "Kubrick movies", "directed by Tarkovsky"), set directors to their name; do NOT filter by genre/mood unless also specified
 - If user names an ACTOR (e.g. "movies with Tom Hanks", "starring Cate Blanchett"), set actors to their name
+- IMPORTANT: Always write director and actor names using plain ASCII Latin letters only — no accents, diacritics, or special characters. Examples: "Francois Truffaut" not "François Truffaut", "Nuri Bilge Ceylan" not "Nurı Bilge Ceylan", "Alejandro Inarritu" not "Alejandro Iñárritu", "Yilmaz Guney" not "Yılmaz Güney"
 - If user asks for films in a specific language (e.g. "Turkish films", "French cinema", "Japanese movies"), set language to the ISO 639-1 code: tr, fr, ja, ko, it, de, es, pt, ar, zh, etc.
 - When directors, actors, or language are set, do NOT raise min_score — keep it at 40 or lower so niche/arthouse films are included`
 
