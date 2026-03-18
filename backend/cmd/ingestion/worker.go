@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	enums "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -146,7 +147,7 @@ type ingestionScheduleSpec struct {
 	id      string
 	cron    string
 	input   IngestionInput
-	overlap client.ScheduleOverlapPolicy
+	overlap enums.ScheduleOverlapPolicy
 }
 
 // ensureSchedules creates the three ingestion Temporal Schedules on first start.
@@ -162,7 +163,7 @@ func ensureSchedules(ctx context.Context, c client.Client) {
 				Country:   "US",
 				MinVotes:  "50",
 			},
-			overlap: client.ScheduleOverlapPolicySkip,
+			overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 		},
 		{
 			id:   "cinova-ingestion-enrich",
@@ -171,7 +172,7 @@ func ensureSchedules(ctx context.Context, c client.Client) {
 				Mode:      "enrich-only",
 				MediaType: "all",
 			},
-			overlap: client.ScheduleOverlapPolicySkip,
+			overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 		},
 		{
 			id:   "cinova-ingestion-full",
@@ -183,7 +184,7 @@ func ensureSchedules(ctx context.Context, c client.Client) {
 				MinVotes:      "100",
 				MinPopularity: "1",
 			},
-			overlap: client.ScheduleOverlapPolicySkip,
+			overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 		},
 	}
 
