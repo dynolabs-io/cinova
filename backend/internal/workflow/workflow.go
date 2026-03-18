@@ -119,8 +119,10 @@ func ChatWorkflow(ctx workflow.Context, input ChatInput) (*ChatOutput, error) {
 	recAO := workflow.ActivityOptions{
 		StartToCloseTimeout: 90 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts: 2,
-			InitialInterval: 2 * time.Second,
+			MaximumAttempts:    5,
+			InitialInterval:    3 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    30 * time.Second,
 		},
 	}
 	var recOut chat.WriteRecsOutput

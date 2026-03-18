@@ -33,12 +33,19 @@ const (
 )
 
 func main() {
-	mode           := flag.String("mode", "delta", "ingestion mode: full or delta")
+	mode           := flag.String("mode", "delta", "ingestion mode: full, delta, enrich-only, score-recompute, or worker")
 	mediaType      := flag.String("media-type", "all", "media type: movie, tvshow, or all")
 	country        := flag.String("country", "US", "ISO 3166-1 alpha-2 country code for streaming providers")
 	minVotes       := flag.Int("min-votes", 100, "minimum vote_count to include (quality filter)")
 	minPopularity  := flag.Float64("min-popularity", 5.0, "minimum TMDB popularity to include from bulk export (0=all)")
 	flag.Parse()
+
+	// Worker mode connects to Temporal and runs as a long-lived worker process.
+	// It does not need the full API config (no Postgres/Redis/JWT).
+	if *mode == "worker" {
+		runWorker()
+		return
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -117,7 +124,7 @@ func main() {
 			log.Fatal().Err(err).Msg("score recompute failed")
 		}
 	default:
-		log.Fatal().Str("mode", *mode).Msg("unknown mode; use full, delta, enrich-only, plot-recovery, assess, or score-recompute")
+		log.Fatal().Str("mode", *mode).Msg("unknown mode; use full, delta, enrich-only, plot-recovery, assess, score-recompute, or worker")
 	}
 
 	log.Info().Msg("ingestion complete")
