@@ -96,7 +96,7 @@ type RecEntry struct {
 // ExtractIntentActivity wraps extractIntent for Temporal activity use.
 func (s *Service) ExtractIntentActivity(ctx context.Context, input ExtractIntentInput) (*ExtractIntentOutput, error) {
 	start := time.Now()
-	result, err := s.extractIntent(ctx, input.History, input.Message)
+	result, _, err := s.extractIntent(ctx, input.History, input.Message)
 	end := time.Now()
 	if err != nil {
 		return nil, err
