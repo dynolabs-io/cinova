@@ -951,8 +951,10 @@ func (s *Service) fetchCandidates(ctx context.Context, filters graph.ChatFilters
 		}
 	}
 
-	// Tier 3: drop all filters — flag it so Claude can acknowledge the gap
-	if len(candidates) < 3 {
+	// Tier 3: drop all filters — skip if a specific director/actor was requested
+	// and we already have at least one matching candidate; the AI handles the thin set gracefully.
+	hasPersonFilter := len(filters.Directors) > 0 || len(filters.Actors) > 0
+	if len(candidates) < 3 && !(hasPersonFilter && len(candidates) > 0) {
 		log.Info().Int("n", len(candidates)).Msg("chat: dropping all filters")
 		bare := graph.ChatFilters{MinScore: defaultMinScore, ExcludeIDs: filters.ExcludeIDs}
 		if more, err2 := s.repo.GetChatCandidates(ctx, bare, country); err2 == nil && len(more) > len(candidates) {
