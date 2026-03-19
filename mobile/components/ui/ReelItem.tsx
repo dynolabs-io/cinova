@@ -148,12 +148,6 @@ export default function ReelItem({
           color={Colors.scoreMid}
           onPress={() => { hapticMedium(); onRate?.(movie); }}
         />
-        <ActionButton
-          label="✕"
-          sublabel="Skip"
-          color={Colors.textSecondary}
-          onPress={() => { hapticLight(); onDismiss?.(movie); }}
-        />
         {trailerKey && (
           <ActionButton
             label="▶"

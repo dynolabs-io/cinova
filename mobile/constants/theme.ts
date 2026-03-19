@@ -182,7 +182,7 @@ export const Layout = {
   carouselGap: 10,
 
   // Tab bar
-  tabBarHeight: 60,
+  tabBarHeight: 69,
 } as const;
 
 export const Theme = {

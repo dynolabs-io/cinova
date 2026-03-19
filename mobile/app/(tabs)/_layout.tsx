@@ -1,8 +1,8 @@
 /**
  * Tab navigator layout
  *
- * Five tabs: Home · Discover · Search · Watchlist · Profile
- * Icons drawn with React Native Views — no font loading required.
+ * Five tabs: Home · Discover · Chat · Watchlist · Profile
+ * Search removed — Chat is the superior discovery interface.
  */
 
 import React from 'react';
@@ -26,8 +26,8 @@ export default function TabLayout() {
           borderTopColor: 'rgba(255,255,255,0.06)',
           borderTopWidth: 1,
           height: Layout.tabBarHeight + (Platform.OS === 'android' ? insets.bottom : 0),
-          paddingBottom: Platform.OS === 'android' ? insets.bottom : 4,
-          paddingTop: 4,
+          paddingBottom: Platform.OS === 'android' ? insets.bottom : 6,
+          paddingTop: 6,
           elevation: 0,
         },
         tabBarShowLabel: false,
@@ -45,13 +45,6 @@ export default function TabLayout() {
         options={{
           title: 'Discover',
           tabBarIcon: ({ color }) => <TabIcon name="discover" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: 'Search',
-          tabBarIcon: ({ color }) => <TabIcon name="search" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -73,6 +66,13 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => <TabIcon name="profile" color={color} />,
+        }}
+      />
+      {/* Hidden — search screen kept for deep-link compatibility but not shown in tab bar */}
+      <Tabs.Screen
+        name="search"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

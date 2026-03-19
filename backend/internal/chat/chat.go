@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	chatModel       = "claude-sonnet-4-6"
-	intentModel     = "claude-sonnet-4-6"
+	chatModel       = "claude-haiku-4-5-20251001"
+	intentModel     = "claude-haiku-4-5-20251001"
 	intentTimeout   = 15 * time.Second
 	recommendTimeout = 60 * time.Second
 	historyLimit    = 10 // turns kept as context
@@ -44,10 +44,15 @@ type axonMessage struct {
 	Content string `json:"content"`
 }
 
+type axonThinking struct {
+	Type string `json:"type"`
+}
+
 type axonRequest struct {
 	Model     string        `json:"model"`
 	Messages  []axonMessage `json:"messages"`
 	MaxTokens int           `json:"max_tokens"`
+	Thinking  *axonThinking `json:"thinking,omitempty"`
 }
 
 type axonResponse struct {
@@ -63,6 +68,7 @@ type axonStreamRequest struct {
 	Messages  []axonMessage `json:"messages"`
 	MaxTokens int           `json:"max_tokens"`
 	Stream    bool          `json:"stream"`
+	Thinking  *axonThinking `json:"thinking,omitempty"`
 }
 
 type axonStreamChunk struct {
@@ -441,6 +447,7 @@ func (s *Service) callAxonWithModel(ctx context.Context, messages []axonMessage,
 		Model:     model,
 		Messages:  messages,
 		MaxTokens: maxTokens,
+		Thinking:  &axonThinking{Type: "disabled"},
 	}
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
@@ -787,6 +794,7 @@ func (s *Service) streamAxonToSSE(
 		Messages:  messages,
 		MaxTokens: maxTokens,
 		Stream:    true,
+		Thinking:  &axonThinking{Type: "disabled"},
 	}
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
