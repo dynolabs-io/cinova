@@ -3,11 +3,12 @@
  *
  * Anonymous sessions allow full app usage before sign-up.
  * Credentials stored in expo-secure-store (hardware-backed on iOS,
- * Android Keystore on Android).
+ * Android Keystore on Android). On web, localStorage is used as fallback.
  */
 
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
+import { Platform } from 'react-native';
 
 const API_BASE = 'https://api.cinova.openova.io';
 
@@ -18,6 +19,33 @@ async function fetchAnonymousToken(deviceId: string): Promise<string> {
 
 const KEY_SESSION_ID = 'cinova_session_id';
 const KEY_JWT = 'cinova_jwt';
+
+// ── Web localStorage fallback ─────────────────────────────────────────────────
+
+function webGet(key: string): string | null {
+  try { return typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null; } catch { return null; }
+}
+function webSet(key: string, value: string): void {
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem(key, value); } catch { /* ignore */ }
+}
+function webDel(key: string): void {
+  try { if (typeof localStorage !== 'undefined') localStorage.removeItem(key); } catch { /* ignore */ }
+}
+
+async function storeGet(key: string): Promise<string | null> {
+  if (Platform.OS === 'web') return webGet(key);
+  try { return await SecureStore.getItemAsync(key); } catch { return webGet(key); }
+}
+
+async function storeSet(key: string, value: string): Promise<void> {
+  if (Platform.OS === 'web') { webSet(key, value); return; }
+  try { await SecureStore.setItemAsync(key, value); } catch { webSet(key, value); }
+}
+
+async function storeDel(key: string): Promise<void> {
+  if (Platform.OS === 'web') { webDel(key); return; }
+  try { await SecureStore.deleteItemAsync(key); } catch { webDel(key); }
+}
 
 // ── UUID v4 (no crypto module needed — pure JS) ───────────────────────────────
 
@@ -34,29 +62,27 @@ function uuidv4(): string {
 
 /**
  * Initialise session on first launch:
- *   1. Generate UUID and persist to SecureStore
+ *   1. Generate UUID and persist to SecureStore / localStorage
  *   2. Exchange UUID for anonymous JWT from the API
- *   3. Persist JWT to SecureStore
+ *   3. Persist JWT
  *
  * If a session already exists, this is a no-op and returns the
  * existing session ID.
  */
 export async function initSession(): Promise<string> {
-  let sessionId: string | null = null;
-  try { sessionId = await SecureStore.getItemAsync(KEY_SESSION_ID); } catch { /* web */ }
+  let sessionId = await storeGet(KEY_SESSION_ID);
 
   if (!sessionId) {
     sessionId = uuidv4();
-    try { await SecureStore.setItemAsync(KEY_SESSION_ID, sessionId); } catch { /* web */ }
+    await storeSet(KEY_SESSION_ID, sessionId);
   }
 
-  let existingToken: string | null = null;
-  try { existingToken = await SecureStore.getItemAsync(KEY_JWT); } catch { /* web */ }
+  const existingToken = await storeGet(KEY_JWT);
 
   if (!existingToken) {
     try {
       const token = await fetchAnonymousToken(sessionId);
-      try { await SecureStore.setItemAsync(KEY_JWT, token); } catch { /* web */ }
+      await storeSet(KEY_JWT, token);
     } catch {
       // Fail silently — app will retry on first authenticated request
     }
@@ -65,24 +91,24 @@ export async function initSession(): Promise<string> {
   return sessionId;
 }
 
-/** Returns the UUID session ID from SecureStore, or null if not initialised. */
+/** Returns the UUID session ID, or null if not initialised. */
 export async function getSessionId(): Promise<string | null> {
-  try { return await SecureStore.getItemAsync(KEY_SESSION_ID); } catch { return null; }
+  return storeGet(KEY_SESSION_ID);
 }
 
-/** Returns the current JWT from SecureStore, or null if not present. */
+/** Returns the current JWT, or null if not present. */
 export async function getToken(): Promise<string | null> {
-  try { return await SecureStore.getItemAsync(KEY_JWT); } catch { return null; }
+  return storeGet(KEY_JWT);
 }
 
 /** Persist a new JWT (called after login / signup / token refresh). */
 export async function saveToken(token: string): Promise<void> {
-  try { await SecureStore.setItemAsync(KEY_JWT, token); } catch { /* web fallback */ }
+  await storeSet(KEY_JWT, token);
 }
 
 /** Remove JWT only (keeps session UUID). Called on 401 refresh failure. */
 export async function clearToken(): Promise<void> {
-  try { await SecureStore.deleteItemAsync(KEY_JWT); } catch { /* web fallback */ }
+  await storeDel(KEY_JWT);
 }
 
 /**
@@ -90,10 +116,5 @@ export async function clearToken(): Promise<void> {
  * The session UUID is cleared so the next initSession() generates a fresh one.
  */
 export async function clearSession(): Promise<void> {
-  try {
-    await Promise.all([
-      SecureStore.deleteItemAsync(KEY_SESSION_ID),
-      SecureStore.deleteItemAsync(KEY_JWT),
-    ]);
-  } catch { /* web fallback */ }
+  await Promise.all([storeDel(KEY_SESSION_ID), storeDel(KEY_JWT)]);
 }
