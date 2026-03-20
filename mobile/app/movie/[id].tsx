@@ -23,7 +23,7 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, Link } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import CinovaScore from '../../components/ui/CinovaScore';
@@ -273,8 +273,7 @@ export default function MovieDetailScreen() {
               title="Genres"
               tags={genreTags.map((g) => g.name)}
               color={Colors.primary}
-              filterType="genre"
-              onTagPress={(tag) => router.push(`/(tabs)/discover?genre=${encodeURIComponent(tag)}`)}
+              filterParam="genre"
             />
           )}
 
@@ -284,8 +283,7 @@ export default function MovieDetailScreen() {
               title="Themes"
               tags={themeTags.map((t) => t.name)}
               color={Colors.prime ?? '#00A8E1'}
-              filterType="theme"
-              onTagPress={(tag) => router.push(`/(tabs)/discover?theme=${encodeURIComponent(tag)}`)}
+              filterParam="theme"
             />
           )}
 
@@ -294,8 +292,7 @@ export default function MovieDetailScreen() {
               title="Mood"
               tags={moodTags.map((m) => m.name)}
               color={Colors.hbo ?? '#5822B4'}
-              filterType="mood"
-              onTagPress={(tag) => router.push(`/(tabs)/discover?mood=${encodeURIComponent(tag)}`)}
+              filterParam="mood"
             />
           )}
 
@@ -496,12 +493,13 @@ function TagSection({
   title,
   tags,
   color,
-  onTagPress,
+  filterParam,
 }: {
   title: string;
   tags: string[];
   color: string;
   filterType?: string;
+  filterParam?: string;
   onTagPress?: (tag: string) => void;
 }) {
   return (
@@ -510,14 +508,18 @@ function TagSection({
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={tagStyles.row}>
           {tags.map((tag) => (
-            <TouchableOpacity
+            <Link
               key={tag}
-              style={[tagStyles.chip, { borderColor: color + '60' }]}
-              activeOpacity={onTagPress ? 0.65 : 1}
-              onPress={() => onTagPress?.(tag)}
+              href={`/(tabs)/discover?${filterParam ?? 'genre'}=${encodeURIComponent(tag)}` as never}
+              asChild
             >
-              <Text style={[tagStyles.chipText, { color }]}>{tag}</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[tagStyles.chip, { borderColor: color + '60' }]}
+                activeOpacity={0.65}
+              >
+                <Text style={[tagStyles.chipText, { color }]}>{tag}</Text>
+              </TouchableOpacity>
+            </Link>
           ))}
         </View>
       </ScrollView>
