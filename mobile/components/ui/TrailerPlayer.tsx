@@ -4,12 +4,10 @@
  * Layout rules:
  *  - Always opens in landscape (locked) — guarantees full-screen for all trailers
  *    regardless of whether the movie is 16:9, 1.85:1, or 2.35:1.
- *  - Portrait fallback still works if orientation lock fails (same 16:9 letterbox).
- *  - Uses onLayout on the container View (not Dimensions API) because:
- *    a) Dimensions.get('screen') returns portrait dims when the app is portrait-locked,
- *       even if the phone is physically in landscape when the modal opens.
- *    b) ScreenOrientation.unlockAsync() is async — initial render fires before unlock.
- *    c) onLayout measures what was actually rendered by the system, immune to all of this.
+ *  - Dimensions are tracked two ways (belt-and-suspenders):
+ *    1. onLayout on the container View — fires on first render.
+ *    2. Dimensions.addEventListener('change') — fires when orientation changes,
+ *       because onLayout inside a Modal does NOT reliably re-fire on iOS rotation.
  *  - Player top offset is calculated explicitly → guaranteed equal bars.
  *  - Bottom 25% of player is fully passthrough → YouTube's progress bar and
  *    native controls are always accessible.
@@ -23,6 +21,7 @@ import {
   Modal,
   TouchableOpacity,
   StyleSheet,
+  Dimensions,
   StatusBar,
   Linking,
   Platform,
@@ -73,10 +72,17 @@ export default function TrailerPlayer({
   const seekRightOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Force landscape immediately — trailers always look better full-width,
-    // and this eliminates the double-letterboxing issue for widescreen trailers.
+    // Force landscape immediately — eliminates double-letterboxing for widescreen trailers.
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+
+    // Dimensions.change fires reliably on iOS rotation, even inside Modals.
+    // onLayout alone does NOT always re-fire after orientation change inside a Modal.
+    const sub = Dimensions.addEventListener('change', ({ screen }) => {
+      setContainerSize({ width: screen.width, height: screen.height });
+    });
+
     return () => {
+      sub.remove();
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
     };
   }, []);
