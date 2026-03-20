@@ -2,9 +2,9 @@
  * TrailerPlayer — Full-screen YouTube trailer modal.
  *
  * Layout rules:
- *  - Landscape: player fills entire screen (no bars).
- *  - Portrait: player fills full width, height = width × 9/16, centered vertically
- *    so black bars above and below are exactly equal.
+ *  - Always opens in landscape (locked) — guarantees full-screen for all trailers
+ *    regardless of whether the movie is 16:9, 1.85:1, or 2.35:1.
+ *  - Portrait fallback still works if orientation lock fails (same 16:9 letterbox).
  *  - Uses onLayout on the container View (not Dimensions API) because:
  *    a) Dimensions.get('screen') returns portrait dims when the app is portrait-locked,
  *       even if the phone is physically in landscape when the modal opens.
@@ -73,7 +73,9 @@ export default function TrailerPlayer({
   const seekRightOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    ScreenOrientation.unlockAsync();
+    // Force landscape immediately — trailers always look better full-width,
+    // and this eliminates the double-letterboxing issue for widescreen trailers.
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
     return () => {
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
     };
@@ -83,6 +85,7 @@ export default function TrailerPlayer({
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP)
       .catch(() => {})
       .finally(onClose);
+    // Effect cleanup also fires, but lockAsync is idempotent — safe to call twice.
   }, [onClose]);
 
   const handleStateChange = useCallback((state: string) => {
