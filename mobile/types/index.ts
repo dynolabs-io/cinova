@@ -99,9 +99,11 @@ export interface WatchProvider {
 }
 
 export interface CastMember {
-  id: number;
+  id?: number;
+  tmdbId?: number;
   name: string;
-  character: string;
+  character?: string;
+  role?: string;
   profilePath: string | null;
   order: number;
 }

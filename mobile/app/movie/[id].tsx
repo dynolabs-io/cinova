@@ -526,7 +526,10 @@ function CastCard({ member }: { member: CastMember }) {
   const router = useRouter();
   return (
     <TouchableOpacity
-      onPress={() => router.push(`/person/${member.id}`)}
+      onPress={() => {
+        const pid = member.tmdbId ?? member.id;
+        if (pid) router.push(`/person/${pid}`);
+      }}
       activeOpacity={0.85}
       style={castStyles.card}
     >
@@ -544,7 +547,7 @@ function CastCard({ member }: { member: CastMember }) {
         {member.name}
       </Text>
       <Text style={castStyles.character} numberOfLines={2}>
-        {member.character}
+        {member.character ?? member.role ?? ''}
       </Text>
     </TouchableOpacity>
   );
