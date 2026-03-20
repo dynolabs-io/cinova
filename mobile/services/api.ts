@@ -363,6 +363,30 @@ export function streamChatMessage(
   return () => { aborted = true; xhr.abort(); };
 }
 
+/**
+ * Transcribe an audio file recorded with expo-av.
+ * Sends to the backend /api/v1/me/stt endpoint.
+ * Returns the transcript string or null on failure.
+ */
+export async function transcribeAudio(fileUri: string): Promise<string | null> {
+  try {
+    const formData = new FormData();
+    // expo-av records to .m4a on iOS, .3gp/.webm on Android
+    const filename = fileUri.split('/').pop() ?? 'audio.m4a';
+    const ext = filename.split('.').pop()?.toLowerCase() ?? 'm4a';
+    const mimeMap: Record<string, string> = { m4a: 'audio/m4a', mp4: 'audio/mp4', '3gp': 'audio/3gpp', webm: 'audio/webm', wav: 'audio/wav' };
+    const mime = mimeMap[ext] ?? 'audio/m4a';
+    formData.append('audio', { uri: fileUri, name: filename, type: mime } as unknown as Blob);
+    const res = await api.post('/api/v1/me/stt', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000,
+    });
+    return (res.data as { transcript?: string }).transcript ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Aliases matching screen import names */
 export const login = authLogin;
 export const signUp = authSignup;

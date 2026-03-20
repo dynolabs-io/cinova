@@ -35,6 +35,7 @@ interface ReelItemProps {
   onRate?: (movie: Movie) => void;
   onDismiss?: (movie: Movie) => void;
   isSaved?: boolean;
+  userRating?: number;
 }
 
 function backdropUri(path: string | null): string {
@@ -65,6 +66,7 @@ export default function ReelItem({
   onRate,
   onDismiss,
   isSaved = false,
+  userRating,
 }: ReelItemProps) {
   const router = useRouter();
   const primaryProvider = movie.providers?.[0] ?? null;
@@ -143,9 +145,9 @@ export default function ReelItem({
           onPress={() => { hapticSuccess(); onSave?.(movie); }}
         />
         <ActionButton
-          label="★"
-          sublabel="Rate"
-          color={Colors.scoreMid}
+          label={userRating ? `${userRating}★` : "★"}
+          sublabel={userRating ? `Rated` : "Rate"}
+          color={userRating ? Colors.scoreMid : Colors.textPrimary}
           onPress={() => { hapticMedium(); onRate?.(movie); }}
         />
         {trailerKey && (

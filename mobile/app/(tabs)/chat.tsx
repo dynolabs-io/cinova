@@ -15,12 +15,16 @@ import {
   Platform,
   Animated,
   SafeAreaView,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { streamChatMessage } from '../../services/api';
+import { Ionicons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
+import { streamChatMessage, transcribeAudio } from '../../services/api';
 import type { ChatSuggestion } from '../../services/api';
 import ChatBubble from '../../components/ui/ChatBubble';
 import { Colors } from '../../constants/theme';
+import { useAppStore } from '../../store/useAppStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -44,16 +48,59 @@ const QUICK_REPLIES = [
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
+  const country = useAppStore((s) => s.country);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
   const [isStatusPhase, setIsStatusPhase] = useState(false);
   const [convId, setConvId] = useState<string | undefined>();
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const recordingRef = useRef<Audio.Recording | null>(null);
   const listRef = useRef<FlatList>(null);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Microphone access is needed for voice input.');
+        return;
+      }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      recordingRef.current = recording;
+      setIsRecording(true);
+    } catch {
+      Alert.alert('Error', 'Could not start recording.');
+    }
+  }, []);
+
+  const stopRecording = useCallback(async () => {
+    if (!recordingRef.current) return;
+    setIsRecording(false);
+    setIsTranscribing(true);
+    try {
+      await recordingRef.current.stopAndUnloadAsync();
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      const uri = recordingRef.current.getURI();
+      recordingRef.current = null;
+      if (!uri) return;
+      const transcript = await transcribeAudio(uri);
+      if (transcript) {
+        setInput((prev) => (prev ? prev + ' ' + transcript : transcript));
+      }
+    } catch {
+      Alert.alert('Error', 'Could not transcribe audio. Please type instead.');
+    } finally {
+      setIsTranscribing(false);
+    }
   }, []);
 
   const sendMessage = useCallback((text: string) => {
@@ -92,7 +139,7 @@ export default function ChatScreen() {
     streamChatMessage(
       trimmed,
       convId,
-      'US',
+      country || 'US',
       // onDelta — first delta switches out of status phase, then appends real content
       (chunk) => {
         clearCycle();
@@ -219,17 +266,33 @@ export default function ChatScreen() {
 
         {/* Input bar */}
         <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          {/* Mic button */}
+          <TouchableOpacity
+            style={[styles.micBtn, isRecording && styles.micBtnActive]}
+            activeOpacity={0.8}
+            onPressIn={startRecording}
+            onPressOut={stopRecording}
+            disabled={loading || isTranscribing}
+          >
+            <Ionicons
+              name={isRecording ? 'mic' : isTranscribing ? 'hourglass' : 'mic-outline'}
+              size={20}
+              color={isRecording ? '#fff' : '#888'}
+            />
+          </TouchableOpacity>
+
           <TextInput
             style={styles.input}
             value={input}
             onChangeText={setInput}
-            placeholder="Ask me anything about films…"
+            placeholder={isTranscribing ? 'Transcribing…' : 'Ask me anything about films…'}
             placeholderTextColor="#555"
             multiline
             maxLength={500}
             returnKeyType="send"
             blurOnSubmit={false}
             onSubmitEditing={() => sendMessage(input)}
+            editable={!isTranscribing}
           />
           <TouchableOpacity
             style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]}
@@ -237,7 +300,7 @@ export default function ChatScreen() {
             onPress={() => sendMessage(input)}
             disabled={!input.trim() || loading}
           >
-            <SendArrow />
+            <Ionicons name="arrow-up" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -326,41 +389,6 @@ function EmptyState() {
   );
 }
 
-// ── Send arrow icon ───────────────────────────────────────────────────────────
-
-function SendArrow() {
-  return (
-    <View style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
-      {/* Arrow body */}
-      <View style={{
-        position: 'absolute',
-        width: 13,
-        height: 2.5,
-        backgroundColor: '#fff',
-        borderRadius: 2,
-        transform: [{ rotate: '-45deg' }, { translateX: -1 }],
-        top: 5,
-      }} />
-      <View style={{
-        position: 'absolute',
-        width: 13,
-        height: 2.5,
-        backgroundColor: '#fff',
-        borderRadius: 2,
-        transform: [{ rotate: '45deg' }, { translateX: -1 }],
-        bottom: 5,
-      }} />
-      <View style={{
-        position: 'absolute',
-        right: 1,
-        width: 2.5,
-        height: 14,
-        backgroundColor: '#fff',
-        borderRadius: 2,
-      }} />
-    </View>
-  );
-}
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -448,4 +476,19 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   sendBtnDisabled: { backgroundColor: '#1a2a4a', opacity: 0.5 },
+  micBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#1a1a1a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  micBtnActive: {
+    backgroundColor: '#dc2626',
+    borderColor: '#dc2626',
+  },
 });

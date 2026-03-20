@@ -38,6 +38,8 @@ type Config struct {
 
 	TemporalAddress string
 
+	GroqAPIKey string // for Whisper STT via Groq (optional)
+
 	LogLevel string
 }
 
@@ -63,6 +65,7 @@ func Load() (*Config, error) {
 		LangflowFlowID:    getEnv("LANGFLOW_FLOW_ID", ""),
 		LangflowAPIKey:    getEnv("LANGFLOW_API_KEY", ""),
 		TemporalAddress:   getEnv("TEMPORAL_ADDRESS", ""),
+		GroqAPIKey:        getEnv("GROQ_API_KEY", ""),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),
 		JWTAccessTTLSec:  getEnvInt("JWT_ACCESS_TTL_SEC", 900),   // 15 min
 		JWTRefreshTTLSec: getEnvInt("JWT_REFRESH_TTL_SEC", 2592000), // 30 days

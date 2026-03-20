@@ -13,6 +13,7 @@ import {
   Dimensions,
   ActivityIndicator,
   Text,
+  Alert,
   ViewToken,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +30,7 @@ export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
   const country = useAppStore((s) => s.country);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
+  const [ratedIds, setRatedIds] = useState<Map<number, number>>(new Map());
   const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
 
   const {
@@ -72,13 +74,25 @@ export default function DiscoverScreen() {
     }
   }, []);
 
-  const handleRate = useCallback(async (movie: Movie) => {
-    // Open rating modal — for now rate 8/10 as placeholder
-    try {
-      await rateTitle(movie.tmdbId, 8);
-    } catch {
-      // Ignore
-    }
+  const handleRate = useCallback((movie: Movie) => {
+    Alert.alert(
+      `Rate "${movie.title}"`,
+      'How would you rate it?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        ...[1,2,3,4,5,6,7,8,9,10].map((score) => ({
+          text: `${score}/10`,
+          onPress: async () => {
+            try {
+              await rateTitle(movie.tmdbId, score);
+              setRatedIds((prev) => new Map(prev).set(movie.id, score));
+            } catch {
+              Alert.alert('Error', 'Could not save rating. Please try again.');
+            }
+          },
+        })),
+      ]
+    );
   }, []);
 
   const handleDismiss = useCallback(async (movie: Movie) => {
@@ -108,12 +122,13 @@ export default function DiscoverScreen() {
       <ReelItem
         movie={item}
         isSaved={savedIds.has(item.id)}
+        userRating={ratedIds.get(item.id)}
         onSave={handleSave}
         onRate={handleRate}
         onDismiss={handleDismiss}
       />
     ),
-    [handleDismiss, handleRate, handleSave, savedIds]
+    [handleDismiss, handleRate, handleSave, savedIds, ratedIds]
   );
 
   if (isLoading) {

@@ -29,12 +29,12 @@ import (
 )
 
 const (
-	chatModel       = "claude-haiku-4-5-20251001"
-	intentModel     = "claude-haiku-4-5-20251001"
-	intentTimeout   = 15 * time.Second
+	chatModel        = "claude-haiku-4-5-20251001"
+	intentModel      = "claude-haiku-4-5-20251001"
+	intentTimeout    = 15 * time.Second
 	recommendTimeout = 60 * time.Second
-	historyLimit    = 10 // turns kept as context
-	defaultMinScore = 40.0
+	historyLimit     = 10 // turns kept as context
+	defaultMinScore  = 55.0 // raised from 40 — filters out low-quality titles
 )
 
 // ── Axon wire types ──────────────────────────────────────────────────────────

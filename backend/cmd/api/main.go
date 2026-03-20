@@ -82,6 +82,7 @@ func main() {
 	personHandler := handlers.NewPersonHandler(movieRepo)
 	pushTokenHandler := handlers.NewPushTokenHandler(pg)
 	scoringHandler := handlers.NewScoringHandler(movieRepo)
+	sttHandler := handlers.NewSTTHandler(cfg)
 
 	// Search
 	searchHandler := search.NewHandler(neo, rdb, cfg)
@@ -199,6 +200,7 @@ func main() {
 				r.Put("/scoring-profile", scoringHandler.SetScoringProfile)
 				r.Post("/chat", chatHandler.Chat)
 				r.Post("/chat/stream", chatHandler.ChatStream)
+				r.Post("/stt", sttHandler.Transcribe)
 			})
 		})
 	})

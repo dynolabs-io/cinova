@@ -50,16 +50,32 @@ export default function PersonDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const { data: person, isLoading } = useQuery({
+  const { data: person, isLoading, isError, refetch } = useQuery({
     queryKey: ['person', id],
     queryFn: () => getPerson(Number(id)),
     enabled: !!id,
   });
 
-  if (isLoading || !person) {
+  if (isLoading) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={Colors.primary} size="large" />
+      </View>
+    );
+  }
+
+  if (isError || !person) {
+    return (
+      <View style={styles.loading}>
+        <Text style={{ color: Colors.textSecondary, fontSize: Typography.base, marginBottom: Spacing[4] }}>
+          Could not load person
+        </Text>
+        <TouchableOpacity
+          onPress={() => refetch()}
+          style={{ backgroundColor: Colors.primary, borderRadius: Radius.md, paddingHorizontal: Spacing[6], paddingVertical: Spacing[3] }}
+        >
+          <Text style={{ color: Colors.textPrimary, fontWeight: Typography.semibold }}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }

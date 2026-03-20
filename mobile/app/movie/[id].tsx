@@ -8,7 +8,7 @@
  * Trailer plays fullscreen via expo-av
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -26,10 +26,10 @@ import { BlurView } from 'expo-blur';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Video, ResizeMode } from 'expo-av';
 import CinovaScore from '../../components/ui/CinovaScore';
 import MovieCard from '../../components/ui/MovieCard';
 import StreamingBadge from '../../components/ui/StreamingBadge';
+import TrailerPlayer from '../../components/ui/TrailerPlayer';
 import { getMovie, saveTitle, rateTitle, dismissTitle, getRecommendations } from '../../services/api';
 import { shareMovie } from '../../services/sharing';
 import { useAppStore } from '../../store/useAppStore';
@@ -71,9 +71,8 @@ export default function MovieDetailScreen() {
   const [userRating, setUserRating] = useState<number | null>(null);
   const [isDismissed, setIsDismissed] = useState(false);
   const [showTrailer, setShowTrailer] = useState(false);
-  const videoRef = useRef<Video>(null);
 
-  const { data: movie, isLoading } = useQuery({
+  const { data: movie, isLoading, isError, refetch } = useQuery({
     queryKey: ['movie', id, country],
     queryFn: () => getMovie(Number(id), country),
     enabled: !!id,
@@ -118,10 +117,26 @@ export default function MovieDetailScreen() {
     );
   }, [movie]);
 
-  if (isLoading || !movie) {
+  if (isLoading) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={Colors.primary} size="large" />
+      </View>
+    );
+  }
+
+  if (isError || !movie) {
+    return (
+      <View style={styles.loading}>
+        <Text style={{ color: Colors.textSecondary, fontSize: Typography.base, marginBottom: Spacing[4] }}>
+          Could not load movie
+        </Text>
+        <TouchableOpacity
+          onPress={() => refetch()}
+          style={{ backgroundColor: Colors.primary, borderRadius: Radius.md, paddingHorizontal: Spacing[6], paddingVertical: Spacing[3] }}
+        >
+          <Text style={{ color: Colors.textPrimary, fontWeight: Typography.semibold }}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -130,35 +145,20 @@ export default function MovieDetailScreen() {
   const themeTags = movie.themes ?? [];
   const moodTags = movie.moods ?? [];
 
-  const trailerKey = movie.trailer?.key;
-  const trailerUrl = trailerKey
-    ? `https://www.youtube.com/embed/${trailerKey}`
-    : null;
+  const trailerKey = movie.trailer?.key ?? movie.trailerYouTubeKey ?? null;
+  const hasTrailer = !!trailerKey;
 
   return (
     <View style={styles.container}>
-      {/* Trailer overlay */}
+      {/* Trailer — full-screen modal with YouTube iframe */}
       {showTrailer && trailerKey && (
-        <View style={StyleSheet.absoluteFill}>
-          <Video
-            ref={videoRef}
-            style={StyleSheet.absoluteFill}
-            source={{
-              uri: `https://www.youtube.com/watch?v=${trailerKey}`,
-            }}
-            resizeMode={ResizeMode.CONTAIN}
-            shouldPlay
-            useNativeControls
-          />
-          <TouchableOpacity
-            style={[styles.trailerClose, { top: insets.top + 10 }]}
-            onPress={() => setShowTrailer(false)}
-          >
-            <BlurView intensity={60} style={styles.backBlur}>
-              <Text style={styles.backIcon}>✕</Text>
-            </BlurView>
-          </TouchableOpacity>
-        </View>
+        <TrailerPlayer
+          youtubeKey={trailerKey}
+          title={movie.title}
+          primaryProvider={movie.providers[0] ?? null}
+          tmdbId={movie.tmdbId}
+          onClose={() => setShowTrailer(false)}
+        />
       )}
 
       <ScrollView
@@ -180,7 +180,7 @@ export default function MovieDetailScreen() {
           />
 
           {/* Trailer button */}
-          {trailerUrl && (
+          {hasTrailer && (
             <TouchableOpacity
               style={styles.trailerBtn}
               onPress={() => setShowTrailer(true)}
@@ -273,6 +273,8 @@ export default function MovieDetailScreen() {
               title="Genres"
               tags={genreTags.map((g) => g.name)}
               color={Colors.primary}
+              filterType="genre"
+              onTagPress={(tag) => router.push({ pathname: '/(tabs)/discover', params: { genre: tag } })}
             />
           )}
 
@@ -282,6 +284,8 @@ export default function MovieDetailScreen() {
               title="Themes"
               tags={themeTags.map((t) => t.name)}
               color={Colors.prime ?? '#00A8E1'}
+              filterType="theme"
+              onTagPress={(tag) => router.push({ pathname: '/(tabs)/discover', params: { theme: tag } })}
             />
           )}
 
@@ -290,6 +294,8 @@ export default function MovieDetailScreen() {
               title="Mood"
               tags={moodTags.map((m) => m.name)}
               color={Colors.hbo ?? '#5822B4'}
+              filterType="mood"
+              onTagPress={(tag) => router.push({ pathname: '/(tabs)/discover', params: { mood: tag } })}
             />
           )}
 
@@ -490,10 +496,13 @@ function TagSection({
   title,
   tags,
   color,
+  onTagPress,
 }: {
   title: string;
   tags: string[];
   color: string;
+  filterType?: string;
+  onTagPress?: (tag: string) => void;
 }) {
   return (
     <View style={tagStyles.section}>
@@ -501,12 +510,14 @@ function TagSection({
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={tagStyles.row}>
           {tags.map((tag) => (
-            <View
+            <TouchableOpacity
               key={tag}
               style={[tagStyles.chip, { borderColor: color + '60' }]}
+              activeOpacity={onTagPress ? 0.65 : 1}
+              onPress={() => onTagPress?.(tag)}
             >
               <Text style={[tagStyles.chipText, { color }]}>{tag}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
       </ScrollView>
@@ -589,11 +600,6 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: Typography.base,
     fontWeight: Typography.semibold,
-  },
-  trailerClose: {
-    position: 'absolute',
-    right: 16,
-    zIndex: 10,
   },
   backBtnContainer: {
     position: 'absolute',

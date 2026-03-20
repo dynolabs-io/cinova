@@ -18,8 +18,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useRouter, Link } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import { login } from '../../services/api';
 import { saveToken, getSessionId } from '../../services/session';
@@ -78,6 +80,35 @@ export default function LoginScreen() {
         <View style={styles.header}>
           <Text style={styles.wordmark}>CINOVA</Text>
           <Text style={styles.tagline}>Your cinematic universe</Text>
+        </View>
+
+        {/* SSO Options */}
+        <View style={styles.ssoContainer}>
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity
+              style={styles.ssoButton}
+              activeOpacity={0.85}
+              onPress={() => Alert.alert('Apple Sign In', 'Apple Sign In requires an EAS production build. Coming soon!')}
+            >
+              <Ionicons name="logo-apple" size={20} color={Colors.textPrimary} />
+              <Text style={styles.ssoButtonText}>Continue with Apple</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.ssoButton, styles.ssoButtonGoogle]}
+            activeOpacity={0.85}
+            onPress={() => Alert.alert('Google Sign In', 'Google Sign In requires an EAS production build. Coming soon!')}
+          >
+            <Ionicons name="logo-google" size={18} color="#fff" />
+            <Text style={styles.ssoButtonText}>Continue with Google</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Divider */}
+        <View style={styles.divider}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>or sign in with email</Text>
+          <View style={styles.dividerLine} />
         </View>
 
         {/* Form */}
@@ -208,6 +239,46 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: Typography.md,
     fontWeight: '700',
+  },
+  ssoContainer: {
+    gap: Spacing[3],
+    marginBottom: Spacing[6],
+  },
+  ssoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing[3],
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing[4],
+  },
+  ssoButtonGoogle: {
+    backgroundColor: '#4285F4',
+    borderColor: '#4285F4',
+  },
+  ssoButtonText: {
+    color: Colors.textPrimary,
+    fontSize: Typography.base,
+    fontWeight: '600',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[3],
+    marginBottom: Spacing[6],
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  dividerText: {
+    color: Colors.textMuted,
+    fontSize: Typography.xs,
+    fontWeight: '500',
   },
   footer: {
     flexDirection: 'row',

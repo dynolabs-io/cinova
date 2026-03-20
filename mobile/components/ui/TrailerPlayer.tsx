@@ -137,9 +137,10 @@ export default function TrailerPlayer({
   }
 
   const isLandscape = dims.width > dims.height;
-  const playerWidth = dims.width;
-  const playerHeight = isLandscape ? dims.height : dims.width * (9 / 16);
-  const tapZoneWidth = playerWidth / 3;
+  // In landscape: fill full screen. In portrait: fill full height (pillarbox).
+  const playerWidth = isLandscape ? dims.width : dims.height * (16 / 9);
+  const playerHeight = isLandscape ? dims.height : dims.height;
+  const tapZoneWidth = isLandscape ? playerWidth / 3 : dims.width / 3;
 
   return (
     <Modal
@@ -166,16 +167,16 @@ export default function TrailerPlayer({
           />
         </View>
 
-        {/* Double-tap zones — left / center / right */}
-        <View style={[styles.tapOverlay, { width: playerWidth, height: playerHeight }]}>
+        {/* Double-tap zones — left / right only; center passes touches to YouTube */}
+        <View style={[styles.tapOverlay, { width: playerWidth, height: playerHeight }]} pointerEvents="box-none">
           {/* Left zone: rewind */}
           <TouchableOpacity
             activeOpacity={1}
             style={[styles.tapZone, { width: tapZoneWidth }]}
             onPress={handleTapLeft}
           />
-          {/* Center zone: no action (passes to YouTube player) */}
-          <View style={[styles.tapZone, { width: tapZoneWidth }]} />
+          {/* Center zone: transparent — YouTube controls accessible here */}
+          <View style={[styles.tapZone, { width: tapZoneWidth }]} pointerEvents="none" />
           {/* Right zone: forward */}
           <TouchableOpacity
             activeOpacity={1}
