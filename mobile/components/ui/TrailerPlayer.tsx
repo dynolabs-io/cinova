@@ -177,7 +177,11 @@ export default function TrailerPlayer({
       {/* Player block — explicitly positioned for pixel-perfect centering */}
       <View style={{ position: 'absolute', top: playerTop, left: playerLeft, width: playerW, height: playerH }}>
 
+        {/* key forces WebView remount when dimensions change (orientation change).
+            Without this, the WebView keeps its original layout from mount time —
+            causing tiny player when opened in portrait then rotated to landscape. */}
         <YoutubePlayer
+          key={`${playerW}x${playerH}`}
           ref={playerRef}
           height={playerH}
           width={playerW}
