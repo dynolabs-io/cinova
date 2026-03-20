@@ -14,6 +14,7 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   Dimensions,
   FlatList,
@@ -23,7 +24,7 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { useLocalSearchParams, useRouter, Link } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import CinovaScore from '../../components/ui/CinovaScore';
@@ -502,27 +503,21 @@ function TagSection({
   filterParam?: string;
   onTagPress?: (tag: string) => void;
 }) {
+  const router = useRouter();
   return (
     <View style={tagStyles.section}>
       <Text style={tagStyles.title}>{title}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={tagStyles.row}>
-          {tags.map((tag) => (
-            <Link
-              key={tag}
-              href={`/(tabs)/discover?${filterParam ?? 'genre'}=${encodeURIComponent(tag)}` as never}
-              asChild
-            >
-              <TouchableOpacity
-                style={[tagStyles.chip, { borderColor: color + '60' }]}
-                activeOpacity={0.65}
-              >
-                <Text style={[tagStyles.chipText, { color }]}>{tag}</Text>
-              </TouchableOpacity>
-            </Link>
-          ))}
-        </View>
-      </ScrollView>
+      <View style={tagStyles.row}>
+        {tags.map((tag) => (
+          <Pressable
+            key={tag}
+            style={({ pressed }) => [tagStyles.chip, { borderColor: color + '60', opacity: pressed ? 0.65 : 1 }]}
+            onPress={() => router.push(`/(tabs)/discover?${filterParam ?? 'genre'}=${encodeURIComponent(tag)}` as never)}
+          >
+            <Text style={[tagStyles.chipText, { color }]}>{tag}</Text>
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 }
@@ -758,6 +753,7 @@ const tagStyles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing[2],
   },
   chip: {
