@@ -46,6 +46,19 @@ const SEEK_SECONDS = 10;
 const DOUBLE_TAP_DELAY = 300;
 const DEFAULT_ASPECT_RATIO = 16 / 9;
 
+// react-native-youtube-iframe hardcodes `padding-bottom: 56.25%` (16:9) in its
+// HTML template CSS, which overrides any height prop we pass. This injection
+// removes that constraint so the player fills the WebView at whatever aspect
+// ratio we set — allowing our YouTube Data API sizing to actually take effect.
+const FILL_CONTAINER_CSS = `
+  (function(){
+    var s = document.createElement('style');
+    s.textContent = 'html,body{margin:0;padding:0;height:100%;overflow:hidden}.container{padding-bottom:0!important;height:100%!important}';
+    document.head.appendChild(s);
+  })();
+  true;
+`;
+
 export default function TrailerPlayer({
   youtubeKey,
   title,
@@ -188,7 +201,7 @@ export default function TrailerPlayer({
           videoId={youtubeKey}
           play={playing}
           onChangeState={handleStateChange}
-          webViewProps={{ allowsInlineMediaPlayback: true }}
+          webViewProps={{ allowsInlineMediaPlayback: true, injectedJavaScript: FILL_CONTAINER_CSS }}
           initialPlayerParams={{ controls: true, modestbranding: true, rel: false }}
         />
 
