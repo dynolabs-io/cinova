@@ -21,7 +21,6 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter, Link } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import { login } from '../../services/api';
@@ -81,7 +80,7 @@ export default function LoginScreen() {
         hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
         activeOpacity={0.7}
       >
-        <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
+        <Text style={{ color: Colors.textPrimary, fontSize: 24, lineHeight: 28 }}>‹</Text>
       </TouchableOpacity>
 
       <ScrollView
@@ -102,7 +101,7 @@ export default function LoginScreen() {
               activeOpacity={0.85}
               onPress={() => Alert.alert('Apple Sign In', 'Apple Sign In requires an EAS production build. Coming soon!')}
             >
-              <Ionicons name="logo-apple" size={20} color={Colors.textPrimary} />
+              <Text style={{ color: Colors.textPrimary, fontSize: 18, fontWeight: '600' }}></Text>
               <Text style={styles.ssoButtonText}>Continue with Apple</Text>
             </TouchableOpacity>
           )}
@@ -111,7 +110,7 @@ export default function LoginScreen() {
             activeOpacity={0.85}
             onPress={() => Alert.alert('Google Sign In', 'Google Sign In requires an EAS production build. Coming soon!')}
           >
-            <Ionicons name="logo-google" size={18} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>G</Text>
             <Text style={styles.ssoButtonText}>Continue with Google</Text>
           </TouchableOpacity>
         </View>

@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
+import { View, Text } from 'react-native';
 
 interface Props {
   name: 'home' | 'discover' | 'watchlist' | 'profile' | 'chat';
@@ -109,46 +109,12 @@ function ChatIcon({ color, size }: { color: string; size: number }) {
   );
 }
 
-// ── Watchlist (bookmark) ──────────────────────────────────────────────────────
+// ── Watchlist (heart) ────────────────────────────────────────────────────────
+// Unicode ♥ renders via the system font — no custom font loading needed.
 function WatchlistIcon({ color, size }: { color: string; size: number }) {
-  const w = size * 0.58;
-  const h = size * 0.82;
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      {/* Bookmark body */}
-      <View style={{
-        width: w,
-        height: h,
-        borderWidth: 2.5,
-        borderColor: color,
-        borderBottomWidth: 0,
-      }}>
-        {/* V-notch: two triangles */}
-        <View style={{
-          position: 'absolute',
-          bottom: -(w * 0.5 - 1),
-          left: -1,
-          width: 0, height: 0,
-          borderLeftWidth: w / 2,
-          borderRightWidth: w / 2,
-          borderTopWidth: w * 0.5,
-          borderLeftColor: 'transparent',
-          borderRightColor: color,
-          borderTopColor: color,
-        }} />
-        <View style={{
-          position: 'absolute',
-          bottom: -(w * 0.5 - 1),
-          left: -1,
-          width: 0, height: 0,
-          borderLeftWidth: w / 2,
-          borderRightWidth: w / 2,
-          borderTopWidth: w * 0.5,
-          borderLeftColor: color,
-          borderRightColor: 'transparent',
-          borderTopColor: color,
-        }} />
-      </View>
+      <Text style={{ color, fontSize: size * 0.9, lineHeight: size }}>♥</Text>
     </View>
   );
 }

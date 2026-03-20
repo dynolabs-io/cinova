@@ -18,7 +18,6 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { streamChatMessage, transcribeAudio } from '../../services/api';
 import type { ChatSuggestion } from '../../services/api';
@@ -274,11 +273,9 @@ export default function ChatScreen() {
             onPressOut={stopRecording}
             disabled={loading || isTranscribing}
           >
-            <Ionicons
-              name={isRecording ? 'mic' : isTranscribing ? 'hourglass' : 'mic-outline'}
-              size={20}
-              color={isRecording ? '#fff' : '#888'}
-            />
+            <Text style={{ fontSize: 18, color: isRecording ? '#fff' : '#888' }}>
+              {isRecording ? '⏺' : isTranscribing ? '…' : '🎙'}
+            </Text>
           </TouchableOpacity>
 
           <TextInput
@@ -300,7 +297,7 @@ export default function ChatScreen() {
             onPress={() => sendMessage(input)}
             disabled={!input.trim() || loading}
           >
-            <Ionicons name="arrow-up" size={20} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700', lineHeight: 22 }}>↑</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

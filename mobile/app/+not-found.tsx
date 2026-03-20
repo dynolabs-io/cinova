@@ -9,7 +9,6 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../constants/theme';
 
 export default function NotFoundScreen() {
@@ -23,7 +22,7 @@ export default function NotFoundScreen() {
         { paddingTop: insets.top, paddingBottom: insets.bottom },
       ]}
     >
-      <Feather name="film" size={64} color={Colors.primary} style={styles.icon} />
+      <Text style={[styles.icon, { fontSize: 64, color: Colors.primary }]}>🎬</Text>
 
       <Text style={styles.code}>404</Text>
       <Text style={styles.title}>Page Not Found</Text>
@@ -36,7 +35,7 @@ export default function NotFoundScreen() {
         onPress={() => router.replace('/(tabs)' as never)}
         activeOpacity={0.85}
       >
-        <Feather name="home" size={18} color={Colors.textPrimary} />
+        <Text style={{ color: Colors.textPrimary, fontSize: 16 }}>⌂</Text>
         <Text style={styles.homeBtnText}>Go to Home</Text>
       </TouchableOpacity>
     </View>
