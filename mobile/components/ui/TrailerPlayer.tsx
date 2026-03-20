@@ -4,13 +4,14 @@
  * Layout rules:
  *  - Landscape: player fills entire screen (no bars).
  *  - Portrait: player fills full width, height = width × 9/16, centered vertically
- *    so black bars above and below are equal.
- *  - Bottom 25% of player is fully passthrough → YouTube's native progress bar
- *    and controls are always accessible without interference.
- *  - Double-tap left third → rewind 10s (top 75% only)
- *  - Double-tap right third → forward 10s (top 75% only)
+ *    so black bars above and below are exactly equal.
+ *  - Uses Dimensions.get('screen') (physical screen) not 'window', because
+ *    statusBarTranslucent makes the Modal content area larger than 'window',
+ *    causing flex centering to shift the player down.
+ *  - Player top offset is calculated explicitly → guaranteed equal bars.
+ *  - Bottom 25% of player is fully passthrough → YouTube's progress bar and
+ *    native controls are always accessible.
  *  - No custom title overlay — YouTube already shows it.
- *  - Shows "Watch on [Provider]" when video ends.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -20,11 +21,11 @@ import {
   Modal,
   TouchableOpacity,
   StyleSheet,
+  Dimensions,
   StatusBar,
   Linking,
   Platform,
   Animated,
-  useWindowDimensions,
 } from 'react-native';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import YoutubePlayer, { type YoutubeIframeRef } from 'react-native-youtube-iframe';
@@ -44,6 +45,11 @@ interface TrailerPlayerProps {
 const SEEK_SECONDS = 10;
 const DOUBLE_TAP_DELAY = 300;
 
+function getScreen() {
+  // 'screen' = physical screen size — always correct regardless of status bar / modal chrome
+  return Dimensions.get('screen');
+}
+
 export default function TrailerPlayer({
   youtubeKey,
   title,
@@ -52,8 +58,8 @@ export default function TrailerPlayer({
   onClose,
 }: TrailerPlayerProps) {
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions(); // auto-updates on rotation
   const playerRef = useRef<YoutubeIframeRef>(null);
+  const [screen, setScreen] = useState(getScreen);
   const [playing, setPlaying] = useState(true);
   const [ended, setEnded] = useState(false);
 
@@ -67,7 +73,9 @@ export default function TrailerPlayer({
 
   useEffect(() => {
     ScreenOrientation.unlockAsync();
+    const sub = Dimensions.addEventListener('change', () => setScreen(getScreen()));
     return () => {
+      sub.remove();
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
     };
   }, []);
@@ -133,21 +141,25 @@ export default function TrailerPlayer({
     }
   }
 
-  const isLandscape = width > height;
+  const SW = screen.width;
+  const SH = screen.height;
+  const isLandscape = SW > SH;
 
-  // Landscape: fill entire screen.
-  // Portrait: fill width, height = width × 9/16 → equal black bars above and below.
-  const playerW = isLandscape ? width : width;
-  const playerH = isLandscape ? height : Math.round(width * 9 / 16);
+  // Landscape: player fills full screen.
+  // Portrait: player fills width, height = width × 9/16 (16:9 letterbox).
+  const playerW = SW;
+  const playerH = isLandscape ? SH : Math.round(SW * 9 / 16);
 
-  // Tap zones cover only the top 75% of the player.
-  // The bottom 25% is fully passthrough so YouTube's progress bar is always usable.
-  const tapZoneH = Math.round(playerH * 0.75);
-  const tapZoneW = Math.round(playerW / 3);
+  // Explicit top/left offset → guaranteed equal bars, immune to Modal chrome issues
+  const playerTop = Math.round((SH - playerH) / 2);
+  const playerLeft = Math.round((SW - playerW) / 2);
 
-  // Close button: top-left accounting for safe area
-  const closeBtnTop = Math.max(insets.top, 12);
-  const closeBtnLeft = Math.max(insets.left, 12);
+  // Tap zones: top 75% of player only — bottom 25% passthrough for YouTube controls
+  const tapH = Math.round(playerH * 0.75);
+  const tapW = Math.round(playerW / 3);
+
+  const closeBtnTop = playerTop + Math.max(insets.top, 12);
+  const closeBtnLeft = playerLeft + Math.max(insets.left, 12);
 
   return (
     <Modal
@@ -159,99 +171,76 @@ export default function TrailerPlayer({
     >
       <StatusBar hidden />
 
-      {/* Full-screen black background, player centered */}
-      <View style={styles.container}>
+      {/* Full physical screen black background */}
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000' }]} />
 
-        {/* Player + all overlays in one positioned block */}
-        <View style={{ width: playerW, height: playerH }}>
+      {/* Player block — explicitly positioned for pixel-perfect centering */}
+      <View style={{ position: 'absolute', top: playerTop, left: playerLeft, width: playerW, height: playerH }}>
 
-          {/* YouTube player */}
-          <YoutubePlayer
-            ref={playerRef}
-            height={playerH}
-            width={playerW}
-            videoId={youtubeKey}
-            play={playing}
-            onChangeState={handleStateChange}
-            webViewProps={{ allowsInlineMediaPlayback: true }}
-            initialPlayerParams={{ controls: true, modestbranding: true, rel: false }}
-          />
+        <YoutubePlayer
+          ref={playerRef}
+          height={playerH}
+          width={playerW}
+          videoId={youtubeKey}
+          play={playing}
+          onChangeState={handleStateChange}
+          webViewProps={{ allowsInlineMediaPlayback: true }}
+          initialPlayerParams={{ controls: true, modestbranding: true, rel: false }}
+        />
 
-          {/* Tap zones — top 75% only, so bottom 25% passes through to YouTube controls */}
-          <View
-            style={[styles.tapOverlay, { width: playerW, height: tapZoneH }]}
-            pointerEvents="box-none"
-          >
-            {/* Left: rewind */}
-            <TouchableOpacity
-              activeOpacity={1}
-              style={{ width: tapZoneW, height: '100%' }}
-              onPress={handleTapLeft}
-            />
-            {/* Center: fully passthrough to YouTube */}
-            <View style={{ width: tapZoneW, height: '100%' }} pointerEvents="none" />
-            {/* Right: forward */}
-            <TouchableOpacity
-              activeOpacity={1}
-              style={{ width: tapZoneW, height: '100%' }}
-              onPress={handleTapRight}
-            />
-          </View>
-
-          {/* Seek flash indicators */}
-          <Animated.View style={[styles.seekIndicator, styles.seekLeft, { opacity: seekLeftOpacity }]}>
-            <Text style={styles.seekIcon}>«</Text>
-            <Text style={styles.seekLabel}>{SEEK_SECONDS}s</Text>
-          </Animated.View>
-          <Animated.View style={[styles.seekIndicator, styles.seekRight, { opacity: seekRightOpacity }]}>
-            <Text style={styles.seekIcon}>»</Text>
-            <Text style={styles.seekLabel}>{SEEK_SECONDS}s</Text>
-          </Animated.View>
-
-          {/* Watch on Provider overlay — shown when video ends */}
-          {ended && primaryProvider && (
-            <View style={styles.watchOverlay}>
-              <Text style={styles.watchLabel}>Ready to watch?</Text>
-              <TouchableOpacity style={styles.watchBtn} onPress={handleWatch}>
-                {primaryProvider.logoPath ? (
-                  <Image
-                    source={{ uri: `https://image.tmdb.org/t/p/w92${primaryProvider.logoPath}` }}
-                    style={styles.providerLogo}
-                    contentFit="contain"
-                  />
-                ) : null}
-                <Text style={styles.watchBtnText}>
-                  Watch on {primaryProvider.providerName}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
+        {/* Tap zones — top 75% only; bottom 25% is passthrough for YouTube progress bar */}
+        <View style={[styles.tapOverlay, { height: tapH }]} pointerEvents="box-none">
+          <TouchableOpacity activeOpacity={1} style={{ width: tapW, height: '100%' }} onPress={handleTapLeft} />
+          <View style={{ width: tapW, height: '100%' }} pointerEvents="none" />
+          <TouchableOpacity activeOpacity={1} style={{ width: tapW, height: '100%' }} onPress={handleTapRight} />
         </View>
 
-        {/* Close button — always on top, positioned in screen coordinates */}
-        <TouchableOpacity
-          style={[styles.closeBtn, { top: closeBtnTop, left: closeBtnLeft }]}
-          onPress={handleClose}
-          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-        >
-          <Text style={styles.closeBtnText}>✕</Text>
-        </TouchableOpacity>
+        {/* Seek flash indicators */}
+        <Animated.View style={[styles.seekIndicator, styles.seekLeft, { opacity: seekLeftOpacity }]}>
+          <Text style={styles.seekIcon}>«</Text>
+          <Text style={styles.seekLabel}>{SEEK_SECONDS}s</Text>
+        </Animated.View>
+        <Animated.View style={[styles.seekIndicator, styles.seekRight, { opacity: seekRightOpacity }]}>
+          <Text style={styles.seekIcon}>»</Text>
+          <Text style={styles.seekLabel}>{SEEK_SECONDS}s</Text>
+        </Animated.View>
+
+        {/* Watch on Provider — shown when video ends */}
+        {ended && primaryProvider && (
+          <View style={styles.watchOverlay}>
+            <Text style={styles.watchLabel}>Ready to watch?</Text>
+            <TouchableOpacity style={styles.watchBtn} onPress={handleWatch}>
+              {primaryProvider.logoPath ? (
+                <Image
+                  source={{ uri: `https://image.tmdb.org/t/p/w92${primaryProvider.logoPath}` }}
+                  style={styles.providerLogo}
+                  contentFit="contain"
+                />
+              ) : null}
+              <Text style={styles.watchBtnText}>Watch on {primaryProvider.providerName}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
+
+      {/* Close button — positioned in screen coordinates, always visible */}
+      <TouchableOpacity
+        style={[styles.closeBtn, { top: closeBtnTop, left: closeBtnLeft }]}
+        onPress={handleClose}
+        hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+      >
+        <Text style={styles.closeBtnText}>✕</Text>
+      </TouchableOpacity>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   tapOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
+    right: 0,
     flexDirection: 'row',
     zIndex: 5,
   },
@@ -267,17 +256,8 @@ const styles = StyleSheet.create({
   },
   seekLeft: { left: 24 },
   seekRight: { right: 24 },
-  seekIcon: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: '700',
-  },
-  seekLabel: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 2,
-  },
+  seekIcon: { color: '#fff', fontSize: 28, fontWeight: '700' },
+  seekLabel: { color: '#fff', fontSize: 12, fontWeight: '600', marginTop: 2 },
   closeBtn: {
     position: 'absolute',
     width: 40,
@@ -288,11 +268,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 20,
   },
-  closeBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  closeBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   watchOverlay: {
     position: 'absolute',
     bottom: 80,
@@ -302,10 +278,7 @@ const styles = StyleSheet.create({
     gap: 10,
     zIndex: 20,
   },
-  watchLabel: {
-    color: '#ccc',
-    fontSize: 14,
-  },
+  watchLabel: { color: '#ccc', fontSize: 14 },
   watchBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -315,14 +288,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 8,
   },
-  providerLogo: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
-  },
-  watchBtnText: {
-    color: '#000',
-    fontSize: 15,
-    fontWeight: '700',
-  },
+  providerLogo: { width: 24, height: 24, borderRadius: 4 },
+  watchBtnText: { color: '#000', fontSize: 15, fontWeight: '700' },
 });
