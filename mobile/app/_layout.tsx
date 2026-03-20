@@ -8,16 +8,9 @@
  *  - Load CinovaIcons font (Ionicons TTF under a unique name to avoid Expo Go conflict)
  *  - Anonymous session initialisation on first mount
  *
- * Icon font strategy:
- *  Expo Go pre-bundles its own version of Ionicons in the host binary. If we try to load
- *  the font under the name "Ionicons", the native registration either fails (code 104 —
- *  "already registered") or succeeds but the host's version (different glyph map) is used.
- *  Either way, @expo/vector-icons renders "?" glyphs because the code points from our
- *  installed version don't match the host's font.
- *
- *  Solution: load the TTF bundled with @expo/vector-icons under a UNIQUE name "CinovaIcons".
- *  No conflict with Expo Go. TabIcon renders Text with fontFamily="CinovaIcons" + the
- *  correct Unicode code points from the installed glyph map. Always correct, always works.
+ * Icon strategy:
+ *  TabIcon uses pure View-drawn icons — no font dependency, no @expo/vector-icons.
+ *  This sidesteps the Expo Go font conflict entirely.
  */
 
 import React, { useEffect } from 'react';
@@ -27,7 +20,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import * as Font from 'expo-font';
 import { initSession } from '../services/session';
 import { useAppStore } from '../store/useAppStore';
 import { Colors } from '../constants/theme';
@@ -53,17 +45,6 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function bootstrap() {
-      // Load Ionicons TTF under unique name "CinovaIcons" — avoids conflict with
-      // Expo Go's pre-bundled Ionicons. TabIcon renders glyphs using this font.
-      try {
-        await Font.loadAsync({
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          CinovaIcons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf'),
-        });
-      } catch {
-        // Non-fatal — icons fall back to text labels if font fails to load
-      }
-
       try {
         const sessionId = await initSession();
         setSessionId(sessionId);
