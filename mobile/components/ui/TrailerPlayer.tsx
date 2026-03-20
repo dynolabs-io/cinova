@@ -139,10 +139,10 @@ export default function TrailerPlayer({
   }
 
   const isLandscape = dims.width > dims.height;
-  // In landscape: fill full screen. In portrait: fill full height (pillarbox).
-  const playerWidth = isLandscape ? dims.width : dims.height * (16 / 9);
-  const playerHeight = isLandscape ? dims.height : dims.height;
-  const tapZoneWidth = isLandscape ? playerWidth / 3 : dims.width / 3;
+  // Landscape: fill full screen. Portrait: letterbox 16:9 centered with equal black bars top/bottom.
+  const playerWidth = isLandscape ? dims.width : dims.width;
+  const playerHeight = isLandscape ? dims.height : dims.width * (9 / 16);
+  const tapZoneWidth = playerWidth / 3;
 
   return (
     <Modal

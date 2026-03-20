@@ -21,8 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 // Patch ExpoFontLoader.loadAsync to swallow CTFontManagerError 104.
 // In Expo Go the vector-icon fonts are pre-registered in the host binary;
 // a second registration attempt throws code 104 ("already registered").
-// By swallowing ALL errors here, Font.loadAsync() completes normally and
-// Font.isLoaded() returns true, so icons render on first paint.
+// Only swallow that specific error — let real failures propagate.
 // @ts-ignore — internal path, stable within expo-font 14.x
 import ExpoFontLoader from 'expo-font/build/ExpoFontLoader';
 {
@@ -30,8 +29,13 @@ import ExpoFontLoader from 'expo-font/build/ExpoFontLoader';
   ExpoFontLoader.loadAsync = async (name: string, uri: string) => {
     try {
       return await _orig(name, uri);
-    } catch {
-      return;
+    } catch (e: unknown) {
+      // Only swallow "already registered" errors (Expo Go code 104)
+      const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
+      if (msg.includes('already') || (e as { code?: number })?.code === 104) {
+        return;
+      }
+      throw e;
     }
   };
 }

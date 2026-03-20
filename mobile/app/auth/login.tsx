@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import { useRouter, Link } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import { login } from '../../services/api';
 import { saveToken, getSessionId } from '../../services/session';
@@ -29,6 +30,7 @@ import { useAppStore } from '../../store/useAppStore';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const setUser = useAppStore((s) => s.setUser);
   const setSessionId = useAppStore((s) => s.setSessionId);
 
@@ -72,6 +74,16 @@ export default function LoginScreen() {
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      {/* Back button */}
+      <TouchableOpacity
+        style={[styles.backBtn, { top: insets.top + 10 }]}
+        onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}
+        hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
+      </TouchableOpacity>
+
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
@@ -174,6 +186,17 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  backBtn: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   container: {
     flexGrow: 1,
