@@ -274,7 +274,7 @@ export default function MovieDetailScreen() {
               tags={genreTags.map((g) => g.name)}
               color={Colors.primary}
               filterType="genre"
-              onTagPress={(tag) => router.push({ pathname: '/(tabs)/discover', params: { genre: tag } })}
+              onTagPress={(tag) => router.push(`/(tabs)/discover?genre=${encodeURIComponent(tag)}`)}
             />
           )}
 
@@ -285,7 +285,7 @@ export default function MovieDetailScreen() {
               tags={themeTags.map((t) => t.name)}
               color={Colors.prime ?? '#00A8E1'}
               filterType="theme"
-              onTagPress={(tag) => router.push({ pathname: '/(tabs)/discover', params: { theme: tag } })}
+              onTagPress={(tag) => router.push(`/(tabs)/discover?theme=${encodeURIComponent(tag)}`)}
             />
           )}
 
@@ -295,7 +295,7 @@ export default function MovieDetailScreen() {
               tags={moodTags.map((m) => m.name)}
               color={Colors.hbo ?? '#5822B4'}
               filterType="mood"
-              onTagPress={(tag) => router.push({ pathname: '/(tabs)/discover', params: { mood: tag } })}
+              onTagPress={(tag) => router.push(`/(tabs)/discover?mood=${encodeURIComponent(tag)}`)}
             />
           )}
 

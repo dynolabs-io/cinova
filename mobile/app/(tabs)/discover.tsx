@@ -14,21 +14,26 @@ import {
   ActivityIndicator,
   Text,
   Alert,
+  TouchableOpacity,
   ViewToken,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import ReelItem from '../../components/ui/ReelItem';
 import { getDiscoverFeed, saveTitle, rateTitle, dismissTitle } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
-import { Colors, Typography } from '../../constants/theme';
+import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import type { Movie } from '../../types';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const country = useAppStore((s) => s.country);
+  const { genre, theme, mood } = useLocalSearchParams<{ genre?: string; theme?: string; mood?: string }>();
+  const activeFilter = genre ? { type: 'genre', value: genre } : theme ? { type: 'theme', value: theme } : mood ? { type: 'mood', value: mood } : null;
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [ratedIds, setRatedIds] = useState<Map<number, number>>(new Map());
   const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
@@ -40,7 +45,7 @@ export default function DiscoverScreen() {
     isFetchingNextPage,
     isLoading,
   } = useInfiniteQuery({
-    queryKey: ['discover-feed', country],
+    queryKey: ['discover-feed', country, genre, theme, mood],
     queryFn: ({ pageParam = 1 }) => getDiscoverFeed(country, pageParam as number),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) =>
@@ -142,6 +147,14 @@ export default function DiscoverScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: 0 }]}>
+      {activeFilter && (
+        <View style={[styles.filterBanner, { top: insets.top + 8 }]}>
+          <Text style={styles.filterLabel}>{activeFilter.type}: {activeFilter.value}</Text>
+          <TouchableOpacity onPress={() => router.replace('/(tabs)/discover')} style={styles.filterClear}>
+            <Text style={styles.filterClearText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <FlatList
         data={movies}
         renderItem={renderItem}
@@ -192,5 +205,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: Colors.background,
+  },
+  filterBanner: {
+    position: 'absolute',
+    left: Spacing[4],
+    right: Spacing[4],
+    zIndex: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: Radius.full ?? 999,
+    paddingHorizontal: Spacing[4],
+    paddingVertical: Spacing[2],
+    gap: Spacing[2],
+  },
+  filterLabel: {
+    flex: 1,
+    color: Colors.textPrimary,
+    fontSize: Typography.sm,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  filterClear: {
+    padding: Spacing[1],
+  },
+  filterClearText: {
+    color: Colors.textMuted,
+    fontSize: Typography.sm,
   },
 });
