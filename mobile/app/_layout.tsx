@@ -17,7 +17,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 // Patch ExpoFontLoader.loadAsync to swallow CTFontManagerError 104.
 // In Expo Go the vector-icon fonts are pre-registered in the host binary;
 // a second registration attempt throws code 104 ("already registered").
@@ -60,11 +60,11 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function bootstrap() {
-      // Load Feather font BEFORE hiding splash so tab icons are ready on
+      // Load Ionicons font BEFORE hiding splash so tab icons are ready on
       // first render. The ExpoFontLoader patch above swallows the 104 error
       // in Expo Go, so this always resolves successfully.
       try {
-        await Font.loadAsync(Feather.font);
+        await Font.loadAsync(Ionicons.font);
       } catch {
         // Ignore — patch already handles this
       }
