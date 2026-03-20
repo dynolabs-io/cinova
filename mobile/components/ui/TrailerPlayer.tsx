@@ -74,7 +74,9 @@ export default function TrailerPlayer({
   }, []);
 
   const handleClose = useCallback(() => {
-    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).then(onClose);
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP)
+      .catch(() => {})
+      .finally(onClose);
   }, [onClose]);
 
   const handleStateChange = useCallback((state: string) => {
