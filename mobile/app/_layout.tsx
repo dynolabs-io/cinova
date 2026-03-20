@@ -5,8 +5,19 @@
  *  - StatusBar dark (light text on dark background)
  *  - SafeAreaProvider
  *  - QueryClientProvider (react-query)
- *  - Load Feather font before splash hides (prevents "?" icons)
+ *  - Load CinovaIcons font (Ionicons TTF under a unique name to avoid Expo Go conflict)
  *  - Anonymous session initialisation on first mount
+ *
+ * Icon font strategy:
+ *  Expo Go pre-bundles its own version of Ionicons in the host binary. If we try to load
+ *  the font under the name "Ionicons", the native registration either fails (code 104 —
+ *  "already registered") or succeeds but the host's version (different glyph map) is used.
+ *  Either way, @expo/vector-icons renders "?" glyphs because the code points from our
+ *  installed version don't match the host's font.
+ *
+ *  Solution: load the TTF bundled with @expo/vector-icons under a UNIQUE name "CinovaIcons".
+ *  No conflict with Expo Go. TabIcon renders Text with fontFamily="CinovaIcons" + the
+ *  correct Unicode code points from the installed glyph map. Always correct, always works.
  */
 
 import React, { useEffect } from 'react';
@@ -17,25 +28,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
-import { Ionicons } from '@expo/vector-icons';
-// Patch ExpoFontLoader.loadAsync to swallow ALL errors.
-// In Expo Go the vector-icon fonts are pre-registered in the host binary;
-// a second registration attempt throws code 104 ("already registered").
-// By swallowing ALL errors here, Font.loadAsync() resolves successfully and
-// Font.isLoaded() returns true — icons render correctly on first paint.
-// Without this patch, icons render as "?" glyphs on device.
-// @ts-ignore — internal path, stable within expo-font 14.x
-import ExpoFontLoader from 'expo-font/build/ExpoFontLoader';
-{
-  const _orig = ExpoFontLoader.loadAsync.bind(ExpoFontLoader);
-  ExpoFontLoader.loadAsync = async (name: string, uri: string) => {
-    try {
-      return await _orig(name, uri);
-    } catch {
-      return; // swallow all errors so Font.isLoaded() returns true
-    }
-  };
-}
 import { initSession } from '../services/session';
 import { useAppStore } from '../store/useAppStore';
 import { Colors } from '../constants/theme';
@@ -61,13 +53,15 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function bootstrap() {
-      // Load Ionicons font BEFORE hiding splash so tab icons are ready on
-      // first render. The ExpoFontLoader patch above swallows the 104 error
-      // in Expo Go, so this always resolves successfully.
+      // Load Ionicons TTF under unique name "CinovaIcons" — avoids conflict with
+      // Expo Go's pre-bundled Ionicons. TabIcon renders glyphs using this font.
       try {
-        await Font.loadAsync(Ionicons.font);
+        await Font.loadAsync({
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          CinovaIcons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf'),
+        });
       } catch {
-        // Ignore — patch already handles this
+        // Non-fatal — icons fall back to text labels if font fails to load
       }
 
       try {
