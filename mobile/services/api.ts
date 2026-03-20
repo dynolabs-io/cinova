@@ -387,6 +387,19 @@ export async function transcribeAudio(fileUri: string): Promise<string | null> {
   }
 }
 
+/** Returns the native aspect ratio (width/height) of a YouTube video.
+ *  Falls back to 16/9 if the API is unavailable or the video is not found. */
+export async function getVideoAspectRatio(youtubeKey: string): Promise<number> {
+  try {
+    const res = await api.get<{ aspect_ratio: number }>('/api/v1/video-info', {
+      params: { youtube_key: youtubeKey },
+    });
+    return res.data.aspect_ratio ?? 16 / 9;
+  } catch {
+    return 16 / 9;
+  }
+}
+
 /** Aliases matching screen import names */
 export const login = authLogin;
 export const signUp = authSignup;

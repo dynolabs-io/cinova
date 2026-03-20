@@ -83,6 +83,7 @@ func main() {
 	pushTokenHandler := handlers.NewPushTokenHandler(pg)
 	scoringHandler := handlers.NewScoringHandler(movieRepo)
 	sttHandler := handlers.NewSTTHandler(cfg)
+	videoInfoHandler := handlers.NewVideoInfoHandler(cfg.YouTubeAPIKey)
 
 	// Search
 	searchHandler := search.NewHandler(neo, rdb, cfg)
@@ -181,6 +182,7 @@ func main() {
 		r.Get("/movie/{id}/providers", movieHandler.GetMovieProviders)
 		r.Get("/tv/{id}", movieHandler.GetTV)
 		r.Get("/person/{id}", personHandler.GetPerson)
+		r.Get("/video-info", videoInfoHandler.GetVideoInfo)
 
 		// Protected routes (require valid JWT)
 		r.Group(func(r chi.Router) {

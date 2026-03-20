@@ -40,6 +40,8 @@ type Config struct {
 
 	GroqAPIKey string // for Whisper STT via Groq (optional)
 
+	YouTubeAPIKey string // for YouTube Data API v3 (video aspect ratio lookup)
+
 	LogLevel string
 }
 
@@ -66,6 +68,7 @@ func Load() (*Config, error) {
 		LangflowAPIKey:    getEnv("LANGFLOW_API_KEY", ""),
 		TemporalAddress:   getEnv("TEMPORAL_ADDRESS", ""),
 		GroqAPIKey:        getEnv("GROQ_API_KEY", ""),
+		YouTubeAPIKey:     getEnv("YOUTUBE_API_KEY", ""),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),
 		JWTAccessTTLSec:  getEnvInt("JWT_ACCESS_TTL_SEC", 900),   // 15 min
 		JWTRefreshTTLSec: getEnvInt("JWT_REFRESH_TTL_SEC", 2592000), // 30 days

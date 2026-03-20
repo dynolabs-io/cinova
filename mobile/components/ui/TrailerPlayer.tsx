@@ -2,15 +2,13 @@
  * TrailerPlayer — Full-screen YouTube trailer modal.
  *
  * Layout rules:
- *  - Always opens in landscape (locked) — guarantees full-screen for all trailers
- *    regardless of whether the movie is 16:9, 1.85:1, or 2.35:1.
- *  - Dimensions are tracked two ways (belt-and-suspenders):
- *    1. onLayout on the container View — fires on first render.
- *    2. Dimensions.addEventListener('change') — fires when orientation changes,
- *       because onLayout inside a Modal does NOT reliably re-fire on iOS rotation.
- *  - Player top offset is calculated explicitly → guaranteed equal bars.
- *  - Bottom 25% of player is fully passthrough → YouTube's progress bar and
- *    native controls are always accessible.
+ *  - Always opens in landscape (locked).
+ *  - Fetches the video's native aspect ratio from the backend (YouTube Data API v3)
+ *    so the player container exactly matches the video — zero YouTube internal letterboxing.
+ *  - Fallback: 16/9 if the fetch fails or times out.
+ *  - Container dimensions from onLayout + Dimensions.change listener (belt-and-suspenders).
+ *  - Player top/left offsets calculated explicitly for pixel-perfect centering.
+ *  - Bottom 25% of player passthrough → YouTube progress bar always accessible.
  *  - No custom title overlay — YouTube already shows it.
  */
 
@@ -32,6 +30,7 @@ import YoutubePlayer, { type YoutubeIframeRef } from 'react-native-youtube-ifram
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { getProviderById } from '../../constants/providers';
+import { getVideoAspectRatio } from '../../services/api';
 import type { WatchProvider } from '../../types';
 
 interface TrailerPlayerProps {
@@ -44,6 +43,7 @@ interface TrailerPlayerProps {
 
 const SEEK_SECONDS = 10;
 const DOUBLE_TAP_DELAY = 300;
+const DEFAULT_ASPECT_RATIO = 16 / 9;
 
 export default function TrailerPlayer({
   youtubeKey,
@@ -55,10 +55,12 @@ export default function TrailerPlayer({
   const insets = useSafeAreaInsets();
   const playerRef = useRef<YoutubeIframeRef>(null);
 
-  // onLayout-based dimensions — measured from actual rendered container.
-  // Immune to portrait-lock, async unlock timing, and statusBarTranslucent chrome.
+  // Container size — updated by onLayout and Dimensions.change
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const { width: CW, height: CH } = containerSize;
+
+  // Native aspect ratio of this specific YouTube video (width / height)
+  const [videoAspectRatio, setVideoAspectRatio] = useState(DEFAULT_ASPECT_RATIO);
 
   const [playing, setPlaying] = useState(true);
   const [ended, setEnded] = useState(false);
@@ -72,26 +74,28 @@ export default function TrailerPlayer({
   const seekRightOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Force landscape immediately — eliminates double-letterboxing for widescreen trailers.
+    // Lock to landscape immediately
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
 
-    // Dimensions.change fires reliably on iOS rotation, even inside Modals.
-    // onLayout alone does NOT always re-fire after orientation change inside a Modal.
+    // Dimensions.change fires reliably on rotation even inside a Modal
     const sub = Dimensions.addEventListener('change', ({ screen }) => {
       setContainerSize({ width: screen.width, height: screen.height });
     });
+
+    // Fetch the video's native aspect ratio — sizes the player to eliminate
+    // YouTube's internal letterboxing for non-16:9 trailers
+    getVideoAspectRatio(youtubeKey).then(setVideoAspectRatio);
 
     return () => {
       sub.remove();
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
     };
-  }, []);
+  }, [youtubeKey]);
 
   const handleClose = useCallback(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP)
       .catch(() => {})
       .finally(onClose);
-    // Effect cleanup also fires, but lockAsync is idempotent — safe to call twice.
   }, [onClose]);
 
   const handleStateChange = useCallback((state: string) => {
@@ -149,16 +153,33 @@ export default function TrailerPlayer({
     }
   }
 
-  // Compute player dimensions from measured container — not Dimensions API.
-  // CW/CH = 0 until onLayout fires; player is hidden until then.
-  const isLandscape = CW > 0 && CW > CH;
-  const playerW = CW;
-  const playerH = isLandscape ? CH : (CW > 0 ? Math.round(CW * 9 / 16) : 0);
+  // Player dimensions: size the container to the video's native aspect ratio.
+  // This means YouTube fills the container exactly — zero internal letterboxing.
+  //
+  // Strategy: fit the video within the screen using the native aspect ratio.
+  //   - Width-constrained:  playerH = CW / videoAspectRatio
+  //   - Height-constrained: playerW = CH * videoAspectRatio
+  //   Pick whichever fits within both CW and CH.
+  let playerW = 0;
+  let playerH = 0;
 
-  // Explicit top offset → equal black bars in portrait, zero bars in landscape
-  const playerTop = CH > 0 ? Math.round((CH - playerH) / 2) : 0;
+  if (CW > 0 && CH > 0) {
+    const hFromW = Math.round(CW / videoAspectRatio);
+    if (hFromW <= CH) {
+      // Width-constrained: full width, letterbox top/bottom
+      playerW = CW;
+      playerH = hFromW;
+    } else {
+      // Height-constrained: full height, pillarbox left/right
+      playerH = CH;
+      playerW = Math.round(CH * videoAspectRatio);
+    }
+  }
 
-  // Tap zones: top 75% of player only — bottom 25% passthrough for YouTube progress bar
+  const playerTop  = CH > 0 ? Math.round((CH - playerH) / 2) : 0;
+  const playerLeft = CW > 0 ? Math.round((CW - playerW) / 2) : 0;
+
+  // Tap zones: top 75% of player — bottom 25% passthrough for YouTube progress bar
   const tapH = Math.round(playerH * 0.75);
   const tapW = Math.round(playerW / 3);
 
@@ -172,7 +193,7 @@ export default function TrailerPlayer({
     >
       <StatusBar hidden />
 
-      {/* Container fills the full modal area — onLayout gives us actual rendered dimensions */}
+      {/* Container fills the full modal area */}
       <View
         style={StyleSheet.absoluteFillObject}
         onLayout={(e) => {
@@ -183,13 +204,11 @@ export default function TrailerPlayer({
         {/* Black background */}
         <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000' }]} />
 
-        {/* Player block — only rendered once we have real dimensions */}
-        {CW > 0 && (
-          <View style={{ position: 'absolute', top: playerTop, left: 0, width: playerW, height: playerH }}>
+        {/* Player — only rendered once we have real dimensions */}
+        {playerW > 0 && playerH > 0 && (
+          <View style={{ position: 'absolute', top: playerTop, left: playerLeft, width: playerW, height: playerH }}>
 
-            {/* key forces WebView remount when dimensions change (orientation change).
-                Without this, the WebView keeps its original layout from mount time —
-                causing tiny player when opened in portrait then rotated to landscape. */}
+            {/* key forces WebView remount when dimensions change */}
             <YoutubePlayer
               key={`${playerW}x${playerH}`}
               ref={playerRef}
@@ -202,7 +221,7 @@ export default function TrailerPlayer({
               initialPlayerParams={{ controls: true, modestbranding: true, rel: false }}
             />
 
-            {/* Tap zones — top 75% only; bottom 25% is passthrough for YouTube progress bar */}
+            {/* Tap zones — top 75% only */}
             <View style={[styles.tapOverlay, { height: tapH }]} pointerEvents="box-none">
               <TouchableOpacity activeOpacity={1} style={{ width: tapW, height: '100%' }} onPress={handleTapLeft} />
               <View style={{ width: tapW, height: '100%' }} pointerEvents="none" />
@@ -238,7 +257,7 @@ export default function TrailerPlayer({
           </View>
         )}
 
-        {/* Close button — in container coordinates, always visible */}
+        {/* Close button — always visible, in container coordinates */}
         <TouchableOpacity
           style={[styles.closeBtn, { top: Math.max(insets.top, 12), left: Math.max(insets.left, 12) }]}
           onPress={handleClose}
