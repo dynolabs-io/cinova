@@ -5,9 +5,11 @@
  *  - Landscape: player fills entire screen (no bars).
  *  - Portrait: player fills full width, height = width × 9/16, centered vertically
  *    so black bars above and below are exactly equal.
- *  - Uses Dimensions.get('screen') (physical screen) not 'window', because
- *    statusBarTranslucent makes the Modal content area larger than 'window',
- *    causing flex centering to shift the player down.
+ *  - Uses onLayout on the container View (not Dimensions API) because:
+ *    a) Dimensions.get('screen') returns portrait dims when the app is portrait-locked,
+ *       even if the phone is physically in landscape when the modal opens.
+ *    b) ScreenOrientation.unlockAsync() is async — initial render fires before unlock.
+ *    c) onLayout measures what was actually rendered by the system, immune to all of this.
  *  - Player top offset is calculated explicitly → guaranteed equal bars.
  *  - Bottom 25% of player is fully passthrough → YouTube's progress bar and
  *    native controls are always accessible.
@@ -21,7 +23,6 @@ import {
   Modal,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
   StatusBar,
   Linking,
   Platform,
@@ -45,11 +46,6 @@ interface TrailerPlayerProps {
 const SEEK_SECONDS = 10;
 const DOUBLE_TAP_DELAY = 300;
 
-function getScreen() {
-  // 'screen' = physical screen size — always correct regardless of status bar / modal chrome
-  return Dimensions.get('screen');
-}
-
 export default function TrailerPlayer({
   youtubeKey,
   title,
@@ -59,7 +55,12 @@ export default function TrailerPlayer({
 }: TrailerPlayerProps) {
   const insets = useSafeAreaInsets();
   const playerRef = useRef<YoutubeIframeRef>(null);
-  const [screen, setScreen] = useState(getScreen);
+
+  // onLayout-based dimensions — measured from actual rendered container.
+  // Immune to portrait-lock, async unlock timing, and statusBarTranslucent chrome.
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const { width: CW, height: CH } = containerSize;
+
   const [playing, setPlaying] = useState(true);
   const [ended, setEnded] = useState(false);
 
@@ -73,9 +74,7 @@ export default function TrailerPlayer({
 
   useEffect(() => {
     ScreenOrientation.unlockAsync();
-    const sub = Dimensions.addEventListener('change', () => setScreen(getScreen()));
     return () => {
-      sub.remove();
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
     };
   }, []);
@@ -141,25 +140,18 @@ export default function TrailerPlayer({
     }
   }
 
-  const SW = screen.width;
-  const SH = screen.height;
-  const isLandscape = SW > SH;
+  // Compute player dimensions from measured container — not Dimensions API.
+  // CW/CH = 0 until onLayout fires; player is hidden until then.
+  const isLandscape = CW > 0 && CW > CH;
+  const playerW = CW;
+  const playerH = isLandscape ? CH : (CW > 0 ? Math.round(CW * 9 / 16) : 0);
 
-  // Landscape: player fills full screen.
-  // Portrait: player fills width, height = width × 9/16 (16:9 letterbox).
-  const playerW = SW;
-  const playerH = isLandscape ? SH : Math.round(SW * 9 / 16);
+  // Explicit top offset → equal black bars in portrait, zero bars in landscape
+  const playerTop = CH > 0 ? Math.round((CH - playerH) / 2) : 0;
 
-  // Explicit top/left offset → guaranteed equal bars, immune to Modal chrome issues
-  const playerTop = Math.round((SH - playerH) / 2);
-  const playerLeft = Math.round((SW - playerW) / 2);
-
-  // Tap zones: top 75% of player only — bottom 25% passthrough for YouTube controls
+  // Tap zones: top 75% of player only — bottom 25% passthrough for YouTube progress bar
   const tapH = Math.round(playerH * 0.75);
   const tapW = Math.round(playerW / 3);
-
-  const closeBtnTop = playerTop + Math.max(insets.top, 12);
-  const closeBtnLeft = playerLeft + Math.max(insets.left, 12);
 
   return (
     <Modal
@@ -171,70 +163,81 @@ export default function TrailerPlayer({
     >
       <StatusBar hidden />
 
-      {/* Full physical screen black background */}
-      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000' }]} />
+      {/* Container fills the full modal area — onLayout gives us actual rendered dimensions */}
+      <View
+        style={StyleSheet.absoluteFillObject}
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          setContainerSize({ width, height });
+        }}
+      >
+        {/* Black background */}
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000' }]} />
 
-      {/* Player block — explicitly positioned for pixel-perfect centering */}
-      <View style={{ position: 'absolute', top: playerTop, left: playerLeft, width: playerW, height: playerH }}>
+        {/* Player block — only rendered once we have real dimensions */}
+        {CW > 0 && (
+          <View style={{ position: 'absolute', top: playerTop, left: 0, width: playerW, height: playerH }}>
 
-        {/* key forces WebView remount when dimensions change (orientation change).
-            Without this, the WebView keeps its original layout from mount time —
-            causing tiny player when opened in portrait then rotated to landscape. */}
-        <YoutubePlayer
-          key={`${playerW}x${playerH}`}
-          ref={playerRef}
-          height={playerH}
-          width={playerW}
-          videoId={youtubeKey}
-          play={playing}
-          onChangeState={handleStateChange}
-          webViewProps={{ allowsInlineMediaPlayback: true }}
-          initialPlayerParams={{ controls: true, modestbranding: true, rel: false }}
-        />
+            {/* key forces WebView remount when dimensions change (orientation change).
+                Without this, the WebView keeps its original layout from mount time —
+                causing tiny player when opened in portrait then rotated to landscape. */}
+            <YoutubePlayer
+              key={`${playerW}x${playerH}`}
+              ref={playerRef}
+              height={playerH}
+              width={playerW}
+              videoId={youtubeKey}
+              play={playing}
+              onChangeState={handleStateChange}
+              webViewProps={{ allowsInlineMediaPlayback: true }}
+              initialPlayerParams={{ controls: true, modestbranding: true, rel: false }}
+            />
 
-        {/* Tap zones — top 75% only; bottom 25% is passthrough for YouTube progress bar */}
-        <View style={[styles.tapOverlay, { height: tapH }]} pointerEvents="box-none">
-          <TouchableOpacity activeOpacity={1} style={{ width: tapW, height: '100%' }} onPress={handleTapLeft} />
-          <View style={{ width: tapW, height: '100%' }} pointerEvents="none" />
-          <TouchableOpacity activeOpacity={1} style={{ width: tapW, height: '100%' }} onPress={handleTapRight} />
-        </View>
+            {/* Tap zones — top 75% only; bottom 25% is passthrough for YouTube progress bar */}
+            <View style={[styles.tapOverlay, { height: tapH }]} pointerEvents="box-none">
+              <TouchableOpacity activeOpacity={1} style={{ width: tapW, height: '100%' }} onPress={handleTapLeft} />
+              <View style={{ width: tapW, height: '100%' }} pointerEvents="none" />
+              <TouchableOpacity activeOpacity={1} style={{ width: tapW, height: '100%' }} onPress={handleTapRight} />
+            </View>
 
-        {/* Seek flash indicators */}
-        <Animated.View style={[styles.seekIndicator, styles.seekLeft, { opacity: seekLeftOpacity }]}>
-          <Text style={styles.seekIcon}>«</Text>
-          <Text style={styles.seekLabel}>{SEEK_SECONDS}s</Text>
-        </Animated.View>
-        <Animated.View style={[styles.seekIndicator, styles.seekRight, { opacity: seekRightOpacity }]}>
-          <Text style={styles.seekIcon}>»</Text>
-          <Text style={styles.seekLabel}>{SEEK_SECONDS}s</Text>
-        </Animated.View>
+            {/* Seek flash indicators */}
+            <Animated.View style={[styles.seekIndicator, styles.seekLeft, { opacity: seekLeftOpacity }]}>
+              <Text style={styles.seekIcon}>«</Text>
+              <Text style={styles.seekLabel}>{SEEK_SECONDS}s</Text>
+            </Animated.View>
+            <Animated.View style={[styles.seekIndicator, styles.seekRight, { opacity: seekRightOpacity }]}>
+              <Text style={styles.seekIcon}>»</Text>
+              <Text style={styles.seekLabel}>{SEEK_SECONDS}s</Text>
+            </Animated.View>
 
-        {/* Watch on Provider — shown when video ends */}
-        {ended && primaryProvider && (
-          <View style={styles.watchOverlay}>
-            <Text style={styles.watchLabel}>Ready to watch?</Text>
-            <TouchableOpacity style={styles.watchBtn} onPress={handleWatch}>
-              {primaryProvider.logoPath ? (
-                <Image
-                  source={{ uri: `https://image.tmdb.org/t/p/w92${primaryProvider.logoPath}` }}
-                  style={styles.providerLogo}
-                  contentFit="contain"
-                />
-              ) : null}
-              <Text style={styles.watchBtnText}>Watch on {primaryProvider.providerName}</Text>
-            </TouchableOpacity>
+            {/* Watch on Provider — shown when video ends */}
+            {ended && primaryProvider && (
+              <View style={styles.watchOverlay}>
+                <Text style={styles.watchLabel}>Ready to watch?</Text>
+                <TouchableOpacity style={styles.watchBtn} onPress={handleWatch}>
+                  {primaryProvider.logoPath ? (
+                    <Image
+                      source={{ uri: `https://image.tmdb.org/t/p/w92${primaryProvider.logoPath}` }}
+                      style={styles.providerLogo}
+                      contentFit="contain"
+                    />
+                  ) : null}
+                  <Text style={styles.watchBtnText}>Watch on {primaryProvider.providerName}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
-      </View>
 
-      {/* Close button — positioned in screen coordinates, always visible */}
-      <TouchableOpacity
-        style={[styles.closeBtn, { top: closeBtnTop, left: closeBtnLeft }]}
-        onPress={handleClose}
-        hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-      >
-        <Text style={styles.closeBtnText}>✕</Text>
-      </TouchableOpacity>
+        {/* Close button — in container coordinates, always visible */}
+        <TouchableOpacity
+          style={[styles.closeBtn, { top: Math.max(insets.top, 12), left: Math.max(insets.left, 12) }]}
+          onPress={handleClose}
+          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+        >
+          <Text style={styles.closeBtnText}>✕</Text>
+        </TouchableOpacity>
+      </View>
     </Modal>
   );
 }
