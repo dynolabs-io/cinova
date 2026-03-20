@@ -511,10 +511,10 @@ function TagSection({
         {tags.map((tag) => (
           <Pressable
             key={tag}
-            style={({ pressed }) => [tagStyles.chip, { borderColor: color + '60', opacity: pressed ? 0.65 : 1 }]}
+            style={tagStyles.chip}
             onPress={() => router.push(`/(tabs)/discover?${filterParam ?? 'genre'}=${encodeURIComponent(tag)}` as never)}
           >
-            <Text style={[tagStyles.chipText, { color }]}>{tag}</Text>
+            <Text style={[tagStyles.chipText, { color, borderColor: color + '60' }]}>{tag}</Text>
           </Pressable>
         ))}
       </View>
@@ -758,9 +758,10 @@ const tagStyles = StyleSheet.create({
   },
   chip: {
     paddingHorizontal: Spacing[3],
-    paddingVertical: Spacing[1.5],
+    paddingVertical: Spacing[2],
     borderRadius: Radius.full,
     borderWidth: 1,
+    borderColor: Colors.border,
     backgroundColor: Colors.card,
   },
   chipText: {
