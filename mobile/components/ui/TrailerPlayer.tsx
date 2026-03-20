@@ -2,12 +2,13 @@
  * TrailerPlayer — Full-screen YouTube trailer modal.
  *
  * Layout rules:
- *  - Always opens in landscape (locked).
+ *  - No auto-rotation. User decides orientation.
+ *  - useWindowDimensions() is the single source of truth for screen size.
+ *    It updates reactively on rotation. With StatusBar hidden + statusBarTranslucent,
+ *    window === screen — no offset issues.
  *  - Fetches the video's native aspect ratio from the backend (YouTube Data API v3)
- *    so the player container exactly matches the video — zero YouTube internal letterboxing.
- *  - Fallback: 16/9 if the fetch fails or times out.
- *  - Container dimensions from onLayout + Dimensions.change listener (belt-and-suspenders).
- *  - Player top/left offsets calculated explicitly for pixel-perfect centering.
+ *    so the player container exactly matches the video — zero internal letterboxing.
+ *  - Player is centered with explicit top/left offsets — equal bars on all sides.
  *  - Bottom 25% of player passthrough → YouTube progress bar always accessible.
  *  - No custom title overlay — YouTube already shows it.
  */
@@ -19,11 +20,11 @@ import {
   Modal,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
   StatusBar,
   Linking,
   Platform,
   Animated,
+  useWindowDimensions,
 } from 'react-native';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import YoutubePlayer, { type YoutubeIframeRef } from 'react-native-youtube-iframe';
@@ -55,11 +56,12 @@ export default function TrailerPlayer({
   const insets = useSafeAreaInsets();
   const playerRef = useRef<YoutubeIframeRef>(null);
 
-  // Container size — updated by onLayout and Dimensions.change
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const { width: CW, height: CH } = containerSize;
+  // useWindowDimensions updates reactively on every orientation change.
+  // With StatusBar hidden + statusBarTranslucent, window === physical screen.
+  const { width: SW, height: SH } = useWindowDimensions();
 
-  // Native aspect ratio of this specific YouTube video (width / height)
+  // Native aspect ratio of this specific YouTube video (width / height).
+  // Fetched once on mount — sizes the player to eliminate YouTube internal letterboxing.
   const [videoAspectRatio, setVideoAspectRatio] = useState(DEFAULT_ASPECT_RATIO);
 
   const [playing, setPlaying] = useState(true);
@@ -74,20 +76,13 @@ export default function TrailerPlayer({
   const seekRightOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Lock to landscape immediately
-    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+    // Unlock rotation so user can choose orientation
+    ScreenOrientation.unlockAsync();
 
-    // Dimensions.change fires reliably on rotation even inside a Modal
-    const sub = Dimensions.addEventListener('change', ({ screen }) => {
-      setContainerSize({ width: screen.width, height: screen.height });
-    });
-
-    // Fetch the video's native aspect ratio — sizes the player to eliminate
-    // YouTube's internal letterboxing for non-16:9 trailers
+    // Fetch native aspect ratio — eliminates YouTube internal letterboxing
     getVideoAspectRatio(youtubeKey).then(setVideoAspectRatio);
 
     return () => {
-      sub.remove();
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
     };
   }, [youtubeKey]);
@@ -153,31 +148,16 @@ export default function TrailerPlayer({
     }
   }
 
-  // Player dimensions: size the container to the video's native aspect ratio.
-  // This means YouTube fills the container exactly — zero internal letterboxing.
-  //
-  // Strategy: fit the video within the screen using the native aspect ratio.
-  //   - Width-constrained:  playerH = CW / videoAspectRatio
-  //   - Height-constrained: playerW = CH * videoAspectRatio
-  //   Pick whichever fits within both CW and CH.
-  let playerW = 0;
-  let playerH = 0;
+  // Fit the video within the screen using its native aspect ratio.
+  // Width-constrained:  full width, letterbox top/bottom
+  // Height-constrained: full height, pillarbox left/right
+  // Pick whichever fits within both SW and SH.
+  const hFromW = Math.round(SW / videoAspectRatio);
+  const playerW = hFromW <= SH ? SW : Math.round(SH * videoAspectRatio);
+  const playerH = hFromW <= SH ? hFromW : SH;
 
-  if (CW > 0 && CH > 0) {
-    const hFromW = Math.round(CW / videoAspectRatio);
-    if (hFromW <= CH) {
-      // Width-constrained: full width, letterbox top/bottom
-      playerW = CW;
-      playerH = hFromW;
-    } else {
-      // Height-constrained: full height, pillarbox left/right
-      playerH = CH;
-      playerW = Math.round(CH * videoAspectRatio);
-    }
-  }
-
-  const playerTop  = CH > 0 ? Math.round((CH - playerH) / 2) : 0;
-  const playerLeft = CW > 0 ? Math.round((CW - playerW) / 2) : 0;
+  const playerTop  = Math.round((SH - playerH) / 2);
+  const playerLeft = Math.round((SW - playerW) / 2);
 
   // Tap zones: top 75% of player — bottom 25% passthrough for YouTube progress bar
   const tapH = Math.round(playerH * 0.75);
@@ -193,79 +173,68 @@ export default function TrailerPlayer({
     >
       <StatusBar hidden />
 
-      {/* Container fills the full modal area */}
-      <View
-        style={StyleSheet.absoluteFillObject}
-        onLayout={(e) => {
-          const { width, height } = e.nativeEvent.layout;
-          setContainerSize({ width, height });
-        }}
-      >
-        {/* Black background */}
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000' }]} />
+      {/* Full screen black background */}
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000' }]} />
 
-        {/* Player — only rendered once we have real dimensions */}
-        {playerW > 0 && playerH > 0 && (
-          <View style={{ position: 'absolute', top: playerTop, left: playerLeft, width: playerW, height: playerH }}>
+      {/* Player — centered using explicit top/left */}
+      <View style={{ position: 'absolute', top: playerTop, left: playerLeft, width: playerW, height: playerH }}>
 
-            {/* key forces WebView remount when dimensions change */}
-            <YoutubePlayer
-              key={`${playerW}x${playerH}`}
-              ref={playerRef}
-              height={playerH}
-              width={playerW}
-              videoId={youtubeKey}
-              play={playing}
-              onChangeState={handleStateChange}
-              webViewProps={{ allowsInlineMediaPlayback: true }}
-              initialPlayerParams={{ controls: true, modestbranding: true, rel: false }}
-            />
+        {/* key forces WebView remount when dimensions change */}
+        <YoutubePlayer
+          key={`${playerW}x${playerH}`}
+          ref={playerRef}
+          height={playerH}
+          width={playerW}
+          videoId={youtubeKey}
+          play={playing}
+          onChangeState={handleStateChange}
+          webViewProps={{ allowsInlineMediaPlayback: true }}
+          initialPlayerParams={{ controls: true, modestbranding: true, rel: false }}
+        />
 
-            {/* Tap zones — top 75% only */}
-            <View style={[styles.tapOverlay, { height: tapH }]} pointerEvents="box-none">
-              <TouchableOpacity activeOpacity={1} style={{ width: tapW, height: '100%' }} onPress={handleTapLeft} />
-              <View style={{ width: tapW, height: '100%' }} pointerEvents="none" />
-              <TouchableOpacity activeOpacity={1} style={{ width: tapW, height: '100%' }} onPress={handleTapRight} />
-            </View>
+        {/* Tap zones — top 75% only */}
+        <View style={[styles.tapOverlay, { height: tapH }]} pointerEvents="box-none">
+          <TouchableOpacity activeOpacity={1} style={{ width: tapW, height: '100%' }} onPress={handleTapLeft} />
+          <View style={{ width: tapW, height: '100%' }} pointerEvents="none" />
+          <TouchableOpacity activeOpacity={1} style={{ width: tapW, height: '100%' }} onPress={handleTapRight} />
+        </View>
 
-            {/* Seek flash indicators */}
-            <Animated.View style={[styles.seekIndicator, styles.seekLeft, { opacity: seekLeftOpacity }]}>
-              <Text style={styles.seekIcon}>«</Text>
-              <Text style={styles.seekLabel}>{SEEK_SECONDS}s</Text>
-            </Animated.View>
-            <Animated.View style={[styles.seekIndicator, styles.seekRight, { opacity: seekRightOpacity }]}>
-              <Text style={styles.seekIcon}>»</Text>
-              <Text style={styles.seekLabel}>{SEEK_SECONDS}s</Text>
-            </Animated.View>
+        {/* Seek flash indicators */}
+        <Animated.View style={[styles.seekIndicator, styles.seekLeft, { opacity: seekLeftOpacity }]}>
+          <Text style={styles.seekIcon}>«</Text>
+          <Text style={styles.seekLabel}>{SEEK_SECONDS}s</Text>
+        </Animated.View>
+        <Animated.View style={[styles.seekIndicator, styles.seekRight, { opacity: seekRightOpacity }]}>
+          <Text style={styles.seekIcon}>»</Text>
+          <Text style={styles.seekLabel}>{SEEK_SECONDS}s</Text>
+        </Animated.View>
 
-            {/* Watch on Provider — shown when video ends */}
-            {ended && primaryProvider && (
-              <View style={styles.watchOverlay}>
-                <Text style={styles.watchLabel}>Ready to watch?</Text>
-                <TouchableOpacity style={styles.watchBtn} onPress={handleWatch}>
-                  {primaryProvider.logoPath ? (
-                    <Image
-                      source={{ uri: `https://image.tmdb.org/t/p/w92${primaryProvider.logoPath}` }}
-                      style={styles.providerLogo}
-                      contentFit="contain"
-                    />
-                  ) : null}
-                  <Text style={styles.watchBtnText}>Watch on {primaryProvider.providerName}</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+        {/* Watch on Provider — shown when video ends */}
+        {ended && primaryProvider && (
+          <View style={styles.watchOverlay}>
+            <Text style={styles.watchLabel}>Ready to watch?</Text>
+            <TouchableOpacity style={styles.watchBtn} onPress={handleWatch}>
+              {primaryProvider.logoPath ? (
+                <Image
+                  source={{ uri: `https://image.tmdb.org/t/p/w92${primaryProvider.logoPath}` }}
+                  style={styles.providerLogo}
+                  contentFit="contain"
+                />
+              ) : null}
+              <Text style={styles.watchBtnText}>Watch on {primaryProvider.providerName}</Text>
+            </TouchableOpacity>
           </View>
         )}
-
-        {/* Close button — always visible, in container coordinates */}
-        <TouchableOpacity
-          style={[styles.closeBtn, { top: Math.max(insets.top, 12), left: Math.max(insets.left, 12) }]}
-          onPress={handleClose}
-          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-        >
-          <Text style={styles.closeBtnText}>✕</Text>
-        </TouchableOpacity>
       </View>
+
+      {/* Close button — screen coordinates, always visible */}
+      <TouchableOpacity
+        style={[styles.closeBtn, { top: playerTop + Math.max(insets.top, 12), left: playerLeft + Math.max(insets.left, 12) }]}
+        onPress={handleClose}
+        hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+      >
+        <Text style={styles.closeBtnText}>✕</Text>
+      </TouchableOpacity>
     </Modal>
   );
 }
