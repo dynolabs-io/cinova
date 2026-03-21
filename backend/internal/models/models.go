@@ -79,9 +79,10 @@ type Movie struct {
 	Producers          []Person   `json:"producers,omitempty"`
 	Providers          []Provider `json:"providers,omitempty"`
 	Awards             []Award    `json:"awards,omitempty"`
-	PlotSummary        string     `json:"plot_summary,omitempty"`
-	CinovaSynopsis     string     `json:"cinova_synopsis,omitempty"`
-	CinovaEditorial    string     `json:"cinova_editorial,omitempty"`
+	PlotSummary               string     `json:"plot_summary,omitempty"`
+	CinovaSynopsis            string     `json:"cinova_synopsis,omitempty"`
+	CinovaEditorial           string     `json:"cinova_editorial,omitempty"`
+	VerticalTrailerYouTubeKey string     `json:"vertical_trailer_youtube_key,omitempty"`
 }
 
 // TVShow represents a TV series node in the graph database.

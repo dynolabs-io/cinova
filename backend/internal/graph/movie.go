@@ -555,6 +555,9 @@ func movieNodeToModel(v interface{}) *models.Movie {
 	m.PlotSummary = strVal(props["plot_summary"])
 	m.CinovaSynopsis = strVal(props["cinova_synopsis"])
 	m.CinovaEditorial = strVal(props["cinova_editorial"])
+	if v := strVal(props["vertical_trailer_youtube_key"]); v != "" && v != "NOT_FOUND" {
+		m.VerticalTrailerYouTubeKey = v
+	}
 	if sl, ok := props["spoken_languages"]; ok && sl != nil {
 		if list, ok := sl.([]interface{}); ok {
 			for _, item := range list {
@@ -1537,6 +1540,40 @@ func (r *MovieRepository) AssessEnrichedTVShows(ctx context.Context, n int) (*As
 	if totalC > 0 { rep.PassRateOverall = 1.0 - float64(totalF)/float64(totalC) }
 
 	return rep, nil
+}
+
+// GetMoviesWithoutVerticalTrailer returns movies that have a trailer_youtube_key
+// but no vertical_trailer_youtube_key, ordered by release_year DESC then popularity DESC.
+// This prioritises recent movies since vertical trailers are far more common post-2019.
+func (r *MovieRepository) GetMoviesWithoutVerticalTrailer(ctx context.Context, limit int) ([]models.Movie, error) {
+	records, err := r.driver.RunQuery(ctx, `
+		MATCH (m:Movie)
+		WHERE m.trailer_youtube_key IS NOT NULL
+		  AND m.trailer_youtube_key <> ''
+		  AND (m.vertical_trailer_youtube_key IS NULL OR m.vertical_trailer_youtube_key = '')
+		RETURN m
+		ORDER BY m.release_year DESC, m.popularity DESC
+		LIMIT $limit
+	`, map[string]interface{}{"limit": limit})
+	if err != nil {
+		return nil, fmt.Errorf("GetMoviesWithoutVerticalTrailer: %w", err)
+	}
+	movies := make([]models.Movie, 0, len(records))
+	for _, rec := range records {
+		raw, _ := rec.Get("m")
+		if m := movieNodeToModel(raw); m != nil {
+			movies = append(movies, *m)
+		}
+	}
+	return movies, nil
+}
+
+// SetVerticalTrailerKey stores a vertical_trailer_youtube_key on a Movie node.
+func (r *MovieRepository) SetVerticalTrailerKey(ctx context.Context, tmdbID int, verticalKey string) error {
+	return r.driver.RunWriteUnit(ctx, `
+		MATCH (m:Movie {tmdb_id: $tmdb_id})
+		SET m.vertical_trailer_youtube_key = $key
+	`, map[string]interface{}{"tmdb_id": tmdbID, "key": verticalKey})
 }
 
 // GetMoviesWithoutPlot returns up to limit Movie nodes that have a wikidata_id

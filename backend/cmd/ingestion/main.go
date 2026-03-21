@@ -20,6 +20,7 @@ import (
 	"github.com/foundrylab-app/cinova/backend/internal/scoring"
 	"github.com/foundrylab-app/cinova/backend/internal/tmdb"
 	"github.com/foundrylab-app/cinova/backend/internal/wikidata"
+	"github.com/foundrylab-app/cinova/backend/internal/youtube"
 )
 
 const (
@@ -33,11 +34,12 @@ const (
 )
 
 func main() {
-	mode           := flag.String("mode", "delta", "ingestion mode: full, delta, enrich-only, score-recompute, or worker")
+	mode           := flag.String("mode", "delta", "ingestion mode: full, delta, enrich-only, score-recompute, vertical-trailers, or worker")
 	mediaType      := flag.String("media-type", "all", "media type: movie, tvshow, or all")
 	country        := flag.String("country", "US", "ISO 3166-1 alpha-2 country code for streaming providers")
 	minVotes       := flag.Int("min-votes", 100, "minimum vote_count to include (quality filter)")
 	minPopularity  := flag.Float64("min-popularity", 5.0, "minimum TMDB popularity to include from bulk export (0=all)")
+	batchSize      := flag.Int("batch-size", 50, "number of items to process per batch in vertical-trailers mode")
 	flag.Parse()
 
 	// Worker mode connects to Temporal and runs as a long-lived worker process.
@@ -123,8 +125,10 @@ func main() {
 		if err := runScoreRecompute(ctx, movieRepo); err != nil {
 			log.Fatal().Err(err).Msg("score recompute failed")
 		}
+	case "vertical-trailers":
+		runVerticalTrailerIngestion(ctx, movieRepo, cfg.YouTubeAPIKey, *batchSize)
 	default:
-		log.Fatal().Str("mode", *mode).Msg("unknown mode; use full, delta, enrich-only, plot-recovery, assess, score-recompute, or worker")
+		log.Fatal().Str("mode", *mode).Msg("unknown mode; use full, delta, enrich-only, plot-recovery, assess, score-recompute, vertical-trailers, or worker")
 	}
 
 	log.Info().Msg("ingestion complete")
@@ -1031,4 +1035,65 @@ func runScoreRecompute(ctx context.Context, repo *graph.MovieRepository) error {
 
 	log.Info().Int64("total_updated", total).Msg("score-recompute: complete")
 	return nil
+}
+
+// ── Vertical Trailer Ingestion ─────────────────────────────────────────────────
+
+func runVerticalTrailerIngestion(ctx context.Context, repo *graph.MovieRepository, youtubeAPIKey string, batchSize int) {
+	finder := youtube.NewVerticalFinder(youtubeAPIKey)
+
+	// YouTube Data API quota: search costs 100 units, videos costs 1 unit.
+	// Daily quota is 10,000 units. With ~5 searches per movie, process max ~18 movies/day safely.
+	// We use a rate limiter: 1 movie per 5 seconds to stay well within quota.
+	limiter := rate.NewLimiter(rate.Every(5*time.Second), 1)
+
+	var found, notFound, errors int64
+
+	for {
+		movies, err := repo.GetMoviesWithoutVerticalTrailer(ctx, batchSize)
+		if err != nil {
+			log.Fatal().Err(err).Msg("GetMoviesWithoutVerticalTrailer failed")
+		}
+		if len(movies) == 0 {
+			log.Info().Int64("found", found).Int64("not_found", notFound).Int64("errors", errors).Msg("vertical trailer ingestion complete")
+			return
+		}
+
+		for _, m := range movies {
+			if err := limiter.Wait(ctx); err != nil {
+				return
+			}
+
+			year := 0
+			if len(m.ReleaseDate) >= 4 {
+				fmt.Sscanf(m.ReleaseDate[:4], "%d", &year)
+			}
+
+			key, err := finder.FindVerticalTrailer(m.Title, year)
+			if err != nil {
+				log.Error().Err(err).Str("title", m.Title).Msg("vertical trailer search failed")
+				atomic.AddInt64(&errors, 1)
+				// Mark as attempted with empty string so we don't retry endlessly
+				_ = repo.SetVerticalTrailerKey(ctx, int(m.TMDBID), "NOT_FOUND")
+				continue
+			}
+
+			if key == "" {
+				log.Debug().Str("title", m.Title).Int("year", year).Msg("no vertical trailer found")
+				atomic.AddInt64(&notFound, 1)
+				// Mark as attempted so we skip on next run
+				_ = repo.SetVerticalTrailerKey(ctx, int(m.TMDBID), "NOT_FOUND")
+				continue
+			}
+
+			if err := repo.SetVerticalTrailerKey(ctx, int(m.TMDBID), key); err != nil {
+				log.Error().Err(err).Str("title", m.Title).Str("key", key).Msg("failed to save vertical trailer key")
+				atomic.AddInt64(&errors, 1)
+				continue
+			}
+
+			log.Info().Str("title", m.Title).Int("year", year).Str("key", key).Msg("vertical trailer found")
+			atomic.AddInt64(&found, 1)
+		}
+	}
 }

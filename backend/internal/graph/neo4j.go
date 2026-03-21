@@ -110,6 +110,7 @@ func (d *Driver) EnsureSchema(ctx context.Context) error {
 		// Vector indexes for semantic similarity search on editorial embeddings (Phase 3)
 		"CREATE VECTOR INDEX movie_editorial_vec IF NOT EXISTS FOR (m:Movie)  ON (m.editorial_embedding) OPTIONS {indexConfig: {`vector.dimensions`: 1536, `vector.similarity_function`: 'cosine'}}",
 		"CREATE VECTOR INDEX tv_editorial_vec    IF NOT EXISTS FOR (t:TVShow) ON (t.editorial_embedding) OPTIONS {indexConfig: {`vector.dimensions`: 1536, `vector.similarity_function`: 'cosine'}}",
+		`CREATE INDEX movie_vertical_trailer IF NOT EXISTS FOR (m:Movie) ON (m.vertical_trailer_youtube_key)`,
 	}
 
 	session := d.driver.NewSession(ctx, neo4j.SessionConfig{
