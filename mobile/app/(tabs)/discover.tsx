@@ -22,7 +22,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import DiscoverGridCard, { VIDEO_CARD_HEIGHT, POSTER_CARD_HEIGHT } from '../../components/ui/DiscoverGridCard';
+import DiscoverGridCard, { getCardHeight } from '../../components/ui/DiscoverGridCard';
 import TrailerPlayer from '../../components/ui/TrailerPlayer';
 import { getDiscoverFeed, saveTitle } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
@@ -39,7 +39,7 @@ function distributeToColumns(movies: Movie[], numCols: number): Movie[][] {
   const cols: Movie[][] = Array.from({ length: numCols }, () => []);
   const heights = new Array<number>(numCols).fill(0);
   for (const movie of movies) {
-    const cardH = movie.verticalTrailerYoutubeKey ? VIDEO_CARD_HEIGHT : POSTER_CARD_HEIGHT;
+    const cardH = getCardHeight(movie);
     const shortest = heights.indexOf(Math.min(...heights));
     cols[shortest].push(movie);
     heights[shortest] += cardH + COL_GAP;

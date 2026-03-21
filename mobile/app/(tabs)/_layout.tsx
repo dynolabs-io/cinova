@@ -54,35 +54,35 @@ export default function TabLayout() {
           name="index"
           options={{
             title: 'Home',
-            tabBarIcon: ({ color }) => <TabIcon name="home" color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="discover"
-          options={{
-            title: 'Discover',
-            tabBarIcon: ({ color }) => <TabIcon name="discover" color={color} />,
+            tabBarIcon: ({ color }) => <TabIcon name="home" color={color} size={24} />,
           }}
         />
         <Tabs.Screen
           name="reels"
           options={{
             title: 'Reels',
-            tabBarIcon: ({ color }) => <TabIcon name="reels" color={color} size={28} />,
+            tabBarIcon: ({ color }) => <TabIcon name="reels" color={color} size={24} />,
+          }}
+        />
+        <Tabs.Screen
+          name="discover"
+          options={{
+            title: 'Discover',
+            tabBarIcon: ({ color }) => <TabIcon name="discover" color={color} size={26} />,
           }}
         />
         <Tabs.Screen
           name="watchlist"
           options={{
             title: 'Watchlist',
-            tabBarIcon: ({ color }) => <TabIcon name="watchlist" color={color} />,
+            tabBarIcon: ({ color }) => <TabIcon name="watchlist" color={color} size={24} />,
           }}
         />
         <Tabs.Screen
           name="profile"
           options={{
             title: 'Profile',
-            tabBarIcon: ({ color }) => <TabIcon name="profile" color={color} />,
+            tabBarIcon: ({ color }) => <TabIcon name="profile" color={color} size={24} />,
           }}
         />
         {/* Hidden — not in tab bar */}

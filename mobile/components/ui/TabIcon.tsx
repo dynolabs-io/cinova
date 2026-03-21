@@ -49,26 +49,24 @@ function HomeIcon({ color, size }: { color: string; size: number }) {
   );
 }
 
-// ── Reels — large filled play circle (TikTok-style center tab) ────────────────
+// ── Reels — filled play circle ────────────────────────────────────────────────
 function ReelsIcon({ color, size }: { color: string; size: number }) {
+  const d = size * 0.86;
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      {/* Filled circle */}
       <View style={{
-        width: size * 0.94,
-        height: size * 0.94,
-        borderRadius: size * 0.47,
+        width: d, height: d,
+        borderRadius: d / 2,
         backgroundColor: color,
         alignItems: 'center',
         justifyContent: 'center',
       }}>
-        {/* Play triangle — slightly right-offset for visual balance */}
         <View style={{
           width: 0, height: 0,
-          marginLeft: size * 0.06,
-          borderTopWidth: size * 0.2,
-          borderBottomWidth: size * 0.2,
-          borderLeftWidth: size * 0.32,
+          marginLeft: d * 0.08,
+          borderTopWidth: d * 0.22,
+          borderBottomWidth: d * 0.22,
+          borderLeftWidth: d * 0.35,
           borderTopColor: 'transparent',
           borderBottomColor: 'transparent',
           borderLeftColor: '#000',
@@ -79,32 +77,35 @@ function ReelsIcon({ color, size }: { color: string; size: number }) {
 }
 
 // ── Discover — search magnifier ────────────────────────────────────────────────
+// Lens occupies top-left ~60% of box; handle extends diagonally bottom-right.
 function DiscoverIcon({ color, size }: { color: string; size: number }) {
-  const lens = size * 0.6;
-  const strokeW = size * 0.12;
+  const sw = Math.max(2.2, size * 0.115);   // stroke width
+  const ld = size * 0.58;                    // lens outer diameter
+  const hl = size * 0.32;                    // handle length
+  // Handle tip offset so it visually connects to lens circle bottom-right
+  const hOffset = ld * 0.62;
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      {/* Lens circle — ring only */}
+    <View style={{ width: size, height: size }}>
+      {/* Lens ring */}
       <View style={{
         position: 'absolute',
-        top: 0,
-        left: 0,
-        width: lens,
-        height: lens,
-        borderRadius: lens / 2,
-        borderWidth: strokeW,
+        top: 0, left: 0,
+        width: ld, height: ld,
+        borderRadius: ld / 2,
+        borderWidth: sw,
         borderColor: color,
       }} />
-      {/* Handle — rotated bar at bottom-right */}
+      {/* Handle — starts at lens bottom-right, 45° diagonal */}
       <View style={{
         position: 'absolute',
-        bottom: size * 0.02,
-        right: size * 0.02,
-        width: strokeW,
-        height: size * 0.38,
-        borderRadius: strokeW / 2,
+        top: hOffset,
+        left: hOffset,
+        width: sw * 1.1,
+        height: hl,
+        borderRadius: sw,
         backgroundColor: color,
-        transform: [{ rotate: '-45deg' }],
+        transform: [{ rotate: '45deg' }],
+        transformOrigin: 'top center',
       }} />
     </View>
   );
@@ -141,12 +142,40 @@ function ChatIcon({ color, size }: { color: string; size: number }) {
   );
 }
 
-// ── Watchlist (heart) ────────────────────────────────────────────────────────
-// Unicode ♥ renders via the system font — no custom font loading needed.
+// ── Watchlist (heart) ─────────────────────────────────────────────────────────
+// Two filled circles (lobes) + rotated square (bottom point) = classic heart.
 function WatchlistIcon({ color, size }: { color: string; size: number }) {
+  const lobeD = size * 0.46;    // diameter of each circle lobe
+  const squareS = size * 0.54;  // rotated square size
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ color, fontSize: size * 0.9, lineHeight: size }}>♥</Text>
+      {/* Rotated square — heart bottom point */}
+      <View style={{
+        position: 'absolute',
+        top: size * 0.23,
+        width: squareS, height: squareS,
+        backgroundColor: color,
+        transform: [{ rotate: '45deg' }],
+        borderRadius: 2,
+      }} />
+      {/* Left lobe */}
+      <View style={{
+        position: 'absolute',
+        top: size * 0.08,
+        left: size * 0.04,
+        width: lobeD, height: lobeD,
+        borderRadius: lobeD / 2,
+        backgroundColor: color,
+      }} />
+      {/* Right lobe */}
+      <View style={{
+        position: 'absolute',
+        top: size * 0.08,
+        right: size * 0.04,
+        width: lobeD, height: lobeD,
+        borderRadius: lobeD / 2,
+        backgroundColor: color,
+      }} />
     </View>
   );
 }

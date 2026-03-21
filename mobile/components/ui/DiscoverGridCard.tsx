@@ -38,6 +38,23 @@ export const VIDEO_CARD_HEIGHT = Math.round(COL_WIDTH * (4 / 3));
 // Normal card: 2:3 ratio — standard poster
 export const POSTER_CARD_HEIGHT = Math.round(COL_WIDTH * (3 / 2));
 
+/**
+ * Returns the card height for a movie, adding title-length variance
+ * so cards have 4+ distinct heights → genuine Pinterest stagger.
+ *   short title  (≤10 chars)  → base
+ *   medium title (11-22 chars) → base + 24
+ *   long title   (23-38 chars) → base + 46
+ *   very long    (>38 chars)   → base + 66
+ */
+export function getCardHeight(movie: Movie): number {
+  const base = movie.verticalTrailerYoutubeKey ? VIDEO_CARD_HEIGHT : POSTER_CARD_HEIGHT;
+  const len = movie.title?.length ?? 0;
+  if (len > 38) return base + 66;
+  if (len > 22) return base + 46;
+  if (len > 10) return base + 24;
+  return base;
+}
+
 interface DiscoverGridCardProps {
   movie: Movie;
   isSaved?: boolean;
@@ -54,7 +71,7 @@ export default function DiscoverGridCard({
   const router = useRouter();
 
   const hasVertical = !!movie.verticalTrailerYoutubeKey;
-  const cardHeight = hasVertical ? VIDEO_CARD_HEIGHT : POSTER_CARD_HEIGHT;
+  const cardHeight = getCardHeight(movie);
 
   const imageUri = hasVertical
     ? (movie.posterPath ? `${TMDB_IMAGE}/w500${movie.posterPath}` : '')
