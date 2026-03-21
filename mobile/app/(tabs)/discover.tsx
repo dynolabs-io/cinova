@@ -37,7 +37,7 @@ import type { Movie } from '../../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SIDE_PAD = 0;
-const GAP = 2; // Instagram-style thin white border
+const GAP = 1; // thin white border between tiles
 // One unit = 1/6 of the full width (no side padding, 5 gaps between 6 units)
 const U = (SCREEN_WIDTH - GAP * 5) / 6;
 const TMDB = 'https://image.tmdb.org/t/p';
@@ -461,7 +461,7 @@ export default function DiscoverScreen() {
         scrollEventThrottle={200}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingTop: activeFilter ? insets.top + 8 + 36 + GAP : insets.top,
+          paddingTop: 0,
           paddingBottom: insets.bottom + 80,
           gap: GAP,
           backgroundColor: '#fff',
