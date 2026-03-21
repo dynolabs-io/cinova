@@ -301,17 +301,20 @@ func (r *MovieRepository) GetPopular(ctx context.Context, country string, limit,
 // Results include backdrop_path, overview, genres, cinova_score, and streaming providers.
 // Applies age bias: effective_score = cinova_score × exp(−0.15 × age_years)
 // so classic films don't dominate the feed over recent releases.
+// Movies with embeddable vertical trailers appear first (score bonus ×1.5).
 func (r *MovieRepository) GetReels(ctx context.Context, country string, limit int) ([]models.Movie, error) {
 	records, err := r.driver.RunQuery(ctx, `
 		MATCH (m:Movie)-[:AVAILABLE_ON {country: $country}]->(:Provider)
 		WHERE m.backdrop_path IS NOT NULL AND m.backdrop_path <> ''
 		  AND m.overview IS NOT NULL AND m.overview <> ''
 		  AND m.cinova_score > 50
-		  AND m.vertical_trailer_youtube_key IS NOT NULL
-		  AND m.vertical_trailer_youtube_key <> ''
-		  AND m.vertical_trailer_youtube_key <> 'NOT_FOUND'
 		WITH DISTINCT m,
-		     m.cinova_score * exp(-0.15 * toFloat(date().year - toInteger(substring(coalesce(m.release_date, '2000-01-01'), 0, 4)))) * (0.4 + rand() * 0.6) AS effective_score
+		     CASE WHEN m.vertical_trailer_youtube_key IS NOT NULL
+		               AND m.vertical_trailer_youtube_key <> ''
+		               AND m.vertical_trailer_youtube_key <> 'NOT_FOUND'
+		          THEN 1.5 ELSE 1.0 END AS video_bonus
+		WITH m, video_bonus,
+		     m.cinova_score * exp(-0.15 * toFloat(date().year - toInteger(substring(coalesce(m.release_date, '2000-01-01'), 0, 4)))) * (0.4 + rand() * 0.6) * video_bonus AS effective_score
 		ORDER BY effective_score DESC
 		LIMIT $limit
 		OPTIONAL MATCH (m)-[:IN_GENRE]->(g:Genre)
