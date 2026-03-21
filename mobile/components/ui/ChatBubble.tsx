@@ -52,8 +52,8 @@ function AssistantAvatar() {
 function SuggestionRow({ suggestions }: { suggestions: ChatSuggestion[] }) {
   return (
     <View style={styles.suggestions}>
-      {suggestions.map((s) => (
-        <SuggestionCard key={s.tmdbId} suggestion={s} />
+      {suggestions.map((s, i) => (
+        <SuggestionCard key={`${s.tmdbId}-${i}`} suggestion={s} />
       ))}
     </View>
   );

@@ -173,9 +173,9 @@ export default function ReelItem({
         {/* Streaming badges row */}
         {movie.providers.length > 0 && (
           <View style={styles.providerRow}>
-            {movie.providers.slice(0, 4).map((p) => (
+            {movie.providers.slice(0, 4).map((p, i) => (
               <StreamingBadge
-                key={p.providerId}
+                key={`${p.providerId}-${i}`}
                 provider={p}
                 variant="icon"
                 size={32}

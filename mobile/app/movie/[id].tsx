@@ -303,9 +303,9 @@ export default function MovieDetailScreen() {
               <Text style={styles.sectionTitle}>Where to Watch</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={styles.providersRow}>
-                  {movie.providers.map((p) => (
+                  {movie.providers.map((p, i) => (
                     <StreamingBadge
-                      key={p.providerId}
+                      key={`${p.providerId}-${i}`}
                       provider={p}
                       variant="full"
                     />

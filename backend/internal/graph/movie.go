@@ -149,11 +149,24 @@ func (r *MovieRepository) GetStreamingProviders(ctx context.Context, tmdbID int,
 	records, err := r.driver.RunQuery(ctx, `
 		MATCH (n)-[avail:AVAILABLE_ON {country: $country}]->(prov:Provider)
 		WHERE (n:Movie OR n:TVShow) AND n.tmdb_id = $tmdb_id
-		RETURN prov.provider_id   AS provider_id,
+		WITH prov, avail,
+		     CASE avail.type
+		       WHEN 'flatrate' THEN 1
+		       WHEN 'free'     THEN 2
+		       WHEN 'rent'     THEN 3
+		       WHEN 'buy'      THEN 4
+		       ELSE 5
+		     END AS type_rank
+		ORDER BY prov.display_priority ASC, type_rank ASC
+		WITH prov.provider_id AS provider_id,
+		     head(collect(prov))       AS prov,
+		     head(collect(avail.type)) AS best_type,
+		     head(collect(avail.country)) AS country
+		RETURN provider_id,
 		       prov.provider_name AS provider_name,
 		       prov.logo_path     AS logo_path,
-		       avail.type         AS type,
-		       avail.country      AS country
+		       best_type          AS type,
+		       country
 		ORDER BY prov.display_priority ASC
 	`, map[string]interface{}{"tmdb_id": tmdbID, "country": country})
 	if err != nil {
