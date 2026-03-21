@@ -308,7 +308,7 @@ func (r *MovieRepository) GetReels(ctx context.Context, country string, limit in
 		  AND m.overview IS NOT NULL AND m.overview <> ''
 		  AND m.cinova_score > 50
 		WITH DISTINCT m,
-		     m.cinova_score * exp(-0.15 * toFloat(date().year - coalesce(m.release_year, date().year))) AS effective_score
+		     m.cinova_score * exp(-0.15 * toFloat(date().year - toInteger(substring(coalesce(m.release_date, '2000-01-01'), 0, 4)))) AS effective_score
 		ORDER BY effective_score DESC, m.popularity DESC
 		LIMIT $limit
 		OPTIONAL MATCH (m)-[:IN_GENRE]->(g:Genre)
