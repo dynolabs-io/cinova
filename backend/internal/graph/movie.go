@@ -146,33 +146,27 @@ func (r *MovieRepository) GetTVShow(ctx context.Context, tmdbID int) (*models.TV
 
 // GetStreamingProviders returns streaming providers for a title in a given country.
 func (r *MovieRepository) GetStreamingProviders(ctx context.Context, tmdbID int, country string) ([]models.Provider, error) {
+	// Type priority: flatrate > free > rent > buy — used to pick the best when
+	// the same provider appears under multiple availability types.
+	typePriority := map[string]int{"flatrate": 1, "free": 2, "rent": 3, "buy": 4}
+
 	records, err := r.driver.RunQuery(ctx, `
-		MATCH (n)-[avail:AVAILABLE_ON {country: $country}]->(prov:Provider)
-		WHERE (n:Movie OR n:TVShow) AND n.tmdb_id = $tmdb_id
-		WITH prov, avail,
-		     CASE avail.type
-		       WHEN 'flatrate' THEN 1
-		       WHEN 'free'     THEN 2
-		       WHEN 'rent'     THEN 3
-		       WHEN 'buy'      THEN 4
-		       ELSE 5
-		     END AS type_rank
-		ORDER BY prov.display_priority ASC, type_rank ASC
-		WITH prov.provider_id AS provider_id,
-		     head(collect(prov))       AS prov,
-		     head(collect(avail.type)) AS best_type,
-		     head(collect(avail.country)) AS country
-		RETURN provider_id,
+		MATCH (n:Movie)-[avail:AVAILABLE_ON {country: $country}]->(prov:Provider)
+		WHERE n.tmdb_id = $tmdb_id
+		RETURN prov.provider_id   AS provider_id,
 		       prov.provider_name AS provider_name,
 		       prov.logo_path     AS logo_path,
-		       best_type          AS type,
-		       country
+		       avail.type         AS type,
+		       avail.country      AS country
 		ORDER BY prov.display_priority ASC
 	`, map[string]interface{}{"tmdb_id": tmdbID, "country": country})
 	if err != nil {
 		return nil, fmt.Errorf("GetStreamingProviders query: %w", err)
 	}
 
+	// Deduplicate by provider_id: same provider can appear for multiple
+	// availability types (flatrate + rent). Keep the highest-priority type.
+	seen := make(map[int64]int) // provider_id → index in providers slice
 	providers := make([]models.Provider, 0, len(records))
 	for _, rec := range records {
 		p := models.Provider{}
@@ -191,7 +185,15 @@ func (r *MovieRepository) GetStreamingProviders(ctx context.Context, tmdbID int,
 		if v, ok := rec.Get("country"); ok {
 			p.Country = strVal(v)
 		}
-		providers = append(providers, p)
+		if idx, exists := seen[p.ProviderID]; exists {
+			// Replace if this type has higher priority
+			if typePriority[p.Type] < typePriority[providers[idx].Type] {
+				providers[idx].Type = p.Type
+			}
+		} else {
+			seen[p.ProviderID] = len(providers)
+			providers = append(providers, p)
+		}
 	}
 	return providers, nil
 }
