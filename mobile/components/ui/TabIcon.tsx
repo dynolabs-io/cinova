@@ -142,40 +142,13 @@ function ChatIcon({ color, size }: { color: string; size: number }) {
   );
 }
 
-// ── Watchlist (heart) ─────────────────────────────────────────────────────────
-// Two filled circles (lobes) + rotated square (bottom point) = classic heart.
+// ── Watchlist (star) ──────────────────────────────────────────────────────────
 function WatchlistIcon({ color, size }: { color: string; size: number }) {
-  const lobeD = size * 0.46;    // diameter of each circle lobe
-  const squareS = size * 0.54;  // rotated square size
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      {/* Rotated square — heart bottom point */}
-      <View style={{
-        position: 'absolute',
-        top: size * 0.23,
-        width: squareS, height: squareS,
-        backgroundColor: color,
-        transform: [{ rotate: '45deg' }],
-        borderRadius: 2,
-      }} />
-      {/* Left lobe */}
-      <View style={{
-        position: 'absolute',
-        top: size * 0.08,
-        left: size * 0.04,
-        width: lobeD, height: lobeD,
-        borderRadius: lobeD / 2,
-        backgroundColor: color,
-      }} />
-      {/* Right lobe */}
-      <View style={{
-        position: 'absolute',
-        top: size * 0.08,
-        right: size * 0.04,
-        width: lobeD, height: lobeD,
-        borderRadius: lobeD / 2,
-        backgroundColor: color,
-      }} />
+      <Text style={{ color, fontSize: size * 0.92, lineHeight: size, textAlign: 'center', includeFontPadding: false }}>
+        ★
+      </Text>
     </View>
   );
 }
