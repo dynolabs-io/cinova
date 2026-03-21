@@ -101,6 +101,11 @@ function MosaicCard({ movie, style, savedIds, onSave, activeVideoId, onActivateV
           mute
           initialPlayerParams={{ controls: 0, rel: 0, modestbranding: 1 }}
           webViewStyle={{ backgroundColor: '#000' }}
+          webViewProps={{
+            userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+            allowsInlineMediaPlayback: true,
+            mediaPlaybackRequiresUserAction: false,
+          }}
         />
       ) : (
         <Image
