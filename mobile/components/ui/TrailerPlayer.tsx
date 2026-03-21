@@ -192,9 +192,7 @@ export default function TrailerPlayer({
       {/* Player — centered using explicit top/left */}
       <View style={{ position: 'absolute', top: playerTop, left: playerLeft, width: playerW, height: playerH }}>
 
-        {/* key forces WebView remount when dimensions change */}
         <YoutubePlayer
-          key={`${playerW}x${playerH}`}
           ref={playerRef}
           height={playerH}
           width={playerW}
