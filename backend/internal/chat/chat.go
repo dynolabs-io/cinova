@@ -159,20 +159,27 @@ const recStreamSystemPromptTemplate = `You are Cinova's AI film concierge — a 
 
 From the candidate films below, select 3-5 that BEST match what the user asked for. Prioritise relevance to their specific request over picking the highest-scored films.
 
-Respond in EXACTLY this format — nothing else:
-[A warm, specific 2-3 sentence intro that directly addresses what the user asked for — name the genre/mood/theme they wanted and set up your picks with genuine enthusiasm.]|||
-[{"tmdb_id":123,"title":"Film Title","reason":"2-3 sentence reason that is SPECIFIC to this film AND this user's request. Explain what makes it perfect for their mood — reference the film's atmosphere, a standout performance, a specific scene type, or a thematic connection. Never write generic descriptions like 'a great film' or 'you will enjoy this'."}]
+CRITICAL FORMAT — your ENTIRE response must be EXACTLY two parts joined by ||| with NO other text:
 
-Rules:
-- Your intro MUST acknowledge what the user specifically asked for (e.g. "You're after slow-burn psychological tension — here are three films that will get under your skin:")
-- Each reason must connect THIS film to THIS user's request — be a knowledgeable friend recommending something you love
-- Reference streaming availability in reasons when known ("Streaming on Netflix", "On Prime Video")
-- If user named a director/actor, explain what makes their specific body of work distinctive in the reason
-- If user expressed emotion or context ("stressful week", "date night", "feeling melancholic"), briefly acknowledge it in the intro before your picks
-- Reference user's saved/rated titles in the intro only when highly relevant ("You saved Parasite, so you'll appreciate...")
-- Be opinionated: tell them WHY they should watch THIS film RIGHT NOW, not just what it's about
-- If the user message is meta/off-topic (e.g. "are you there", "hello", "hi"), respond: "I'm here and ready to find your next favourite film. Here are some great picks to start with:" then pick the 3 best candidates
-- Do NOT reveal major spoilers, twist endings, or who dies`
+PART 1 (your intro text, 2-3 sentences)|||[{"tmdb_id":123,"title":"Film Title","reason":"..."},{"tmdb_id":456,"title":"Film Title 2","reason":"..."}]
+
+Example:
+You're after something gripping tonight — here are three films that will keep you on the edge of your seat.|||[{"tmdb_id":680,"title":"Pulp Fiction","reason":"Tarantino at his most hypnotic. The non-linear structure makes every scene feel charged with anticipation."}]
+
+RULES FOR PART 1 (intro text before |||):
+- MUST acknowledge what the user specifically asked for
+- 2-3 sentences maximum — be warm, opinionated, specific
+- Reference user's saved titles only when highly relevant
+- For meta/off-topic messages (e.g. "hi", "are you there"): write "I'm here and ready to find your next favourite film. Here are some great picks to start with."
+- NEVER include JSON, tmdb_id, or brackets in Part 1
+
+RULES FOR PART 2 (JSON array after |||):
+- Select 3-5 films from the candidates that BEST match the request
+- Each reason must connect THIS film to THIS user's request specifically
+- Reference streaming availability when known ("Streaming on Netflix")
+- Be opinionated: explain WHY to watch THIS film RIGHT NOW
+- Do NOT reveal major spoilers, twist endings, or who dies
+- NEVER add any text after the closing ] of the JSON array`
 
 const recSystemPromptTemplate = `You are Cinova's AI film concierge — a deeply knowledgeable cinephile with strong, well-reasoned opinions about film.
 
@@ -916,14 +923,27 @@ func (s *Service) streamAxonToSSE(
 	full := accumulated.String()
 
 	if !foundSep {
-		// No separator — treat all content as reply text
+		// No separator — send any remaining text
 		remaining := strings.TrimSpace(full[sentBytes:])
 		if remaining != "" {
 			b, _ := json.Marshal(map[string]string{"type": "delta", "text": remaining})
 			fmt.Fprintf(w, "data: %s\n\n", b)
 			flusher.Flush()
 		}
-		return strings.TrimSpace(full), "", nil
+		// Haiku fallback: try to extract an embedded JSON array when ||| was not used.
+		// Model sometimes writes: "Here are my picks: [{"tmdb_id":123,...}]"
+		fullTrimmed := strings.TrimSpace(full)
+		if jsonStart := strings.LastIndex(fullTrimmed, "[{"); jsonStart >= 0 {
+			if jsonEnd := strings.LastIndex(fullTrimmed, "}]"); jsonEnd > jsonStart {
+				candidate := fullTrimmed[jsonStart : jsonEnd+2]
+				var test []recEntry
+				if json.Unmarshal([]byte(candidate), &test) == nil && len(test) > 0 {
+					replyPart := strings.TrimRight(fullTrimmed[:jsonStart], " \t\r\n:")
+					return replyPart, candidate, nil
+				}
+			}
+		}
+		return fullTrimmed, "", nil
 	}
 
 	replyText := strings.TrimSpace(full[:separatorPos])

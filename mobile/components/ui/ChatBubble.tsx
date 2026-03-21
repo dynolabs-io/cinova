@@ -18,15 +18,28 @@ interface Props {
   suggestions?: ChatSuggestion[];
 }
 
+// Strip any embedded JSON recommendations that Haiku includes when it ignores the ||| format.
+// Pattern: "Here are my picks: [{"tmdb_id":123,...}]"  → "Here are my picks"
+function stripEmbeddedJson(text: string): string {
+  const idx = text.lastIndexOf('[{');
+  if (idx < 0) return text;
+  const tail = text.slice(idx);
+  if (tail.includes('"tmdb_id"') || tail.includes('"title"')) {
+    return text.slice(0, idx).replace(/[\s:,]+$/, '').trim();
+  }
+  return text;
+}
+
 export default function ChatBubble({ role, content, suggestions }: Props) {
   const isUser = role === 'user';
+  const displayContent = isUser ? content : stripEmbeddedJson(content);
   return (
     <View style={[styles.row, isUser ? styles.rowUser : styles.rowAssistant]}>
       {!isUser && <AssistantAvatar />}
       <View style={styles.bubbleCol}>
         <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
           <Text style={[styles.text, isUser ? styles.textUser : styles.textAssistant]}>
-            {content}
+            {displayContent}
           </Text>
         </View>
         {!isUser && suggestions && suggestions.length > 0 && (
