@@ -160,7 +160,7 @@ export default function PersonDetailScreen() {
               <Text style={styles.sectionTitle}>Known For</Text>
               <FlatList
                 data={person.knownFor ?? []}
-                keyExtractor={(item, index) => String(item.tmdbId ?? item.id ?? index)}
+                keyExtractor={(item, index) => `${item.tmdbId ?? item.id ?? index}-${index}`}
                 renderItem={({ item }) => <MovieCard movie={item} size="md" />}
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -173,11 +173,11 @@ export default function PersonDetailScreen() {
           {filmographySorted.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Filmography</Text>
-              {filmographySorted.map((entry) => (
+              {filmographySorted.map((entry, i) => (
                 <FilmographyRow
-                  key={`${entry.id}-${entry.mediaType}`}
+                  key={`${entry.tmdbId}-${entry.role ?? entry.mediaType ?? i}`}
                   entry={entry}
-                  onPress={() => router.push(`/movie/${entry.id}`)}
+                  onPress={() => router.push(`/movie/${entry.tmdbId}`)}
                 />
               ))}
             </View>

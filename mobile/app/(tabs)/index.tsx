@@ -136,7 +136,7 @@ function CarouselRow({ title, movies }: CarouselRowProps) {
       <Text style={styles.rowTitle}>{title}</Text>
       <FlatList
         data={movies}
-        keyExtractor={(item, index) => String(item.tmdbId ?? item.id ?? index)}
+        keyExtractor={(item, index) => `${item.tmdbId ?? item.id ?? index}-${index}`}
         renderItem={({ item }) => <MovieCard movie={item} size="md" />}
         horizontal
         showsHorizontalScrollIndicator={false}

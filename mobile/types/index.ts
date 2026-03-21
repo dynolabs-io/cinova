@@ -125,15 +125,14 @@ export interface Person {
 }
 
 export interface FilmographyEntry {
-  id: number;
   tmdbId: number;
   title: string;
   posterPath: string | null;
-  releaseDate: string;
-  year: number;
+  year?: number | string;
   character?: string;
   job?: string;
-  mediaType: 'movie' | 'tv';
+  role?: string; // "ACTED_IN" | "DIRECTED" — from backend
+  mediaType?: 'movie' | 'tv';
 }
 
 export interface Provider {

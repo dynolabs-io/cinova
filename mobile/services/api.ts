@@ -168,8 +168,10 @@ export async function getTV(id: number, country = 'US'): Promise<TVShow> {
 }
 
 export async function getPerson(id: number): Promise<Person> {
-  const { data } = await api.get<Person>(`/api/v1/person/${id}`);
-  return camelizeKeys(data) as unknown as Person;
+  const { data } = await api.get<any>(`/api/v1/person/${id}`);
+  const c = camelizeKeys(data) as any;
+  // Backend wraps response as { person: {...}, filmography: [...] } — flatten it
+  return { ...(c.person ?? c), filmography: c.filmography ?? [] } as unknown as Person;
 }
 
 // ── Search ────────────────────────────────────────────────────────────────────
