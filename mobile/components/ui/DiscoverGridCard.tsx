@@ -143,7 +143,6 @@ export default function DiscoverGridCard({
 
 const styles = StyleSheet.create({
   card: {
-    flex: 1,
     borderRadius: Radius.md,
     overflow: 'hidden',
     backgroundColor: Colors.card,

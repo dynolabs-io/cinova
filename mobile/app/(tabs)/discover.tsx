@@ -1,10 +1,10 @@
 /**
- * Discover screen — Staggered masonry grid
+ * Discover screen — True staggered two-column masonry
  *
- * Two-column layout using FlatList + paired rows (no native modules required).
- * Movies with a vertical_trailer_youtube_key get taller "video" cells (3:4).
- * All others get standard poster cells (2:3).
- * Age-biased ordering from backend (cinova_score × exp(−0.15 × age_years)).
+ * Items are split into left (even) and right (odd) columns independently.
+ * Video cards (3:4) are taller than poster cards (2:3), so columns grow
+ * at different rates — creating genuine Pinterest-style uneven distribution.
+ * No native modules required (pure ScrollView + View columns).
  */
 
 import React, { useCallback, useState, useMemo } from 'react';
@@ -14,7 +14,9 @@ import {
   ActivityIndicator,
   Text,
   TouchableOpacity,
-  FlatList,
+  ScrollView,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -26,7 +28,8 @@ import { useAppStore } from '../../store/useAppStore';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import type { Movie } from '../../types';
 
-type MoviePair = [Movie, Movie | null];
+const COL_GAP = 10;
+const SIDE_PAD = 12;
 
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
@@ -42,7 +45,6 @@ export default function DiscoverScreen() {
     : null;
 
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
-  const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
   const [trailerMovie, setTrailerMovie] = useState<Movie | null>(null);
 
   const {
@@ -59,22 +61,15 @@ export default function DiscoverScreen() {
       lastPage.length === 20 ? allPages.length + 1 : undefined,
   });
 
-  const movies: Movie[] = (data?.pages ?? [])
-    .flat()
-    .filter((m) => !dismissedIds.has(m.id));
+  const movies: Movie[] = (data?.pages ?? []).flat();
 
-  // Pair movies into rows: [[m0,m1],[m2,m3],...]
-  const pairs = useMemo<MoviePair[]>(() => {
-    const result: MoviePair[] = [];
-    for (let i = 0; i < movies.length; i += 2) {
-      result.push([movies[i], movies[i + 1] ?? null]);
-    }
-    return result;
+  // Split into two columns: even indices → left, odd → right
+  const { left, right } = useMemo(() => {
+    const l: Movie[] = [];
+    const r: Movie[] = [];
+    movies.forEach((m, i) => (i % 2 === 0 ? l : r).push(m));
+    return { left: l, right: r };
   }, [movies]);
-
-  const onEndReached = useCallback(() => {
-    if (hasNextPage && !isFetchingNextPage) fetchNextPage();
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const handleSave = useCallback(async (movie: Movie) => {
     setSavedIds((prev) => new Set(prev).add(movie.id));
@@ -93,28 +88,16 @@ export default function DiscoverScreen() {
     setTrailerMovie(movie);
   }, []);
 
-  const renderPair = useCallback(
-    ({ item }: { item: MoviePair }) => (
-      <View style={styles.row}>
-        <DiscoverGridCard
-          movie={item[0]}
-          isSaved={savedIds.has(item[0].id)}
-          onSave={handleSave}
-          onPlayTrailer={handlePlayTrailer}
-        />
-        {item[1] ? (
-          <DiscoverGridCard
-            movie={item[1]}
-            isSaved={savedIds.has(item[1].id)}
-            onSave={handleSave}
-            onPlayTrailer={handlePlayTrailer}
-          />
-        ) : (
-          <View style={styles.emptyCell} />
-        )}
-      </View>
-    ),
-    [handleSave, handlePlayTrailer, savedIds]
+  // Detect scroll near bottom to load next page
+  const handleScroll = useCallback(
+    ({ nativeEvent }: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+      const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
+      if (distanceFromBottom < 600 && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
+      }
+    },
+    [fetchNextPage, hasNextPage, isFetchingNextPage]
   );
 
   if (isLoading) {
@@ -130,7 +113,7 @@ export default function DiscoverScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Trailer player — screen-level so it renders outside the list */}
+      {/* Trailer player — screen-level */}
       {trailerMovie?.verticalTrailerYoutubeKey && (
         <TrailerPlayer
           youtubeKey={trailerMovie.verticalTrailerYoutubeKey}
@@ -154,26 +137,52 @@ export default function DiscoverScreen() {
         </View>
       )}
 
-      <FlatList
-        data={pairs}
-        renderItem={renderPair}
-        keyExtractor={(_, index) => `pair-${index}`}
-        onEndReached={onEndReached}
-        onEndReachedThreshold={3}
-        removeClippedSubviews
+      <ScrollView
+        onScroll={handleScroll}
+        scrollEventThrottle={200}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           paddingTop: activeFilter ? headerHeight : insets.top + Spacing[3],
           paddingBottom: insets.bottom + 80,
-          paddingHorizontal: 12,
+          paddingHorizontal: SIDE_PAD,
         }}
-        ListFooterComponent={
-          isFetchingNextPage ? (
-            <View style={styles.footer}>
-              <ActivityIndicator color={Colors.primary} />
-            </View>
-          ) : null
-        }
-      />
+      >
+        <View style={styles.columns}>
+          {/* Left column — even-indexed movies */}
+          <View style={styles.column}>
+            {left.map((movie) => (
+              <View key={movie.id} style={styles.cardWrapper}>
+                <DiscoverGridCard
+                  movie={movie}
+                  isSaved={savedIds.has(movie.id)}
+                  onSave={handleSave}
+                  onPlayTrailer={handlePlayTrailer}
+                />
+              </View>
+            ))}
+          </View>
+
+          {/* Right column — odd-indexed movies, offset down for visual stagger */}
+          <View style={[styles.column, styles.columnOffset]}>
+            {right.map((movie) => (
+              <View key={movie.id} style={styles.cardWrapper}>
+                <DiscoverGridCard
+                  movie={movie}
+                  isSaved={savedIds.has(movie.id)}
+                  onSave={handleSave}
+                  onPlayTrailer={handlePlayTrailer}
+                />
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {isFetchingNextPage && (
+          <View style={styles.footer}>
+            <ActivityIndicator color={Colors.primary} />
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -194,14 +203,19 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: Typography.base,
   },
-  row: {
+  columns: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    marginBottom: 10,
+    gap: COL_GAP,
   },
-  emptyCell: {
+  column: {
     flex: 1,
+    gap: COL_GAP,
+  },
+  columnOffset: {
+    marginTop: 24, // right column starts lower → natural stagger
+  },
+  cardWrapper: {
+    // each card fills column width; height is set by the card itself
   },
   footer: {
     height: 60,

@@ -7,7 +7,7 @@ import React from 'react';
 import { View, Text } from 'react-native';
 
 interface Props {
-  name: 'home' | 'discover' | 'watchlist' | 'profile' | 'chat';
+  name: 'home' | 'reels' | 'discover' | 'watchlist' | 'profile' | 'chat';
   color: string;
   size?: number;
 }
@@ -15,6 +15,7 @@ interface Props {
 export default function TabIcon({ name, color, size = 22 }: Props) {
   switch (name) {
     case 'home':      return <HomeIcon color={color} size={size} />;
+    case 'reels':     return <ReelsIcon color={color} size={size} />;
     case 'discover':  return <DiscoverIcon color={color} size={size} />;
     case 'chat':      return <ChatIcon color={color} size={size} />;
     case 'watchlist': return <WatchlistIcon color={color} size={size} />;
@@ -48,7 +49,37 @@ function HomeIcon({ color, size }: { color: string; size: number }) {
   );
 }
 
-// ── Discover (play circle) ────────────────────────────────────────────────────
+// ── Reels (phone with play) ───────────────────────────────────────────────────
+function ReelsIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Phone outline — tall portrait rect */}
+      <View style={{
+        width: size * 0.6,
+        height: size * 0.88,
+        borderRadius: size * 0.1,
+        borderWidth: 2,
+        borderColor: color,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        {/* Play triangle inside */}
+        <View style={{
+          width: 0, height: 0,
+          marginLeft: size * 0.04,
+          borderTopWidth: size * 0.14,
+          borderBottomWidth: size * 0.14,
+          borderLeftWidth: size * 0.22,
+          borderTopColor: 'transparent',
+          borderBottomColor: 'transparent',
+          borderLeftColor: color,
+        }} />
+      </View>
+    </View>
+  );
+}
+
+// ── Discover (compass / grid) ──────────────────────────────────────────────────
 function DiscoverIcon({ color, size }: { color: string; size: number }) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
