@@ -27,7 +27,7 @@ export default function TabIcon({ name, color, size = 22 }: Props) {
 function HomeIcon({ color, size }: { color: string; size: number }) {
   const r = size * 0.47;
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'flex-end' }}>
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       {/* Roof */}
       <View style={{
         width: 0, height: 0,
@@ -77,40 +77,34 @@ function ReelsIcon({ color, size }: { color: string; size: number }) {
 }
 
 // ── Discover — search magnifier ────────────────────────────────────────────────
-// Matches catalog row-1 "Search": lens centered at 43% of box, long handle to corner.
+// Strategy: draw lens + handle as a vertical column, rotate the whole thing -45°.
+// This guarantees the handle always exits from the lens bottom with no coordinate math.
 function DiscoverIcon({ color, size }: { color: string; size: number }) {
-  const sw = Math.max(2, size * 0.095);     // stroke width (≈2.5/44 scaled)
-  const r  = size * 0.273;                  // lens radius  (12/44 scaled)
-  const ld = r * 2;
-  // Lens center at 43% of icon (19/44 scaled)
-  const cx = size * 0.432;
-  // Handle: line from (28/44, 28/44) → (38/44, 38/44) of icon box, 45° diagonal
-  const hLen = size * 0.321;               // sqrt(10²+10²)/44 * size
-  const hCX  = size * 0.75;               // handle center x (33/44)
-  const hCY  = size * 0.75;               // handle center y
+  const sw   = Math.max(2, size * 0.1);   // stroke width
+  const ld   = size * 0.52;               // lens diameter
+  const hLen = size * 0.26;               // handle length
+  const hW   = sw * 1.2;                  // handle width
   return (
-    <View style={{ width: size, height: size }}>
-      {/* Lens ring */}
-      <View style={{
-        position: 'absolute',
-        top:  cx - r,
-        left: cx - r,
-        width: ld, height: ld,
-        borderRadius: r,
-        borderWidth: sw,
-        borderColor: color,
-      }} />
-      {/* Handle — rotated 45° around its own center → visual center stays at hCX, hCY */}
-      <View style={{
-        position: 'absolute',
-        top:  hCY - hLen / 2,
-        left: hCX - sw / 2,
-        width: sw * 1.3,
-        height: hLen,
-        borderRadius: sw,
-        backgroundColor: color,
-        transform: [{ rotate: '45deg' }],
-      }} />
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Whole icon rotated -45° so lens sits upper-left, handle lower-right */}
+      <View style={{ alignItems: 'center', transform: [{ rotate: '-45deg' }] }}>
+        {/* Lens ring */}
+        <View style={{
+          width: ld, height: ld,
+          borderRadius: ld / 2,
+          borderWidth: sw,
+          borderColor: color,
+        }} />
+        {/* Handle — straight down from lens, overlaps border slightly */}
+        <View style={{
+          width: hW,
+          height: hLen,
+          borderBottomLeftRadius: hW / 2,
+          borderBottomRightRadius: hW / 2,
+          backgroundColor: color,
+          marginTop: -(sw / 2),
+        }} />
+      </View>
     </View>
   );
 }
@@ -161,7 +155,7 @@ function WatchlistIcon({ color, size }: { color: string; size: number }) {
 function ProfileIcon({ color, size }: { color: string; size: number }) {
   const headSize = size * 0.38;
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 1 }}>
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       {/* Head */}
       <View style={{
         width: headSize,
