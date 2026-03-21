@@ -36,10 +36,10 @@ import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import type { Movie } from '../../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const SIDE_PAD = 12;
-const GAP = 4;
-// One unit = 1/6 of the usable width (accounting for 5 gaps between 6 units)
-const U = (SCREEN_WIDTH - SIDE_PAD * 2 - GAP * 5) / 6;
+const SIDE_PAD = 0;
+const GAP = 2; // Instagram-style thin white border
+// One unit = 1/6 of the full width (no side padding, 5 gaps between 6 units)
+const U = (SCREEN_WIDTH - GAP * 5) / 6;
 const TMDB = 'https://image.tmdb.org/t/p';
 
 // ── MosaicCard ────────────────────────────────────────────────────────────────
@@ -113,7 +113,7 @@ function MosaicCard({ movie, style, savedIds, onSave, onPlayTrailer }: MosaicCar
 const cardStyles = StyleSheet.create({
   card: {
     overflow: 'hidden',
-    borderRadius: Radius.md,
+    borderRadius: 0,
     backgroundColor: Colors.card,
   },
   score: {
@@ -461,14 +461,14 @@ export default function DiscoverScreen() {
         scrollEventThrottle={200}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingTop: activeFilter ? insets.top + 8 + 36 + GAP : insets.top + Spacing[3],
+          paddingTop: activeFilter ? insets.top + 8 + 36 + GAP : insets.top,
           paddingBottom: insets.bottom + 80,
-          paddingHorizontal: SIDE_PAD,
           gap: GAP,
+          backgroundColor: '#fff',
         }}
       >
         {groups.map((g, idx) => (
-          <View key={idx}>
+          <View key={idx} style={{ backgroundColor: '#fff', gap: GAP }}>
             {TEMPLATES[g.tIdx].render(g.movies, handlers)}
           </View>
         ))}
