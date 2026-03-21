@@ -49,62 +49,63 @@ function HomeIcon({ color, size }: { color: string; size: number }) {
   );
 }
 
-// ── Reels (phone with play) ───────────────────────────────────────────────────
+// ── Reels — large filled play circle (TikTok-style center tab) ────────────────
 function ReelsIcon({ color, size }: { color: string; size: number }) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      {/* Phone outline — tall portrait rect */}
+      {/* Filled circle */}
       <View style={{
-        width: size * 0.6,
-        height: size * 0.88,
-        borderRadius: size * 0.1,
-        borderWidth: 2,
-        borderColor: color,
+        width: size * 0.94,
+        height: size * 0.94,
+        borderRadius: size * 0.47,
+        backgroundColor: color,
         alignItems: 'center',
         justifyContent: 'center',
       }}>
-        {/* Play triangle inside */}
+        {/* Play triangle — slightly right-offset for visual balance */}
         <View style={{
           width: 0, height: 0,
-          marginLeft: size * 0.04,
-          borderTopWidth: size * 0.14,
-          borderBottomWidth: size * 0.14,
-          borderLeftWidth: size * 0.22,
+          marginLeft: size * 0.06,
+          borderTopWidth: size * 0.2,
+          borderBottomWidth: size * 0.2,
+          borderLeftWidth: size * 0.32,
           borderTopColor: 'transparent',
           borderBottomColor: 'transparent',
-          borderLeftColor: color,
+          borderLeftColor: '#000',
         }} />
       </View>
     </View>
   );
 }
 
-// ── Discover (compass / grid) ──────────────────────────────────────────────────
+// ── Discover — search magnifier ────────────────────────────────────────────────
 function DiscoverIcon({ color, size }: { color: string; size: number }) {
+  const lens = size * 0.6;
+  const strokeW = size * 0.12;
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      {/* Outer circle */}
+      {/* Lens circle — ring only */}
       <View style={{
-        width: size * 0.92,
-        height: size * 0.92,
-        borderRadius: size * 0.46,
-        borderWidth: 2,
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: lens,
+        height: lens,
+        borderRadius: lens / 2,
+        borderWidth: strokeW,
         borderColor: color,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-        {/* Inner play triangle */}
-        <View style={{
-          width: 0, height: 0,
-          marginLeft: size * 0.06,
-          borderTopWidth: size * 0.22,
-          borderBottomWidth: size * 0.22,
-          borderLeftWidth: size * 0.34,
-          borderTopColor: 'transparent',
-          borderBottomColor: 'transparent',
-          borderLeftColor: color,
-        }} />
-      </View>
+      }} />
+      {/* Handle — rotated bar at bottom-right */}
+      <View style={{
+        position: 'absolute',
+        bottom: size * 0.02,
+        right: size * 0.02,
+        width: strokeW,
+        height: size * 0.38,
+        borderRadius: strokeW / 2,
+        backgroundColor: color,
+        transform: [{ rotate: '-45deg' }],
+      }} />
     </View>
   );
 }

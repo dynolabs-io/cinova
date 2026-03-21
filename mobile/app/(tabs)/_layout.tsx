@@ -58,17 +58,17 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="reels"
-          options={{
-            title: 'Reels',
-            tabBarIcon: ({ color }) => <TabIcon name="reels" color={color} />,
-          }}
-        />
-        <Tabs.Screen
           name="discover"
           options={{
             title: 'Discover',
             tabBarIcon: ({ color }) => <TabIcon name="discover" color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="reels"
+          options={{
+            title: 'Reels',
+            tabBarIcon: ({ color }) => <TabIcon name="reels" color={color} size={28} />,
           }}
         />
         <Tabs.Screen
@@ -99,7 +99,7 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
-    right: 20,
+    right: 12,
     zIndex: 100,
   },
   fabInner: {

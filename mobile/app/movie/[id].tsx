@@ -27,7 +27,6 @@ import { BlurView } from 'expo-blur';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import YoutubePlayer from 'react-native-youtube-iframe';
 import CinovaScore from '../../components/ui/CinovaScore';
 import MovieCard from '../../components/ui/MovieCard';
 import StreamingBadge from '../../components/ui/StreamingBadge';
@@ -46,7 +45,6 @@ import type { Award, CastMember, Movie, WatchProvider } from '../../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_HEIGHT = SCREEN_HEIGHT * 0.55;
-const TRAILER_HEIGHT = Math.round(SCREEN_WIDTH * (9 / 16));
 const TMDB_IMAGE = 'https://image.tmdb.org/t/p';
 
 function backdropUri(path: string | null): string {
@@ -73,7 +71,7 @@ export default function MovieDetailScreen() {
   const [isSaved, setIsSaved] = useState(false);
   const [userRating, setUserRating] = useState<number | null>(null);
   const [isDismissed, setIsDismissed] = useState(false);
-  const [_showTrailer, _setShowTrailer] = useState(false); // kept for future use
+  const [showTrailer, setShowTrailer] = useState(false);
 
   const { data: movie, isLoading, isError, refetch } = useQuery({
     queryKey: ['movie', id, country],
@@ -153,43 +151,47 @@ export default function MovieDetailScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Full-screen trailer modal */}
+      {showTrailer && trailerKey && (
+        <TrailerPlayer
+          youtubeKey={trailerKey}
+          title={movie.title}
+          primaryProvider={movie.providers?.[0] ?? null}
+          tmdbId={movie.tmdbId}
+          onClose={() => setShowTrailer(false)}
+        />
+      )}
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
       >
-        {/* Hero — inline YouTube trailer or backdrop fallback */}
-        {hasTrailer ? (
-          <View style={styles.inlineTrailer}>
-            <YoutubePlayer
-              height={TRAILER_HEIGHT}
-              width={SCREEN_WIDTH}
-              videoId={trailerKey!}
-              play={false}
-              webViewProps={{ allowsInlineMediaPlayback: true }}
-            />
-            {/* Gradient fade into content below */}
-            <LinearGradient
-              colors={['transparent', Colors.background]}
-              locations={[0.7, 1]}
-              style={styles.inlineTrailerFade}
-              pointerEvents="none"
-            />
-          </View>
-        ) : (
-          <View style={[styles.hero, { height: HERO_HEIGHT }]}>
-            <Image
-              source={{ uri: backdropUri(movie.backdropPath) }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              transition={300}
-            />
-            <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.3)', Colors.background]}
-              locations={[0, 0.55, 1]}
-              style={StyleSheet.absoluteFill}
-            />
-          </View>
-        )}
+        {/* Hero — backdrop image */}
+        <View style={[styles.hero, { height: HERO_HEIGHT }]}>
+          <Image
+            source={{ uri: backdropUri(movie.backdropPath) }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            transition={300}
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.3)', Colors.background]}
+            locations={[0, 0.55, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+          {hasTrailer && (
+            <TouchableOpacity
+              style={styles.trailerBtn}
+              onPress={() => setShowTrailer(true)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.trailerPlay}>
+                <Text style={styles.trailerPlayIcon}>▶</Text>
+              </View>
+              <Text style={styles.trailerLabel}>Watch Trailer</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {/* Back button — positioned absolutely over hero */}
         <View
@@ -562,23 +564,40 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  inlineTrailer: {
-    width: SCREEN_WIDTH,
-    height: TRAILER_HEIGHT,
-    backgroundColor: '#000',
-  },
-  inlineTrailerFade: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 40,
-  },
   hero: {
     width: SCREEN_WIDTH,
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingBottom: Spacing[8],
+  },
+  trailerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[2],
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing[5],
+    paddingVertical: Spacing[3],
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  trailerPlay: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  trailerPlayIcon: {
+    color: '#fff',
+    fontSize: 10,
+    marginLeft: 2,
+  },
+  trailerLabel: {
+    color: Colors.textPrimary,
+    fontSize: Typography.sm,
+    fontWeight: Typography.semibold,
   },
   backBtnContainer: {
     position: 'absolute',

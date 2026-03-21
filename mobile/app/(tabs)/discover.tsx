@@ -1,9 +1,9 @@
 /**
- * Discover screen — True staggered two-column masonry
+ * Discover screen — True staggered masonry (height-tracking)
  *
- * Items are split into left (even) and right (odd) columns independently.
- * Video cards (3:4) are taller than poster cards (2:3), so columns grow
- * at different rates — creating genuine Pinterest-style uneven distribution.
+ * Each card is assigned to the shortest column at the time of insertion,
+ * producing genuine Pinterest-style uneven distribution.
+ * Supports 2–3 columns; currently uses 2 on phone.
  * No native modules required (pure ScrollView + View columns).
  */
 
@@ -15,21 +15,37 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
+  Dimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import DiscoverGridCard from '../../components/ui/DiscoverGridCard';
+import DiscoverGridCard, { VIDEO_CARD_HEIGHT, POSTER_CARD_HEIGHT } from '../../components/ui/DiscoverGridCard';
 import TrailerPlayer from '../../components/ui/TrailerPlayer';
 import { getDiscoverFeed, saveTitle } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import type { Movie } from '../../types';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const NUM_COLS = SCREEN_WIDTH >= 768 ? 3 : 2; // 3 cols on tablet, 2 on phone
 const COL_GAP = 10;
 const SIDE_PAD = 12;
+
+/** Distribute movies into columns by always adding to the shortest column */
+function distributeToColumns(movies: Movie[], numCols: number): Movie[][] {
+  const cols: Movie[][] = Array.from({ length: numCols }, () => []);
+  const heights = new Array<number>(numCols).fill(0);
+  for (const movie of movies) {
+    const cardH = movie.verticalTrailerYoutubeKey ? VIDEO_CARD_HEIGHT : POSTER_CARD_HEIGHT;
+    const shortest = heights.indexOf(Math.min(...heights));
+    cols[shortest].push(movie);
+    heights[shortest] += cardH + COL_GAP;
+  }
+  return cols;
+}
 
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
@@ -63,13 +79,8 @@ export default function DiscoverScreen() {
 
   const movies: Movie[] = (data?.pages ?? []).flat();
 
-  // Split into two columns: even indices → left, odd → right
-  const { left, right } = useMemo(() => {
-    const l: Movie[] = [];
-    const r: Movie[] = [];
-    movies.forEach((m, i) => (i % 2 === 0 ? l : r).push(m));
-    return { left: l, right: r };
-  }, [movies]);
+  // Distribute into columns by shortest-column height tracking
+  const columns = useMemo(() => distributeToColumns(movies, NUM_COLS), [movies]);
 
   const handleSave = useCallback(async (movie: Movie) => {
     setSavedIds((prev) => new Set(prev).add(movie.id));
@@ -148,33 +159,20 @@ export default function DiscoverScreen() {
         }}
       >
         <View style={styles.columns}>
-          {/* Left column — even-indexed movies */}
-          <View style={styles.column}>
-            {left.map((movie) => (
-              <View key={movie.id} style={styles.cardWrapper}>
-                <DiscoverGridCard
-                  movie={movie}
-                  isSaved={savedIds.has(movie.id)}
-                  onSave={handleSave}
-                  onPlayTrailer={handlePlayTrailer}
-                />
-              </View>
-            ))}
-          </View>
-
-          {/* Right column — odd-indexed movies, offset down for visual stagger */}
-          <View style={[styles.column, styles.columnOffset]}>
-            {right.map((movie) => (
-              <View key={movie.id} style={styles.cardWrapper}>
-                <DiscoverGridCard
-                  movie={movie}
-                  isSaved={savedIds.has(movie.id)}
-                  onSave={handleSave}
-                  onPlayTrailer={handlePlayTrailer}
-                />
-              </View>
-            ))}
-          </View>
+          {columns.map((colMovies, colIdx) => (
+            <View key={colIdx} style={styles.column}>
+              {colMovies.map((movie) => (
+                <View key={movie.id} style={styles.cardWrapper}>
+                  <DiscoverGridCard
+                    movie={movie}
+                    isSaved={savedIds.has(movie.id)}
+                    onSave={handleSave}
+                    onPlayTrailer={handlePlayTrailer}
+                  />
+                </View>
+              ))}
+            </View>
+          ))}
         </View>
 
         {isFetchingNextPage && (
@@ -206,13 +204,11 @@ const styles = StyleSheet.create({
   columns: {
     flexDirection: 'row',
     gap: COL_GAP,
+    alignItems: 'flex-start',
   },
   column: {
     flex: 1,
     gap: COL_GAP,
-  },
-  columnOffset: {
-    marginTop: 24, // right column starts lower → natural stagger
   },
   cardWrapper: {
     // each card fills column width; height is set by the card itself
