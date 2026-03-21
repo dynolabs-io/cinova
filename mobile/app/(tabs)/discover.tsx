@@ -1,30 +1,32 @@
 /**
  * Discover screen — Staggered masonry grid
  *
- * Two-column Instagram-style masonry layout.
+ * Two-column layout using FlatList + paired rows (no native modules required).
  * Movies with a vertical_trailer_youtube_key get taller "video" cells (3:4).
  * All others get standard poster cells (2:3).
  * Age-biased ordering from backend (cinova_score × exp(−0.15 × age_years)).
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import {
   View,
   StyleSheet,
   ActivityIndicator,
   Text,
   TouchableOpacity,
+  FlatList,
 } from 'react-native';
-import { MasonryFlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import DiscoverGridCard, { VIDEO_CARD_HEIGHT, POSTER_CARD_HEIGHT } from '../../components/ui/DiscoverGridCard';
+import DiscoverGridCard from '../../components/ui/DiscoverGridCard';
 import TrailerPlayer from '../../components/ui/TrailerPlayer';
-import { getDiscoverFeed, saveTitle, dismissTitle } from '../../services/api';
+import { getDiscoverFeed, saveTitle } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import type { Movie } from '../../types';
+
+type MoviePair = [Movie, Movie | null];
 
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
@@ -61,6 +63,15 @@ export default function DiscoverScreen() {
     .flat()
     .filter((m) => !dismissedIds.has(m.id));
 
+  // Pair movies into rows: [[m0,m1],[m2,m3],...]
+  const pairs = useMemo<MoviePair[]>(() => {
+    const result: MoviePair[] = [];
+    for (let i = 0; i < movies.length; i += 2) {
+      result.push([movies[i], movies[i + 1] ?? null]);
+    }
+    return result;
+  }, [movies]);
+
   const onEndReached = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) fetchNextPage();
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
@@ -82,21 +93,28 @@ export default function DiscoverScreen() {
     setTrailerMovie(movie);
   }, []);
 
-  const renderItem = useCallback(
-    ({ item }: { item: Movie }) => (
-      <DiscoverGridCard
-        movie={item}
-        isSaved={savedIds.has(item.id)}
-        onSave={handleSave}
-        onPlayTrailer={handlePlayTrailer}
-      />
+  const renderPair = useCallback(
+    ({ item }: { item: MoviePair }) => (
+      <View style={styles.row}>
+        <DiscoverGridCard
+          movie={item[0]}
+          isSaved={savedIds.has(item[0].id)}
+          onSave={handleSave}
+          onPlayTrailer={handlePlayTrailer}
+        />
+        {item[1] ? (
+          <DiscoverGridCard
+            movie={item[1]}
+            isSaved={savedIds.has(item[1].id)}
+            onSave={handleSave}
+            onPlayTrailer={handlePlayTrailer}
+          />
+        ) : (
+          <View style={styles.emptyCell} />
+        )}
+      </View>
     ),
     [handleSave, handlePlayTrailer, savedIds]
-  );
-
-  const getItemType = useCallback(
-    (item: Movie) => (item.verticalTrailerYoutubeKey ? 'video' : 'poster'),
-    []
   );
 
   if (isLoading) {
@@ -108,11 +126,11 @@ export default function DiscoverScreen() {
     );
   }
 
-  const headerHeight = insets.top + 8 + 36; // safe area + padding + banner height
+  const headerHeight = insets.top + 8 + 36;
 
   return (
     <View style={styles.container}>
-      {/* Trailer player — rendered at screen level to avoid AutoLayoutView crash inside list cells */}
+      {/* Trailer player — screen-level so it renders outside the list */}
       {trailerMovie?.verticalTrailerYoutubeKey && (
         <TrailerPlayer
           youtubeKey={trailerMovie.verticalTrailerYoutubeKey}
@@ -136,15 +154,13 @@ export default function DiscoverScreen() {
         </View>
       )}
 
-      <MasonryFlashList
-        data={movies}
-        numColumns={2}
-        renderItem={renderItem}
-        keyExtractor={(item, index) => `${item.tmdbId ?? item.id ?? index}-${index}`}
-        getItemType={getItemType}
-        estimatedItemSize={POSTER_CARD_HEIGHT}
+      <FlatList
+        data={pairs}
+        renderItem={renderPair}
+        keyExtractor={(_, index) => `pair-${index}`}
         onEndReached={onEndReached}
         onEndReachedThreshold={3}
+        removeClippedSubviews
         contentContainerStyle={{
           paddingTop: activeFilter ? headerHeight : insets.top + Spacing[3],
           paddingBottom: insets.bottom + 80,
@@ -177,6 +193,15 @@ const styles = StyleSheet.create({
   loadingText: {
     color: Colors.textSecondary,
     fontSize: Typography.base,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 10,
+  },
+  emptyCell: {
+    flex: 1,
   },
   footer: {
     height: 60,
