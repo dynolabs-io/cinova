@@ -67,10 +67,12 @@ export default function StreamingBadge({
   onPress,
 }: StreamingBadgeProps) {
   const known = getProviderById(provider.providerId);
-  const logoUri = known
+  // Prefer TMDB logo path (always available and resolves correctly).
+  // Fall back to assets.cinova.app CDN only if TMDB path is absent.
+  const logoUri = provider.logoPath
+    ? `https://image.tmdb.org/t/p/w92${provider.logoPath}`
+    : known
     ? PROVIDER_LOGOS[known.logoKey]
-    : provider.logoPath
-    ? `https://image.tmdb.org/t/p/original${provider.logoPath}`
     : PROVIDER_LOGOS.unknown;
 
   const borderColor = known?.color ?? Colors.border;
