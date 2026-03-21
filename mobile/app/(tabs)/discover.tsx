@@ -21,12 +21,14 @@ import {
   ActivityIndicator,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  LayoutChangeEvent,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import YoutubeIframe from 'react-native-youtube-iframe';
 import TrailerPlayer from '../../components/ui/TrailerPlayer';
 import CinovaScore from '../../components/ui/CinovaScore';
 import { getDiscoverFeed, saveTitle } from '../../services/api';
@@ -45,44 +47,85 @@ const TMDB = 'https://image.tmdb.org/t/p';
 // ── MosaicCard ────────────────────────────────────────────────────────────────
 // Fills whatever space the parent gives it. Size is driven by the template.
 
-interface CardHandlers {
-  savedIds: Set<number>;
-  onSave: (m: Movie) => void;
-  onPlayTrailer: (m: Movie) => void;
-}
-
 interface MosaicCardProps {
   movie: Movie;
   style?: object;
   savedIds: Set<number>;
   onSave: (m: Movie) => void;
-  onPlayTrailer: (m: Movie) => void;
+  activeVideoId: number | null;
+  onActivateVideo: (id: number | null) => void;
 }
 
-function MosaicCard({ movie, style, savedIds, onSave, onPlayTrailer }: MosaicCardProps) {
+function MosaicCard({ movie, style, savedIds, onSave, activeVideoId, onActivateVideo }: MosaicCardProps) {
   const router = useRouter();
-  const uri = movie.posterPath ? `${TMDB}/w500${movie.posterPath}` : '';
+  const [cardSize, setCardSize] = useState({ width: 0, height: 0 });
+
+  const hasVideo = !!movie.verticalTrailerYoutubeKey;
+  const isPlaying = activeVideoId === movie.id;
+
+  // Image source: YouTube thumbnail for video cards, TMDB poster for image cards
+  const imageUri = hasVideo
+    ? `https://img.youtube.com/vi/${movie.verticalTrailerYoutubeKey}/hqdefault.jpg`
+    : (movie.posterPath ? `${TMDB}/w500${movie.posterPath}` : '');
+
+  const handlePress = useCallback(() => {
+    if (hasVideo && !isPlaying) {
+      hapticMedium();
+      onActivateVideo(movie.id);
+    } else {
+      router.push(`/movie/${movie.id}`);
+    }
+  }, [hasVideo, isPlaying, movie.id, onActivateVideo, router]);
+
+  const handleLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    if (width > 0 && height > 0) setCardSize({ width, height });
+  }, []);
 
   return (
     <TouchableOpacity
       style={[cardStyles.card, style]}
       activeOpacity={0.88}
-      onPress={() => router.push(`/movie/${movie.id}`)}
+      onPress={handlePress}
       onLongPress={() => { hapticSuccess(); onSave(movie); }}
       delayLongPress={400}
+      onLayout={handleLayout}
     >
-      <Image
-        source={uri ? { uri } : undefined}
-        style={StyleSheet.absoluteFill}
-        contentFit="cover"
-        transition={200}
-        placeholder={{ blurhash: 'L00000fQfQfQfQfQfQfQfQfQfQfQ' }}
-      />
+      {/* Video or image background */}
+      {isPlaying && cardSize.width > 0 ? (
+        <YoutubeIframe
+          videoId={movie.verticalTrailerYoutubeKey!}
+          width={cardSize.width}
+          height={cardSize.height}
+          play
+          mute
+          initialPlayerParams={{ controls: 0, rel: 0, modestbranding: 1 }}
+          webViewStyle={{ backgroundColor: '#000' }}
+        />
+      ) : (
+        <Image
+          source={imageUri ? { uri: imageUri } : undefined}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={200}
+          placeholder={{ blurhash: 'L00000fQfQfQfQfQfQfQfQfQfQfQ' }}
+        />
+      )}
+
       <LinearGradient
         colors={['transparent', 'rgba(0,0,0,0.82)']}
         locations={[0.45, 1]}
         style={StyleSheet.absoluteFill}
+        pointerEvents="none"
       />
+
+      {/* Video badge — small camera icon top-right for video tiles */}
+      {hasVideo && !isPlaying && (
+        <View style={cardStyles.videoBadge}>
+          <Text style={cardStyles.videoBadgeIcon}>▶</Text>
+        </View>
+      )}
+
       {movie.cinovaScore != null && (
         <View style={cardStyles.score}>
           <CinovaScore score={movie.cinovaScore} size="sm" />
@@ -92,15 +135,6 @@ function MosaicCard({ movie, style, savedIds, onSave, onPlayTrailer }: MosaicCar
         <View style={cardStyles.saved}>
           <Text style={cardStyles.savedTick}>✓</Text>
         </View>
-      )}
-      {movie.verticalTrailerYoutubeKey && (
-        <TouchableOpacity
-          style={cardStyles.playBtn}
-          onPress={() => { hapticMedium(); onPlayTrailer(movie); }}
-          activeOpacity={0.8}
-        >
-          <Text style={cardStyles.playIcon}>▶</Text>
-        </TouchableOpacity>
       )}
       <View style={cardStyles.info}>
         <Text style={cardStyles.title} numberOfLines={2}>{movie.title}</Text>
@@ -131,15 +165,15 @@ const cardStyles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   savedTick: { color: '#fff', fontSize: 9, fontWeight: '700' },
-  playBtn: {
+  videoBadge: {
     position: 'absolute',
-    top: '35%', alignSelf: 'center',
-    width: 34, height: 34, borderRadius: 17,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.7)',
-    justifyContent: 'center', alignItems: 'center',
+    top: 5, right: 5,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
-  playIcon: { color: '#fff', fontSize: 13, marginLeft: 2 },
+  videoBadgeIcon: { color: '#fff', fontSize: 8 },
   info: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,
@@ -155,6 +189,13 @@ const cardStyles = StyleSheet.create({
 // ── Layout Templates ──────────────────────────────────────────────────────────
 // U = 1 grid unit. Heights and flex values define the mosaic proportions.
 
+type CardHandlers = {
+  savedIds: Set<number>;
+  onSave: (m: Movie) => void;
+  activeVideoId: number | null;
+  onActivateVideo: (id: number | null) => void;
+};
+
 type Template = {
   count: number;
   render: (movies: Movie[], h: CardHandlers) => React.ReactElement;
@@ -168,7 +209,8 @@ const card = (m: Movie, h: CardHandlers, style: object) => (
     style={style}
     savedIds={h.savedIds}
     onSave={h.onSave}
-    onPlayTrailer={h.onPlayTrailer}
+    activeVideoId={h.activeVideoId}
+    onActivateVideo={h.onActivateVideo}
   />
 );
 
@@ -381,7 +423,7 @@ export default function DiscoverScreen() {
     : null;
 
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
-  const [trailerMovie, setTrailerMovie] = useState<Movie | null>(null);
+  const [activeVideoId, setActiveVideoId] = useState<number | null>(null);
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
     useInfiniteQuery({
@@ -408,8 +450,8 @@ export default function DiscoverScreen() {
     }
   }, []);
 
-  const handlePlayTrailer = useCallback((movie: Movie) => {
-    setTrailerMovie(movie);
+  const handleActivateVideo = useCallback((id: number | null) => {
+    setActiveVideoId(id);
   }, []);
 
   const handleScroll = useCallback(
@@ -430,20 +472,10 @@ export default function DiscoverScreen() {
     );
   }
 
-  const handlers: CardHandlers = { savedIds, onSave: handleSave, onPlayTrailer: handlePlayTrailer };
+  const handlers: CardHandlers = { savedIds, onSave: handleSave, activeVideoId, onActivateVideo: handleActivateVideo };
 
   return (
     <View style={styles.container}>
-      {trailerMovie?.verticalTrailerYoutubeKey && (
-        <TrailerPlayer
-          youtubeKey={trailerMovie.verticalTrailerYoutubeKey}
-          title={trailerMovie.title}
-          primaryProvider={trailerMovie.providers?.[0] ?? null}
-          tmdbId={trailerMovie.tmdbId}
-          onClose={() => setTrailerMovie(null)}
-        />
-      )}
-
       {activeFilter && (
         <View style={[styles.filterBanner, { top: insets.top + 8 }]}>
           <Text style={styles.filterLabel}>{activeFilter.type}: {activeFilter.value}</Text>

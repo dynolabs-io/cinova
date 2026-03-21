@@ -30,6 +30,12 @@ export default function ReelsScreen() {
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [ratings, setRatings] = useState<Record<number, number>>({});
   const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 60 });
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    if (viewableItems.length > 0) setActiveIndex(viewableItems[0].index ?? 0);
+  });
 
   const {
     data,
@@ -84,9 +90,10 @@ export default function ReelsScreen() {
       <FlatList
         data={movies}
         keyExtractor={(item, i) => `${item.id}-${i}`}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <ReelItem
             movie={item}
+            isActive={index === activeIndex}
             isSaved={savedIds.has(item.id)}
             userRating={ratings[item.id]}
             onSave={handleSave}
@@ -101,6 +108,8 @@ export default function ReelsScreen() {
         decelerationRate="fast"
         onEndReached={onEndReached}
         onEndReachedThreshold={2}
+        onViewableItemsChanged={onViewableItemsChanged.current}
+        viewabilityConfig={viewabilityConfig.current}
         getItemLayout={(_, index) => ({
           length: SCREEN_HEIGHT,
           offset: SCREEN_HEIGHT * index,

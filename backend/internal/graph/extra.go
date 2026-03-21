@@ -307,9 +307,12 @@ func (r *MovieRepository) GetReels(ctx context.Context, country string, limit in
 		WHERE m.backdrop_path IS NOT NULL AND m.backdrop_path <> ''
 		  AND m.overview IS NOT NULL AND m.overview <> ''
 		  AND m.cinova_score > 50
+		  AND m.vertical_trailer_youtube_key IS NOT NULL
+		  AND m.vertical_trailer_youtube_key <> ''
+		  AND m.vertical_trailer_youtube_key <> 'NOT_FOUND'
 		WITH DISTINCT m,
-		     m.cinova_score * exp(-0.15 * toFloat(date().year - toInteger(substring(coalesce(m.release_date, '2000-01-01'), 0, 4)))) AS effective_score
-		ORDER BY effective_score DESC, m.popularity DESC
+		     m.cinova_score * exp(-0.15 * toFloat(date().year - toInteger(substring(coalesce(m.release_date, '2000-01-01'), 0, 4)))) * (0.4 + rand() * 0.6) AS effective_score
+		ORDER BY effective_score DESC
 		LIMIT $limit
 		OPTIONAL MATCH (m)-[:IN_GENRE]->(g:Genre)
 		OPTIONAL MATCH (m)-[avail:AVAILABLE_ON {country: $country}]->(prov:Provider)

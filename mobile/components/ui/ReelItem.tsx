@@ -1,8 +1,9 @@
 /**
- * ReelItem — Full-screen discover reel (Instagram Reels / TikTok style)
+ * ReelItem — Full-screen vertical reel (TikTok / Instagram Reels style)
  *
- * Fills the full viewport. Backdrop image with gradient. Right-side
- * action column. Bottom content strip.
+ * When isActive=true and the movie has a verticalTrailerYoutubeKey,
+ * plays the vertical YouTube trailer full-screen. Otherwise shows the
+ * backdrop image with a gradient. UI overlay (actions, title) is always on top.
  */
 
 import React, { useCallback, useState } from 'react';
@@ -18,12 +19,12 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import YoutubeIframe from 'react-native-youtube-iframe';
 import CinovaScore from './CinovaScore';
 import StreamingBadge from './StreamingBadge';
-import TrailerPlayer from './TrailerPlayer';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import { getProviderById } from '../../constants/providers';
-import { hapticSuccess, hapticMedium, hapticLight } from '../../services/haptics';
+import { hapticSuccess, hapticMedium } from '../../services/haptics';
 import type { Movie, WatchProvider } from '../../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -31,6 +32,7 @@ const TMDB_IMAGE = 'https://image.tmdb.org/t/p/w1280';
 
 interface ReelItemProps {
   movie: Movie;
+  isActive?: boolean;
   onSave?: (movie: Movie) => void;
   onRate?: (movie: Movie) => void;
   onDismiss?: (movie: Movie) => void;
@@ -38,22 +40,13 @@ interface ReelItemProps {
   userRating?: number;
 }
 
-function backdropUri(path: string | null): string {
-  if (!path) return '';
-  return `${TMDB_IMAGE}${path}`;
-}
-
 async function watchOnProvider(provider: WatchProvider, movieId: number): Promise<void> {
   const known = getProviderById(provider.providerId);
   if (known) {
     const deepLink = known.buildDeepLink(movieId);
     const canOpen = await Linking.canOpenURL(deepLink);
-    if (canOpen) {
-      await Linking.openURL(deepLink);
-      return;
-    }
-    const store =
-      Platform.OS === 'ios' ? known.storeUrl.ios : known.storeUrl.android;
+    if (canOpen) { await Linking.openURL(deepLink); return; }
+    const store = Platform.OS === 'ios' ? known.storeUrl.ios : known.storeUrl.android;
     await Linking.openURL(store);
     return;
   }
@@ -62,6 +55,7 @@ async function watchOnProvider(provider: WatchProvider, movieId: number): Promis
 
 export default function ReelItem({
   movie,
+  isActive = false,
   onSave,
   onRate,
   onDismiss,
@@ -72,61 +66,62 @@ export default function ReelItem({
   const primaryProvider = movie.providers?.[0] ?? null;
   const genreLabel = movie.genres.slice(0, 2).map((g) => g.name).join(' · ');
   const runtimeLabel = movie.runtime ? `${movie.runtime}m` : '';
-  const [trailerVisible, setTrailerVisible] = useState(false);
+
+  const verticalKey = movie.verticalTrailerYoutubeKey;
+  const showVideo = isActive && !!verticalKey;
 
   const handleTap = useCallback(() => {
     router.push(`/movie/${movie.id}`);
   }, [movie.id, router]);
 
   const handleWatch = useCallback(async () => {
-    if (primaryProvider) {
-      await watchOnProvider(primaryProvider, movie.tmdbId);
-    }
+    if (primaryProvider) await watchOnProvider(primaryProvider, movie.tmdbId);
   }, [primaryProvider, movie.tmdbId]);
 
-  const handleTrailer = useCallback(() => {
-    hapticMedium();
-    setTrailerVisible(true);
-  }, []);
-
-  const trailerKey = movie.trailerYoutubeKey ?? movie.trailer?.key;
-
   return (
-    <>
-    {trailerVisible && trailerKey && (
-      <TrailerPlayer
-        youtubeKey={trailerKey}
-        title={movie.title}
-        primaryProvider={primaryProvider}
-        tmdbId={movie.tmdbId}
-        onClose={() => setTrailerVisible(false)}
-      />
-    )}
-    <TouchableOpacity
-      activeOpacity={1}
-      onPress={handleTap}
-      style={styles.container}
-    >
-      {/* Background backdrop */}
-      <Image
-        source={{ uri: backdropUri(movie.backdropPath) }}
-        style={styles.backdrop}
-        contentFit="cover"
-        transition={300}
-        placeholder={{ blurhash: 'L00000fQfQfQfQfQfQfQfQfQfQfQ' }}
+    <View style={styles.container}>
+      {/* Background: vertical YouTube video or backdrop image */}
+      {showVideo ? (
+        <View style={styles.videoContainer}>
+          <YoutubeIframe
+            videoId={verticalKey!}
+            height={SCREEN_HEIGHT}
+            width={SCREEN_WIDTH}
+            play={isActive}
+            mute={false}
+            initialPlayerParams={{
+              controls: 0,
+              rel: 0,
+              modestbranding: 1,
+              loop: 1,
+              playlist: verticalKey,
+            }}
+            webViewStyle={{ backgroundColor: '#000' }}
+          />
+        </View>
+      ) : (
+        <Image
+          source={movie.backdropPath ? { uri: `${TMDB_IMAGE}${movie.backdropPath}` } : undefined}
+          style={styles.backdrop}
+          contentFit="cover"
+          transition={300}
+          placeholder={{ blurhash: 'L00000fQfQfQfQfQfQfQfQfQfQfQ' }}
+        />
+      )}
+
+      {/* Gradient overlay — needed for both video and image to make text readable */}
+      <LinearGradient
+        colors={['transparent', 'transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.88)', Colors.background]}
+        locations={[0, 0.35, 0.6, 0.8, 1]}
+        style={styles.gradient}
+        pointerEvents="none"
       />
 
-      {/* Gradient — sides transparent, bottom 50% black fade */}
-      <LinearGradient
-        colors={[
-          'transparent',
-          'transparent',
-          'rgba(0,0,0,0.4)',
-          'rgba(0,0,0,0.85)',
-          Colors.background,
-        ]}
-        locations={[0, 0.3, 0.55, 0.78, 1]}
-        style={styles.gradient}
+      {/* Tap target — whole screen navigates to detail */}
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={handleTap}
+        style={StyleSheet.absoluteFill}
       />
 
       {/* CinovaScore top-right */}
@@ -145,19 +140,11 @@ export default function ReelItem({
           onPress={() => { hapticSuccess(); onSave?.(movie); }}
         />
         <ActionButton
-          label={userRating ? `${userRating}★` : "★"}
-          sublabel={userRating ? `Rated` : "Rate"}
+          label={userRating ? `${userRating}★` : '★'}
+          sublabel={userRating ? 'Rated' : 'Rate'}
           color={userRating ? Colors.scoreMid : Colors.textPrimary}
           onPress={() => { hapticMedium(); onRate?.(movie); }}
         />
-        {trailerKey && (
-          <ActionButton
-            label="▶"
-            sublabel="Trailer"
-            color="#e50914"
-            onPress={handleTrailer}
-          />
-        )}
         {primaryProvider && (
           <ActionButton
             label="↗"
@@ -169,49 +156,32 @@ export default function ReelItem({
       </View>
 
       {/* Bottom content */}
-      <View style={[styles.bottomContent, { pointerEvents: 'box-none' }]} >
-        {/* Streaming badges row */}
+      <View style={styles.bottomContent} pointerEvents="box-none">
         {movie.providers.length > 0 && (
           <View style={styles.providerRow}>
             {movie.providers.slice(0, 4).map((p, i) => (
-              <StreamingBadge
-                key={`${p.providerId}-${i}`}
-                provider={p}
-                variant="icon"
-                size={32}
-              />
+              <StreamingBadge key={`${p.providerId}-${i}`} provider={p} variant="icon" size={32} />
             ))}
           </View>
         )}
-
-        {/* Title */}
-        <Text style={styles.title} numberOfLines={2}>
-          {movie.title}
-        </Text>
-
-        {/* Meta */}
+        <Text style={styles.title} numberOfLines={2}>{movie.title}</Text>
         <Text style={styles.meta}>
           {[movie.year, genreLabel, runtimeLabel].filter(Boolean).join(' · ')}
         </Text>
-
-        {/* Cinova synopsis — AI hook */}
         {(movie.cinovaSynopsis ?? movie.aiDescription ?? movie.overview) ? (
-          <Text style={styles.aiDescription} numberOfLines={2}>
+          <Text style={styles.synopsis} numberOfLines={2}>
             {movie.cinovaSynopsis ?? movie.aiDescription ?? movie.overview}
           </Text>
         ) : null}
-
-        {/* Award win chip */}
-        {movie.awards && movie.awards.filter((a) => !a.isNomination).length > 0 ? (
+        {movie.awards && movie.awards.filter((a) => !a.isNomination).length > 0 && (
           <View style={styles.awardChip}>
             <Text style={styles.awardChipText}>
               🏆 {movie.awards.filter((a) => !a.isNomination).length} Award Win{movie.awards.filter((a) => !a.isNomination).length !== 1 ? 's' : ''}
             </Text>
           </View>
-        ) : null}
+        )}
       </View>
-    </TouchableOpacity>
-    </>
+    </View>
   );
 }
 
@@ -224,11 +194,7 @@ interface ActionButtonProps {
 
 function ActionButton({ label, sublabel, color, onPress }: ActionButtonProps) {
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.75}
-      style={styles.actionBtn}
-    >
+    <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={styles.actionBtn}>
       <View style={[styles.actionIconCircle, { borderColor: color }]}>
         <Text style={[styles.actionIcon, { color }]}>{label}</Text>
       </View>
@@ -241,7 +207,14 @@ const styles = StyleSheet.create({
   container: {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
-    backgroundColor: Colors.background,
+    backgroundColor: '#000',
+  },
+  videoContainer: {
+    position: 'absolute',
+    top: 0, left: 0,
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+    backgroundColor: '#000',
   },
   backdrop: {
     position: 'absolute',
@@ -250,9 +223,7 @@ const styles = StyleSheet.create({
   },
   gradient: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    left: 0, right: 0, bottom: 0,
     height: SCREEN_HEIGHT * 0.7,
   },
   scoreContainer: {
@@ -319,7 +290,7 @@ const styles = StyleSheet.create({
     fontWeight: Typography.medium,
     marginBottom: Spacing[2],
   },
-  aiDescription: {
+  synopsis: {
     color: Colors.textSecondary,
     fontSize: Typography.sm,
     fontStyle: 'italic',
