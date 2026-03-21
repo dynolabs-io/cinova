@@ -299,14 +299,17 @@ func (r *MovieRepository) GetPopular(ctx context.Context, country string, limit,
 
 // GetReels returns trending movies optimised for the Discover reel feed.
 // Results include backdrop_path, overview, genres, cinova_score, and streaming providers.
+// Applies age bias: effective_score = cinova_score × exp(−0.15 × age_years)
+// so classic films don't dominate the feed over recent releases.
 func (r *MovieRepository) GetReels(ctx context.Context, country string, limit int) ([]models.Movie, error) {
 	records, err := r.driver.RunQuery(ctx, `
 		MATCH (m:Movie)-[:AVAILABLE_ON {country: $country}]->(:Provider)
 		WHERE m.backdrop_path IS NOT NULL AND m.backdrop_path <> ''
 		  AND m.overview IS NOT NULL AND m.overview <> ''
 		  AND m.cinova_score > 50
-		WITH DISTINCT m
-		ORDER BY m.cinova_score DESC, m.popularity DESC
+		WITH DISTINCT m,
+		     m.cinova_score * exp(-0.15 * toFloat(date().year - coalesce(m.release_year, date().year))) AS effective_score
+		ORDER BY effective_score DESC, m.popularity DESC
 		LIMIT $limit
 		OPTIONAL MATCH (m)-[:IN_GENRE]->(g:Genre)
 		OPTIONAL MATCH (m)-[avail:AVAILABLE_ON {country: $country}]->(prov:Provider)

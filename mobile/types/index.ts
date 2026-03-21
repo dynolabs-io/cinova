@@ -38,6 +38,7 @@ export interface Movie {
   cast: CastMember[];
   trailer?: Trailer;
   trailerYoutubeKey?: string;
+  verticalTrailerYoutubeKey?: string;
   plotSummary?: string;
   cinovaSynopsis?: string;
   /** @deprecated use cinovaSynopsis */
