@@ -24,32 +24,32 @@ func NewMovieRepository(driver *Driver) *MovieRepository {
 func (r *MovieRepository) GetMovie(ctx context.Context, tmdbID int) (*models.Movie, error) {
 	records, err := r.driver.RunQuery(ctx, `
 		MATCH (m:Movie {tmdb_id: $tmdb_id})
-		OPTIONAL MATCH (m)-[:IN_GENRE]->(g:Genre)
-		OPTIONAL MATCH (m)-[:HAS_KEYWORD]->(k:Keyword)
-		OPTIONAL MATCH (m)-[:HAS_THEME]->(t:Theme)
-		OPTIONAL MATCH (m)-[:HAS_MOOD]->(mo:Mood)
-		OPTIONAL MATCH (m)<-[act:ACTED_IN]-(p:Person)
-		OPTIONAL MATCH (m)<-[dir:DIRECTED]-(d:Person)
-		OPTIONAL MATCH (m)-[won:HAS_WON]->(aw:Award)
-		OPTIONAL MATCH (m)-[nom:HAS_NOMINATION]->(na:Award)
-		RETURN m,
-		       collect(DISTINCT {id: g.id, name: g.name})                        AS genres,
-		       collect(DISTINCT {id: k.id, name: k.name})                        AS keywords,
-		       collect(DISTINCT {name: t.name, score: t.score})                  AS themes,
-		       collect(DISTINCT {name: mo.name, score: mo.score})                AS moods,
-		       collect(DISTINCT {tmdb_id: p.tmdb_id, name: p.name,
-		                          profile_path: p.profile_path,
-		                          role: act.character, order: act.order})        AS cast,
-		       collect(DISTINCT {tmdb_id: d.tmdb_id, name: d.name,
-		                          profile_path: d.profile_path,
-		                          job: dir.job})                                  AS directors,
-		       collect(DISTINCT {wikidata_id: aw.wikidata_id, award_name: aw.award_name,
-		                          ceremony_name: aw.ceremony_name, year: won.year,
-		                          recipient_name: won.recipient_name,
-		                          is_nomination: false})                          AS wins,
-		       collect(DISTINCT {wikidata_id: na.wikidata_id, award_name: na.award_name,
-		                          ceremony_name: na.ceremony_name, year: nom.year,
-		                          is_nomination: true})                           AS nominations
+		CALL { WITH m OPTIONAL MATCH (m)-[:IN_GENRE]->(g:Genre)
+		       RETURN collect(DISTINCT {id: g.id, name: g.name}) AS genres }
+		CALL { WITH m OPTIONAL MATCH (m)-[:HAS_KEYWORD]->(k:Keyword)
+		       RETURN collect(DISTINCT {id: k.id, name: k.name}) AS keywords }
+		CALL { WITH m OPTIONAL MATCH (m)-[:HAS_THEME]->(t:Theme)
+		       RETURN collect(DISTINCT {name: t.name, score: t.score}) AS themes }
+		CALL { WITH m OPTIONAL MATCH (m)-[:HAS_MOOD]->(mo:Mood)
+		       RETURN collect(DISTINCT {name: mo.name, score: mo.score}) AS moods }
+		CALL { WITH m OPTIONAL MATCH (m)<-[act:ACTED_IN]-(p:Person)
+		       RETURN collect(DISTINCT {tmdb_id: p.tmdb_id, name: p.name,
+		                                profile_path: p.profile_path,
+		                                role: act.character, order: act.order}) AS cast }
+		CALL { WITH m OPTIONAL MATCH (m)<-[dir:DIRECTED]-(d:Person)
+		       RETURN collect(DISTINCT {tmdb_id: d.tmdb_id, name: d.name,
+		                                profile_path: d.profile_path,
+		                                job: dir.job}) AS directors }
+		CALL { WITH m OPTIONAL MATCH (m)-[won:HAS_WON]->(aw:Award)
+		       RETURN collect(DISTINCT {wikidata_id: aw.wikidata_id, award_name: aw.award_name,
+		                                ceremony_name: aw.ceremony_name, year: won.year,
+		                                recipient_name: won.recipient_name,
+		                                is_nomination: false}) AS wins }
+		CALL { WITH m OPTIONAL MATCH (m)-[nom:HAS_NOMINATION]->(na:Award)
+		       RETURN collect(DISTINCT {wikidata_id: na.wikidata_id, award_name: na.award_name,
+		                                ceremony_name: na.ceremony_name, year: nom.year,
+		                                is_nomination: true}) AS nominations }
+		RETURN m, genres, keywords, themes, moods, cast, directors, wins, nominations
 	`, map[string]interface{}{"tmdb_id": tmdbID})
 	if err != nil {
 		return nil, fmt.Errorf("GetMovie query: %w", err)
@@ -94,22 +94,22 @@ func (r *MovieRepository) GetMovie(ctx context.Context, tmdbID int) (*models.Mov
 func (r *MovieRepository) GetTVShow(ctx context.Context, tmdbID int) (*models.TVShow, error) {
 	records, err := r.driver.RunQuery(ctx, `
 		MATCH (t:TVShow {tmdb_id: $tmdb_id})
-		OPTIONAL MATCH (t)-[:IN_GENRE]->(g:Genre)
-		OPTIONAL MATCH (t)-[:HAS_KEYWORD]->(k:Keyword)
-		OPTIONAL MATCH (t)-[:HAS_THEME]->(th:Theme)
-		OPTIONAL MATCH (t)-[:HAS_MOOD]->(mo:Mood)
-		OPTIONAL MATCH (t)<-[act:ACTED_IN]-(p:Person)
-		OPTIONAL MATCH (t)<-[cr:CREATED]-(c:Person)
-		RETURN t,
-		       collect(DISTINCT {id: g.id, name: g.name})               AS genres,
-		       collect(DISTINCT {id: k.id, name: k.name})               AS keywords,
-		       collect(DISTINCT {name: th.name, score: th.score})        AS themes,
-		       collect(DISTINCT {name: mo.name, score: mo.score})        AS moods,
-		       collect(DISTINCT {tmdb_id: p.tmdb_id, name: p.name,
-		                          profile_path: p.profile_path,
-		                          role: act.character, order: act.order}) AS cast,
-		       collect(DISTINCT {tmdb_id: c.tmdb_id, name: c.name,
-		                          profile_path: c.profile_path})          AS creators
+		CALL { WITH t OPTIONAL MATCH (t)-[:IN_GENRE]->(g:Genre)
+		       RETURN collect(DISTINCT {id: g.id, name: g.name}) AS genres }
+		CALL { WITH t OPTIONAL MATCH (t)-[:HAS_KEYWORD]->(k:Keyword)
+		       RETURN collect(DISTINCT {id: k.id, name: k.name}) AS keywords }
+		CALL { WITH t OPTIONAL MATCH (t)-[:HAS_THEME]->(th:Theme)
+		       RETURN collect(DISTINCT {name: th.name, score: th.score}) AS themes }
+		CALL { WITH t OPTIONAL MATCH (t)-[:HAS_MOOD]->(mo:Mood)
+		       RETURN collect(DISTINCT {name: mo.name, score: mo.score}) AS moods }
+		CALL { WITH t OPTIONAL MATCH (t)<-[act:ACTED_IN]-(p:Person)
+		       RETURN collect(DISTINCT {tmdb_id: p.tmdb_id, name: p.name,
+		                                profile_path: p.profile_path,
+		                                role: act.character, order: act.order}) AS cast }
+		CALL { WITH t OPTIONAL MATCH (t)<-[cr:CREATED]-(c:Person)
+		       RETURN collect(DISTINCT {tmdb_id: c.tmdb_id, name: c.name,
+		                                profile_path: c.profile_path}) AS creators }
+		RETURN t, genres, keywords, themes, moods, cast, creators
 	`, map[string]interface{}{"tmdb_id": tmdbID})
 	if err != nil {
 		return nil, fmt.Errorf("GetTVShow query: %w", err)

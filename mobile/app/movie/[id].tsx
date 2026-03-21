@@ -508,9 +508,9 @@ function TagSection({
     <View style={tagStyles.section}>
       <Text style={tagStyles.title}>{title}</Text>
       <View style={tagStyles.row}>
-        {tags.map((tag) => (
+        {tags.map((tag, i) => (
           <Pressable
-            key={tag}
+            key={`${tag}-${i}`}
             style={tagStyles.chip}
             onPress={() => router.push(`/(tabs)/discover?${filterParam ?? 'genre'}=${encodeURIComponent(tag)}` as never)}
           >
