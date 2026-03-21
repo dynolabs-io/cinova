@@ -74,7 +74,8 @@ func (f *VerticalFinder) search(query string) ([]string, error) {
 	params.Set("q", query)
 	params.Set("type", "video")
 	params.Set("maxResults", "5")
-	params.Set("videoDuration", "short") // under 4 minutes
+	params.Set("videoDuration", "short")    // under 4 minutes
+	params.Set("videoEmbeddable", "true")   // only embeddable videos
 	params.Set("key", f.apiKey)
 
 	resp, err := f.httpClient.Get(searchURL + "?" + params.Encode())
@@ -110,7 +111,7 @@ func (f *VerticalFinder) search(query string) ([]string, error) {
 //   - Title contains the movie title (fuzzy match to avoid wrong mappings)
 func (f *VerticalFinder) validateVertical(videoID, movieTitle string) (bool, error) {
 	params := url.Values{}
-	params.Set("part", "player,contentDetails,snippet")
+	params.Set("part", "player,contentDetails,snippet,status")
 	params.Set("id", videoID)
 	params.Set("maxWidth", "3840")
 	params.Set("key", f.apiKey)
@@ -133,6 +134,9 @@ func (f *VerticalFinder) validateVertical(videoID, movieTitle string) (bool, err
 			ContentDetails struct {
 				Duration string `json:"duration"` // ISO 8601 e.g. PT1M30S
 			} `json:"contentDetails"`
+			Status struct {
+				Embeddable bool `json:"embeddable"`
+			} `json:"status"`
 		} `json:"items"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -143,6 +147,11 @@ func (f *VerticalFinder) validateVertical(videoID, movieTitle string) (bool, err
 	}
 
 	item := result.Items[0]
+
+	// Must be embeddable — reject immediately if studio has disabled embedding
+	if !item.Status.Embeddable {
+		return false, nil
+	}
 
 	// Title must contain the movie title (normalised, case-insensitive)
 	if !titleMatches(item.Snippet.Title, movieTitle) {
