@@ -146,7 +146,7 @@ export default function MovieDetailScreen() {
   const themeTags = movie.themes ?? [];
   const moodTags = movie.moods ?? [];
 
-  const trailerKey = movie.trailer?.key ?? movie.trailerYouTubeKey ?? null;
+  const trailerKey = movie.trailer?.key ?? movie.trailerYoutubeKey ?? null;
   const hasTrailer = !!trailerKey;
 
   return (
