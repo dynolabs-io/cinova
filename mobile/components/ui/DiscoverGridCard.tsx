@@ -9,7 +9,7 @@
  * Tap → movie detail. Long-press → save quick action.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,6 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import CinovaScore from './CinovaScore';
-import TrailerPlayer from './TrailerPlayer';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import { hapticMedium, hapticSuccess } from '../../services/haptics';
 import type { Movie } from '../../types';
@@ -43,15 +42,16 @@ interface DiscoverGridCardProps {
   movie: Movie;
   isSaved?: boolean;
   onSave?: (movie: Movie) => void;
+  onPlayTrailer?: (movie: Movie) => void;
 }
 
 export default function DiscoverGridCard({
   movie,
   isSaved = false,
   onSave,
+  onPlayTrailer,
 }: DiscoverGridCardProps) {
   const router = useRouter();
-  const [trailerVisible, setTrailerVisible] = useState(false);
 
   const hasVertical = !!movie.verticalTrailerYoutubeKey;
   const cardHeight = hasVertical ? VIDEO_CARD_HEIGHT : POSTER_CARD_HEIGHT;
@@ -73,21 +73,11 @@ export default function DiscoverGridCard({
 
   const handleTrailer = useCallback(() => {
     hapticMedium();
-    setTrailerVisible(true);
-  }, []);
+    onPlayTrailer?.(movie);
+  }, [movie, onPlayTrailer]);
 
+  // Single root View — required by MasonryFlashList (no Fragment wrapper)
   return (
-    <>
-      {trailerVisible && movie.verticalTrailerYoutubeKey && (
-        <TrailerPlayer
-          youtubeKey={movie.verticalTrailerYoutubeKey}
-          title={movie.title}
-          primaryProvider={primaryProvider}
-          tmdbId={movie.tmdbId}
-          onClose={() => setTrailerVisible(false)}
-        />
-      )}
-
       <TouchableOpacity
         activeOpacity={0.92}
         onPress={handleTap}
@@ -148,7 +138,6 @@ export default function DiscoverGridCard({
           <Text style={styles.year}>{movie.year}</Text>
         </View>
       </TouchableOpacity>
-    </>
   );
 }
 

@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import DiscoverGridCard, { VIDEO_CARD_HEIGHT, POSTER_CARD_HEIGHT } from '../../components/ui/DiscoverGridCard';
+import TrailerPlayer from '../../components/ui/TrailerPlayer';
 import { getDiscoverFeed, saveTitle, dismissTitle } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
@@ -40,6 +41,7 @@ export default function DiscoverScreen() {
 
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
+  const [trailerMovie, setTrailerMovie] = useState<Movie | null>(null);
 
   const {
     data,
@@ -76,15 +78,20 @@ export default function DiscoverScreen() {
     }
   }, []);
 
+  const handlePlayTrailer = useCallback((movie: Movie) => {
+    setTrailerMovie(movie);
+  }, []);
+
   const renderItem = useCallback(
     ({ item }: { item: Movie }) => (
       <DiscoverGridCard
         movie={item}
         isSaved={savedIds.has(item.id)}
         onSave={handleSave}
+        onPlayTrailer={handlePlayTrailer}
       />
     ),
-    [handleSave, savedIds]
+    [handleSave, handlePlayTrailer, savedIds]
   );
 
   const getItemType = useCallback(
@@ -105,6 +112,17 @@ export default function DiscoverScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Trailer player — rendered at screen level to avoid AutoLayoutView crash inside list cells */}
+      {trailerMovie?.verticalTrailerYoutubeKey && (
+        <TrailerPlayer
+          youtubeKey={trailerMovie.verticalTrailerYoutubeKey}
+          title={trailerMovie.title}
+          primaryProvider={trailerMovie.providers?.[0] ?? null}
+          tmdbId={trailerMovie.tmdbId}
+          onClose={() => setTrailerMovie(null)}
+        />
+      )}
+
       {/* Filter banner */}
       {activeFilter && (
         <View style={[styles.filterBanner, { top: insets.top + 8 }]}>
@@ -132,7 +150,6 @@ export default function DiscoverScreen() {
           paddingBottom: insets.bottom + 80,
           paddingHorizontal: 12,
         }}
-        ItemSeparatorComponent={null}
         ListFooterComponent={
           isFetchingNextPage ? (
             <View style={styles.footer}>
