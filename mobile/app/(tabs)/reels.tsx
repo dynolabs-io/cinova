@@ -80,6 +80,7 @@ export default function ReelsScreen() {
   }
 
   const activeVideoKey = validKey(movies[activeIndex]);
+  console.log('[Reels] activeIndex=', activeIndex, 'activeVideoKey=', activeVideoKey, 'movie=', movies[activeIndex]?.title, 'vtk=', movies[activeIndex]?.verticalTrailerYoutubeKey);
 
   const handleSave = useCallback(async (movie: Movie) => {
     setSavedIds((prev) => new Set(prev).add(movie.id));

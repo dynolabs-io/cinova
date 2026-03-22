@@ -31,15 +31,16 @@ export default function PersistentPlayer({ initialVideoKey, videoKey, playing }:
   const onMessage = useCallback((e: WebViewMessageEvent) => {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
+      console.log('[PersistentPlayer] onMessage:', msg.type, JSON.stringify(msg));
       if (msg.type === 'playerReady') {
         playerReadyRef.current = true;
         const key = pendingKeyRef.current;
         if (key && key !== currentKeyRef.current) {
-          // A different video was queued while the player was initialising
+          console.log('[PersistentPlayer] playerReady: switching to pending key', key);
           currentKeyRef.current = key;
           webViewRef.current?.injectJavaScript(`switchVideo('${key}'); true;`);
         } else if (playingRef.current) {
-          // Same video as initialVideoKey — already loaded, just play
+          console.log('[PersistentPlayer] playerReady: playing initial video');
           webViewRef.current?.injectJavaScript('playAll(); true;');
         }
       }
@@ -47,11 +48,16 @@ export default function PersistentPlayer({ initialVideoKey, videoKey, playing }:
   }, []);
 
   useEffect(() => {
+    console.log('[PersistentPlayer] useEffect videoKey=', videoKey, 'playing=', playing, 'ready=', playerReadyRef.current, 'current=', currentKeyRef.current);
     pendingKeyRef.current = videoKey;
-    if (!playerReadyRef.current || !videoKey) return;
+    if (!playerReadyRef.current || !videoKey) {
+      console.log('[PersistentPlayer] early return: ready=', playerReadyRef.current, 'videoKey=', videoKey);
+      return;
+    }
 
     if (videoKey === currentKeyRef.current) {
       // Same video — just play or pause
+      console.log('[PersistentPlayer] same video, playing=', playing);
       webViewRef.current?.injectJavaScript(
         playing ? 'playAll(); true;' : 'pauseAll(); true;'
       );
@@ -59,6 +65,7 @@ export default function PersistentPlayer({ initialVideoKey, videoKey, playing }:
     }
 
     // Different video — switch via embed page function
+    console.log('[PersistentPlayer] SWITCHING from', currentKeyRef.current, 'to', videoKey);
     currentKeyRef.current = videoKey;
     webViewRef.current?.injectJavaScript(`switchVideo('${videoKey}'); true;`);
   }, [videoKey, playing]);
