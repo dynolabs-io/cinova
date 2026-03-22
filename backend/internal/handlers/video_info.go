@@ -68,10 +68,11 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 		`#p,#p iframe{position:absolute;top:0;left:0;width:100%!important;height:100%!important;border:none;}` +
 		`</style></head><body><div id="p"></div>` +
 		`<script>` +
+		`var player;` +
 		`var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);` +
 		`function onYouTubeIframeAPIReady(){` +
-		`new YT.Player('p',{videoId:'` + key + `',` +
-		`playerVars:{autoplay:1,mute:` + mute + `,controls:` + controls + `,loop:1,playlist:'` + key + `',rel:0,modestbranding:1,playsinline:1},` +
+		`player=new YT.Player('p',{videoId:'` + key + `',` +
+		`playerVars:{autoplay:0,mute:` + mute + `,controls:` + controls + `,loop:1,playlist:'` + key + `',rel:0,modestbranding:1,playsinline:1},` +
 		`events:{onReady:function(e){` + onReady + `}}});}` +
 		`</script></body></html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
