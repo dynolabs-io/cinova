@@ -61,11 +61,12 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 	if autoplay {
 		onReady += `e.target.playVideo();`
 	}
-	// onStateChange: hide overlay on first play, never show it again on subsequent switches
+	// onStateChange: hide overlay on first play, loop video when ended (state 0)
 	onStateChange := `if(e.data===1){` +
 		`ov.style.opacity='0';firstPlay=false;` +
 		`if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'playerPlaying'}));}}` +
-		`else if(e.data===3&&firstPlay){ov.style.opacity='1';}`
+		`else if(e.data===3&&firstPlay){ov.style.opacity='1';}` +
+		`else if(e.data===0){e.target.seekTo(0);e.target.playVideo();}`
 
 	html := `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">` +
 		`<style>*{margin:0;padding:0;box-sizing:border-box;}` +
@@ -82,7 +83,7 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 		`function onYouTubeIframeAPIReady(){` +
 		`ov=document.getElementById('ov');` +
 		`player=new YT.Player('p',{videoId:'` + key + `',` +
-		`playerVars:{autoplay:0,mute:` + mute + `,controls:` + controls + `,loop:1,playlist:'` + key + `',rel:0,modestbranding:1,playsinline:1},` +
+		`playerVars:{autoplay:0,mute:` + mute + `,controls:` + controls + `,rel:0,modestbranding:1,playsinline:1},` +
 		`events:{onReady:function(e){` + onReady + `},onStateChange:function(e){` + onStateChange + `}}});}` +
 		`</script></body></html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
