@@ -61,13 +61,18 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 	if autoplay {
 		onReady += `e.target.playVideo();`
 	}
-	onStateChange := `if(e.data===1&&window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'playerPlaying'}));}`
+	// onStateChange: hide spinner overlay when playing (1), show when buffering (3)
+	onStateChange := `var ov=document.getElementById('ov');` +
+		`if(e.data===1){ov.style.opacity='0';` +
+		`if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'playerPlaying'}));}}` +
+		`else if(e.data===3){ov.style.opacity='1';}`
 
 	html := `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">` +
 		`<style>*{margin:0;padding:0;box-sizing:border-box;}` +
 		`html,body{width:100%;height:100%;background:#000;overflow:hidden;}` +
 		`#p,#p iframe{position:absolute;top:0;left:0;width:100%!important;height:100%!important;border:none;}` +
-		`</style></head><body><div id="p"></div>` +
+		`#ov{position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:10;pointer-events:none;transition:opacity 0.15s;}` +
+		`</style></head><body><div id="p"></div><div id="ov"></div>` +
 		`<script>` +
 		`var player;` +
 		`var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);` +
@@ -77,6 +82,7 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 		`events:{onReady:function(e){` + onReady + `},onStateChange:function(e){` + onStateChange + `}}});}` +
 		`</script></body></html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, html)
 }
