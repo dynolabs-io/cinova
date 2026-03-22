@@ -67,8 +67,9 @@ export default function ReelItem({
   const genreLabel = movie.genres.slice(0, 2).map((g) => g.name).join(' · ');
   const runtimeLabel = movie.runtime ? `${movie.runtime}m` : '';
 
-  const verticalKey = movie.verticalTrailerYoutubeKey;
-  const showVideo = isActive && !!verticalKey;
+  // Prefer vertical trailer; fall back to regular TMDB trailer (embeddable, landscape cropped to fill portrait)
+  const videoKey = movie.verticalTrailerYoutubeKey || movie.trailerYoutubeKey || null;
+  const showVideo = isActive && !!videoKey;
 
   const handleTap = useCallback(() => {
     router.push(`/movie/${movie.id}`);
@@ -104,7 +105,7 @@ iframe {
 </head>
 <body>
 <iframe
-  src="https://www.youtube.com/embed/${verticalKey}?autoplay=1&playsinline=1&controls=1&loop=1&playlist=${verticalKey}&rel=0&modestbranding=1"
+  src="https://www.youtube.com/embed/${videoKey}?autoplay=1&playsinline=1&controls=1&loop=1&playlist=${videoKey}&rel=0&modestbranding=1"
   allow="autoplay; fullscreen"
 ></iframe>
 </body>

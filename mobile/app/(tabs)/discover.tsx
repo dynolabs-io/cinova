@@ -5,9 +5,9 @@
  * with different flex widths and row heights — creating a continuous mosaic
  * similar to a treemap or newspaper layout.
  *
- * Base grid: 6 units wide. Templates cycle through a non-repeating sequence.
- * Infinite scroll loads more pages; incomplete trailing groups are held until
- * enough movies arrive to fill the next template.
+ * Every 3rd movie slot is a VIDEO tile (auto-plays muted, no controls).
+ * All other slots are POSTER tiles (TMDB poster image).
+ * Tapping any tile — video or poster — navigates to the movie detail page.
  */
 
 import React, { useCallback, useState, useMemo } from 'react';
@@ -29,55 +29,39 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import YoutubeIframe from 'react-native-youtube-iframe';
-import TrailerPlayer from '../../components/ui/TrailerPlayer';
 import CinovaScore from '../../components/ui/CinovaScore';
 import { getDiscoverFeed, saveTitle } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
-import { hapticSuccess, hapticMedium } from '../../services/haptics';
+import { hapticSuccess } from '../../services/haptics';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import type { Movie } from '../../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const SIDE_PAD = 0;
-const GAP = 1; // thin white border between tiles
-// One unit = 1/6 of the full width (no side padding, 5 gaps between 6 units)
+const GAP = 1; // thin gap between tiles
 const U = (SCREEN_WIDTH - GAP * 5) / 6;
 const TMDB = 'https://image.tmdb.org/t/p';
 
 // ── MosaicCard ────────────────────────────────────────────────────────────────
-// Fills whatever space the parent gives it. Size is driven by the template.
 
 interface MosaicCardProps {
   movie: Movie;
   style?: object;
+  isVideoTile: boolean;
   savedIds: Set<number>;
   onSave: (m: Movie) => void;
-  activeVideoId: number | null;
-  onActivateVideo: (id: number | null) => void;
 }
 
-function MosaicCard({ movie, style, savedIds, onSave, activeVideoId, onActivateVideo }: MosaicCardProps) {
+function MosaicCard({ movie, style, isVideoTile, savedIds, onSave }: MosaicCardProps) {
   const router = useRouter();
   const [cardSize, setCardSize] = useState({ width: 0, height: 0 });
 
-  // Use vertical trailer if available, fall back to regular trailer
-  const videoKey = movie.verticalTrailerYoutubeKey || movie.trailerYoutubeKey || null;
-  const hasVideo = !!videoKey;
-  const isPlaying = activeVideoId === movie.id;
-
-  // Image source: YouTube thumbnail for video cards, TMDB poster for image cards
-  const imageUri = hasVideo
-    ? `https://img.youtube.com/vi/${videoKey}/hqdefault.jpg`
-    : (movie.posterPath ? `${TMDB}/w500${movie.posterPath}` : '');
+  // Video key: prefer vertical trailer, fall back to regular TMDB trailer
+  const videoKey = movie.trailerYoutubeKey || movie.verticalTrailerYoutubeKey || null;
+  const showVideo = isVideoTile && !!videoKey && cardSize.width > 0;
 
   const handlePress = useCallback(() => {
-    if (hasVideo && !isPlaying) {
-      hapticMedium();
-      onActivateVideo(movie.id);
-    } else {
-      router.push(`/movie/${movie.id}`);
-    }
-  }, [hasVideo, isPlaying, movie.id, onActivateVideo, router]);
+    router.push(`/movie/${movie.id}`);
+  }, [movie.id, router]);
 
   const handleLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -85,23 +69,16 @@ function MosaicCard({ movie, style, savedIds, onSave, activeVideoId, onActivateV
   }, []);
 
   return (
-    <TouchableOpacity
-      style={[cardStyles.card, style]}
-      activeOpacity={0.88}
-      onPress={handlePress}
-      onLongPress={() => { hapticSuccess(); onSave(movie); }}
-      delayLongPress={400}
-      onLayout={handleLayout}
-    >
-      {/* Video or image background */}
-      {isPlaying && cardSize.width > 0 ? (
+    <View style={[cardStyles.card, style]} onLayout={handleLayout}>
+      {/* Video or poster background */}
+      {showVideo ? (
         <YoutubeIframe
           videoId={videoKey!}
           width={cardSize.width}
           height={cardSize.height}
           play
           mute
-          initialPlayerParams={{ controls: 0, rel: 0, modestbranding: 1 }}
+          initialPlayerParams={{ controls: 0, rel: 0, modestbranding: 1, loop: 1, playlist: videoKey! }}
           webViewStyle={{ backgroundColor: '#000' }}
           webViewProps={{
             userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
@@ -111,7 +88,7 @@ function MosaicCard({ movie, style, savedIds, onSave, activeVideoId, onActivateV
         />
       ) : (
         <Image
-          source={imageUri ? { uri: imageUri } : undefined}
+          source={movie.posterPath ? { uri: `${TMDB}/w500${movie.posterPath}` } : undefined}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           transition={200}
@@ -120,18 +97,11 @@ function MosaicCard({ movie, style, savedIds, onSave, activeVideoId, onActivateV
       )}
 
       <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.82)']}
-        locations={[0.45, 1]}
+        colors={['transparent', 'rgba(0,0,0,0.75)']}
+        locations={[0.5, 1]}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
-
-      {/* Video badge — small camera icon top-right for video tiles */}
-      {hasVideo && !isPlaying && (
-        <View style={[cardStyles.videoBadge, movie.verticalTrailerYoutubeKey ? cardStyles.videoBadgeVertical : null]}>
-          <Text style={cardStyles.videoBadgeIcon}>{movie.verticalTrailerYoutubeKey ? '↕▶' : '▶'}</Text>
-        </View>
-      )}
 
       {movie.cinovaScore != null && (
         <View style={cardStyles.score}>
@@ -143,11 +113,20 @@ function MosaicCard({ movie, style, savedIds, onSave, activeVideoId, onActivateV
           <Text style={cardStyles.savedTick}>✓</Text>
         </View>
       )}
-      <View style={cardStyles.info}>
+      <View style={cardStyles.info} pointerEvents="none">
         <Text style={cardStyles.title} numberOfLines={2}>{movie.title}</Text>
         <Text style={cardStyles.year}>{movie.year}</Text>
       </View>
-    </TouchableOpacity>
+
+      {/* Full-area tap target — sits on top of WebView to capture all taps */}
+      <TouchableOpacity
+        style={StyleSheet.absoluteFill}
+        activeOpacity={0}
+        onPress={handlePress}
+        onLongPress={() => { hapticSuccess(); onSave(movie); }}
+        delayLongPress={400}
+      />
+    </View>
   );
 }
 
@@ -172,18 +151,6 @@ const cardStyles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   savedTick: { color: '#fff', fontSize: 9, fontWeight: '700' },
-  videoBadge: {
-    position: 'absolute',
-    top: 5, right: 5,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 4,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-  },
-  videoBadgeVertical: {
-    backgroundColor: 'rgba(99,102,241,0.75)',
-  },
-  videoBadgeIcon: { color: '#fff', fontSize: 8 },
   info: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,
@@ -197,220 +164,172 @@ const cardStyles = StyleSheet.create({
 });
 
 // ── Layout Templates ──────────────────────────────────────────────────────────
-// U = 1 grid unit. Heights and flex values define the mosaic proportions.
+
+type MovieItem = { movie: Movie; isVideo: boolean };
 
 type CardHandlers = {
   savedIds: Set<number>;
   onSave: (m: Movie) => void;
-  activeVideoId: number | null;
-  onActivateVideo: (id: number | null) => void;
 };
 
 type Template = {
   count: number;
-  render: (movies: Movie[], h: CardHandlers) => React.ReactElement;
+  render: (items: MovieItem[], h: CardHandlers) => React.ReactElement;
 };
 
-// Shorthand builder — creates a MosaicCard spreading handlers
-const card = (m: Movie, h: CardHandlers, style: object) => (
+const card = (item: MovieItem, h: CardHandlers, style: object) => (
   <MosaicCard
-    key={m.id}
-    movie={m}
+    key={item.movie.id}
+    movie={item.movie}
     style={style}
+    isVideoTile={item.isVideo}
     savedIds={h.savedIds}
     onSave={h.onSave}
-    activeVideoId={h.activeVideoId}
-    onActivateVideo={h.onActivateVideo}
   />
 );
 
 const TEMPLATES: Template[] = [
   // T0 ── Large left (4u) + 2 stacked right (2u) ── 3 movies
-  //  ┌──────────────┬───────┐
-  //  │              │   B   │
-  //  │      A       ├───────┤
-  //  │              │   C   │
-  //  └──────────────┴───────┘
   {
     count: 3,
-    render: ([a, b, c], h) => (
+    render: (items, h) => (
       <View style={{ flexDirection: 'row', gap: GAP, height: U * 5.5 }}>
-        {card(a, h, { flex: 4 })}
+        {card(items[0], h, { flex: 4 })}
         <View style={{ flex: 2, gap: GAP }}>
-          {card(b, h, { flex: 1 })}
-          {card(c, h, { flex: 1 })}
+          {card(items[1], h, { flex: 1 })}
+          {card(items[2], h, { flex: 1 })}
         </View>
       </View>
     ),
   },
-
   // T1 ── 3 equal thirds ── 3 movies
-  //  ┌──────┬──────┬──────┐
-  //  │  A   │  B   │  C   │
-  //  └──────┴──────┴──────┘
   {
     count: 3,
-    render: ([a, b, c], h) => (
+    render: (items, h) => (
       <View style={{ flexDirection: 'row', gap: GAP, height: U * 3.5 }}>
-        {card(a, h, { flex: 2 })}
-        {card(b, h, { flex: 2 })}
-        {card(c, h, { flex: 2 })}
+        {card(items[0], h, { flex: 2 })}
+        {card(items[1], h, { flex: 2 })}
+        {card(items[2], h, { flex: 2 })}
       </View>
     ),
   },
-
   // T2 ── Full-width banner ── 1 movie
-  //  ┌────────────────────┐
-  //  │         A          │
-  //  └────────────────────┘
   {
     count: 1,
-    render: ([a], h) => (
+    render: (items, h) => (
       <View style={{ height: U * 2.2 }}>
-        {card(a, h, { flex: 1 })}
+        {card(items[0], h, { flex: 1 })}
       </View>
     ),
   },
-
   // T3 ── Wide left (4u) + narrow right (2u) ── 2 movies
-  //  ┌──────────────┬──────┐
-  //  │      A       │  B   │
-  //  └──────────────┴──────┘
   {
     count: 2,
-    render: ([a, b], h) => (
+    render: (items, h) => (
       <View style={{ flexDirection: 'row', gap: GAP, height: U * 4 }}>
-        {card(a, h, { flex: 4 })}
-        {card(b, h, { flex: 2 })}
+        {card(items[0], h, { flex: 4 })}
+        {card(items[1], h, { flex: 2 })}
       </View>
     ),
   },
-
   // T4 ── 2 stacked left (2u) + large right (4u) ── 3 movies
-  //  ┌──────┬──────────────┐
-  //  │  A   │              │
-  //  ├──────┤      C       │
-  //  │  B   │              │
-  //  └──────┴──────────────┘
   {
     count: 3,
-    render: ([a, b, c], h) => (
+    render: (items, h) => (
       <View style={{ flexDirection: 'row', gap: GAP, height: U * 5 }}>
         <View style={{ flex: 2, gap: GAP }}>
-          {card(a, h, { flex: 1 })}
-          {card(b, h, { flex: 1 })}
+          {card(items[0], h, { flex: 1 })}
+          {card(items[1], h, { flex: 1 })}
         </View>
-        {card(c, h, { flex: 4 })}
+        {card(items[2], h, { flex: 4 })}
       </View>
     ),
   },
-
   // T5 ── Narrow left (2u) + wide right (4u) ── 2 movies
-  //  ┌──────┬──────────────┐
-  //  │  A   │      B       │
-  //  └──────┴──────────────┘
   {
     count: 2,
-    render: ([a, b], h) => (
+    render: (items, h) => (
       <View style={{ flexDirection: 'row', gap: GAP, height: U * 3.5 }}>
-        {card(a, h, { flex: 2 })}
-        {card(b, h, { flex: 4 })}
+        {card(items[0], h, { flex: 2 })}
+        {card(items[1], h, { flex: 4 })}
       </View>
     ),
   },
-
   // T6 ── 4 movies: top row 3+3, bottom row 2+4
-  //  ┌─────────┬─────────┐
-  //  │    A    │    B    │
-  //  ├──────┬──┴──────────┤
-  //  │  C   │      D     │
-  //  └──────┴─────────────┘
   {
     count: 4,
-    render: ([a, b, c, d], h) => (
+    render: (items, h) => (
       <View style={{ gap: GAP }}>
         <View style={{ flexDirection: 'row', gap: GAP, height: U * 3 }}>
-          {card(a, h, { flex: 3 })}
-          {card(b, h, { flex: 3 })}
+          {card(items[0], h, { flex: 3 })}
+          {card(items[1], h, { flex: 3 })}
         </View>
         <View style={{ flexDirection: 'row', gap: GAP, height: U * 3.5 }}>
-          {card(c, h, { flex: 2 })}
-          {card(d, h, { flex: 4 })}
+          {card(items[2], h, { flex: 2 })}
+          {card(items[3], h, { flex: 4 })}
         </View>
       </View>
     ),
   },
-
   // T7 ── Tall thin left (2u) + 2 stacked right (4u wide) ── 3 movies
-  //  ┌──────┬──────────────┐
-  //  │      │      B       │
-  //  │  A   ├──────────────┤
-  //  │      │      C       │
-  //  └──────┴──────────────┘
   {
     count: 3,
-    render: ([a, b, c], h) => (
+    render: (items, h) => (
       <View style={{ flexDirection: 'row', gap: GAP, height: U * 6 }}>
-        {card(a, h, { flex: 2 })}
+        {card(items[0], h, { flex: 2 })}
         <View style={{ flex: 4, gap: GAP }}>
-          {card(b, h, { flex: 3 })}
-          {card(c, h, { flex: 2 })}
+          {card(items[1], h, { flex: 3 })}
+          {card(items[2], h, { flex: 2 })}
         </View>
       </View>
     ),
   },
-
   // T8 ── 2 equal halves (3u + 3u), tall ── 2 movies
-  //  ┌─────────┬─────────┐
-  //  │         │         │
-  //  │    A    │    B    │
-  //  │         │         │
-  //  └─────────┴─────────┘
   {
     count: 2,
-    render: ([a, b], h) => (
+    render: (items, h) => (
       <View style={{ flexDirection: 'row', gap: GAP, height: U * 4.5 }}>
-        {card(a, h, { flex: 3 })}
-        {card(b, h, { flex: 3 })}
+        {card(items[0], h, { flex: 3 })}
+        {card(items[1], h, { flex: 3 })}
       </View>
     ),
   },
-
   // T9 ── 4 movies: top 4+2, bottom 3+3
-  //  ┌──────────────┬──────┐
-  //  │      A       │  B   │
-  //  ├─────────┬────┴──────┤
-  //  │    C    │     D     │
-  //  └─────────┴───────────┘
   {
     count: 4,
-    render: ([a, b, c, d], h) => (
+    render: (items, h) => (
       <View style={{ gap: GAP }}>
         <View style={{ flexDirection: 'row', gap: GAP, height: U * 3.8 }}>
-          {card(a, h, { flex: 4 })}
-          {card(b, h, { flex: 2 })}
+          {card(items[0], h, { flex: 4 })}
+          {card(items[1], h, { flex: 2 })}
         </View>
         <View style={{ flexDirection: 'row', gap: GAP, height: U * 3 }}>
-          {card(c, h, { flex: 3 })}
-          {card(d, h, { flex: 3 })}
+          {card(items[2], h, { flex: 3 })}
+          {card(items[3], h, { flex: 3 })}
         </View>
       </View>
     ),
   },
 ];
 
-// Cycling sequence — 20-step non-repeating pattern across all 10 templates
 const SEQUENCE = [0, 6, 1, 3, 7, 2, 4, 9, 5, 8, 0, 5, 6, 3, 1, 7, 4, 2, 8, 9];
 
-function groupMovies(movies: Movie[]): { tIdx: number; movies: Movie[] }[] {
-  const groups: { tIdx: number; movies: Movie[] }[] = [];
+function groupMovies(movies: Movie[]): { tIdx: number; items: MovieItem[] }[] {
+  const groups: { tIdx: number; items: MovieItem[] }[] = [];
   let i = 0;
   let seqPos = 0;
   while (i < movies.length) {
     const tIdx = SEQUENCE[seqPos % SEQUENCE.length];
     const count = TEMPLATES[tIdx].count;
-    if (i + count > movies.length) break; // wait for full group
-    groups.push({ tIdx, movies: movies.slice(i, i + count) });
+    if (i + count > movies.length) break;
+    groups.push({
+      tIdx,
+      // Every 3rd movie globally (index 0, 3, 6, …) is a video tile
+      items: movies.slice(i, i + count).map((movie, j) => ({
+        movie,
+        isVideo: (i + j) % 3 === 0,
+      })),
+    });
     i += count;
     seqPos++;
   }
@@ -433,7 +352,6 @@ export default function DiscoverScreen() {
     : null;
 
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
-  const [activeVideoId, setActiveVideoId] = useState<number | null>(null);
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
     useInfiniteQuery({
@@ -460,10 +378,6 @@ export default function DiscoverScreen() {
     }
   }, []);
 
-  const handleActivateVideo = useCallback((id: number | null) => {
-    setActiveVideoId(id);
-  }, []);
-
   const handleScroll = useCallback(
     ({ nativeEvent }: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
@@ -482,7 +396,7 @@ export default function DiscoverScreen() {
     );
   }
 
-  const handlers: CardHandlers = { savedIds, onSave: handleSave, activeVideoId, onActivateVideo: handleActivateVideo };
+  const handlers: CardHandlers = { savedIds, onSave: handleSave };
 
   return (
     <View style={styles.container}>
@@ -511,7 +425,7 @@ export default function DiscoverScreen() {
       >
         {groups.map((g, idx) => (
           <View key={idx} style={{ backgroundColor: '#fff', gap: GAP }}>
-            {TEMPLATES[g.tIdx].render(g.movies, handlers)}
+            {TEMPLATES[g.tIdx].render(g.items, handlers)}
           </View>
         ))}
 
