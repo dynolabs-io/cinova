@@ -71,15 +71,25 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 	html := `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">` +
 		`<style>*{margin:0;padding:0;box-sizing:border-box;}` +
 		`html,body{width:100%;height:100%;background:#000;overflow:hidden;}` +
-		`#p,#p iframe{position:absolute;top:0;left:0;width:100%!important;height:100%!important;border:none;}` +
-		`#ov{position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:10;pointer-events:none;transition:opacity 0.15s;}` +
-		`</style></head><body><div id="p"></div><div id="ov"></div>` +
+				`#ov{position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:10;pointer-events:none;transition:opacity 0.15s;}` +
+		`#pc,#pc div,#pc iframe{position:absolute;top:0;left:0;width:100%!important;height:100%!important;border:none;}` +
+		`</style></head><body><div id="pc"><div id="p"></div></div><div id="ov"></div>` +
 		`<script>` +
 		`var player,ov,firstPlay=true;` +
 		`var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);` +
+		`var pid=0;` +
 		`function switchVideo(key){` +
-		`if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'switchVideo',key:key,hasPlayer:!!player,hasLoad:!!(player&&player.loadVideoById)}));}` +
-		`if(player&&player.loadVideoById){player.loadVideoById(key);firstPlay=true;ov.style.opacity='1';}}` +
+		`if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'switchVideo',key:key}));}` +
+		`firstPlay=true;ov.style.opacity='1';` +
+		`if(player&&player.destroy){try{player.destroy();}catch(ex){}}` +
+		`pid++;var el=document.createElement('div');el.id='p'+pid;` +
+		`var c=document.getElementById('pc');c.innerHTML='';c.appendChild(el);` +
+		`player=new YT.Player('p'+pid,{videoId:key,` +
+		`playerVars:{autoplay:1,mute:` + mute + `,controls:` + controls + `,rel:0,modestbranding:1,playsinline:1},` +
+		`events:{onReady:function(e){` +
+		`if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'playerReady'}));}` +
+		`e.target.playVideo();},` +
+		`onStateChange:function(e){` + onStateChange + `}}});}` +
 		`function pauseAll(){if(player&&player.pauseVideo){player.pauseVideo();}}` +
 		`function playAll(){if(player&&player.playVideo){player.playVideo();}}` +
 		`function onYouTubeIframeAPIReady(){` +
