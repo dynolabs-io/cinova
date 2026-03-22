@@ -29,7 +29,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import WebView from 'react-native-webview';
+import YoutubeIframe from 'react-native-youtube-iframe';
 import CinovaScore from '../../components/ui/CinovaScore';
 import { getDiscoverMosaicFeed, saveTitle } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
@@ -54,7 +54,7 @@ const PORT_VIDEO_H   = Math.round(PORT_VIDEO_W * (16 / 9));   // exact 9:16
 interface MosaicCardProps {
   movie: Movie;
   style?: object;
-  videoKey?: string;  // if set, renders WebView iframe sized to videoW×videoH exactly
+  videoKey?: string;  // if set, renders YoutubeIframe sized to videoW×videoH exactly
   videoW?: number;
   videoH?: number;
   savedIds: Set<number>;
@@ -73,19 +73,20 @@ function MosaicCard({ movie, style, videoKey, videoW, videoH, savedIds, onSave }
   return (
     <View style={[cardStyles.card, style]}>
       {showVideo ? (
-        <WebView
-          style={{ width: videoW, height: videoH, backgroundColor: '#000' }}
-          source={{
-            html: `<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'><style>*{margin:0;padding:0;box-sizing:border-box;}html,body{width:100%;height:100%;background:#000;overflow:hidden;}body iframe{position:absolute;top:0;left:0;width:100%!important;height:100%!important;border:none;}</style></head><body><div id='p'></div><script>var t=document.createElement('script');t.src='https://www.youtube.com/iframe_api';document.head.appendChild(t);function onYouTubeIframeAPIReady(){new YT.Player('p',{videoId:'${videoKey}',playerVars:{autoplay:1,mute:1,controls:0,loop:1,playlist:'${videoKey}',rel:0,modestbranding:1,playsinline:1},events:{onReady:function(e){e.target.playVideo();}}});}</script></body></html>`,
-            baseUrl: 'https://www.youtube.com',
+        <YoutubeIframe
+          videoId={videoKey!}
+          width={videoW!}
+          height={videoH!}
+          play
+          mute
+          initialPlayerParams={{ controls: 0, rel: 0, modestbranding: 1, loop: 1, playlist: videoKey! }}
+          webViewStyle={{ backgroundColor: '#000' }}
+          webViewProps={{
+            allowsInlineMediaPlayback: true,
+            mediaPlaybackRequiresUserAction: false,
+            injectedJavaScript: `(function(){var s=document.createElement('style');s.innerHTML='#player,#player iframe,body>iframe{position:absolute!important;top:0!important;left:0!important;width:100%!important;height:100%!important;border:none!important;}';document.head.appendChild(s);})();true;`,
+            onError: () => setVideoFailed(true),
           }}
-          allowsInlineMediaPlayback
-          mediaPlaybackRequiresUserAction={false}
-          javaScriptEnabled
-          originWhitelist={['*']}
-          scrollEnabled={false}
-          bounces={false}
-          onError={() => setVideoFailed(true)}
         />
       ) : (
         <Image
