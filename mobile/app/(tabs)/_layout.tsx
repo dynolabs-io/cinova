@@ -131,9 +131,11 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   warmup: {
-    width: 0,
-    height: 0,
+    position: 'absolute',
+    width: 1,
+    height: 1,
     opacity: 0,
+    pointerEvents: 'none',
   },
   fab: {
     position: 'absolute',
