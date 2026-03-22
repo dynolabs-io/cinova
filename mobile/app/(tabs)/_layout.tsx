@@ -5,12 +5,15 @@
  * Chat is a floating bubble on all tab screens — tap to open chat.
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import TabIcon from '../../components/ui/TabIcon';
 import { Colors, Layout } from '../../constants/theme';
+import { getDiscoverFeed } from '../../services/api';
+import { useAppStore } from '../../store/useAppStore';
 
 function ChatFAB() {
   const router = useRouter();
@@ -30,6 +33,18 @@ function ChatFAB() {
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const country = useAppStore((s) => s.country);
+
+  // Prefetch first page of reels immediately so data is ready before user taps the tab
+  useEffect(() => {
+    queryClient.prefetchInfiniteQuery({
+      queryKey: ['reels-feed', country],
+      queryFn: ({ pageParam = 1 }) => getDiscoverFeed(country, pageParam as number),
+      initialPageParam: 1,
+      pages: 1,
+    });
+  }, [queryClient, country]);
 
   return (
     <View style={{ flex: 1 }}>

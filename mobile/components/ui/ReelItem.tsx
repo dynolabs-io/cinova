@@ -32,6 +32,10 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TMDB_IMAGE = 'https://image.tmdb.org/t/p/w1280';
 const EMBED_BASE = 'https://api.cinova.openova.io/api/v1/embed';
 
+// Module-level: tracks keys that have played at least once this session.
+// On remount (backward swipe past windowSize), opacity starts at 1 — no flash.
+const playedKeys = new Set<string>();
+
 interface ReelItemProps {
   movie: Movie;
   isActive?: boolean;
@@ -67,7 +71,6 @@ export default function ReelItem({
   const router = useRouter();
   const webViewRef = useRef<WebView>(null);
   const [playerReady, setPlayerReady] = useState(false);
-  const playerOpacity = useRef(new Animated.Value(0)).current;
   const primaryProvider = movie.providers?.[0] ?? null;
   const genreLabel = movie.genres.slice(0, 2).map((g) => g.name).join(' · ');
   const runtimeLabel = movie.runtime ? `${movie.runtime}m` : '';
@@ -76,6 +79,9 @@ export default function ReelItem({
   const videoKey = (movie.verticalTrailerYoutubeKey && movie.verticalTrailerYoutubeKey !== 'NOT_FOUND')
     ? movie.verticalTrailerYoutubeKey
     : null;
+
+  // Start at opacity 1 if this key has played before — no flash on remount
+  const playerOpacity = useRef(new Animated.Value(videoKey && playedKeys.has(videoKey) ? 1 : 0)).current;
 
   // Play/pause via JS injection when active state changes — instant on swipe
   useEffect(() => {
@@ -89,6 +95,7 @@ export default function ReelItem({
       const msg = JSON.parse(e.nativeEvent.data);
       if (msg.type === 'playerReady') setPlayerReady(true);
       if (msg.type === 'playerPlaying') {
+        if (videoKey) playedKeys.add(videoKey);
         Animated.timing(playerOpacity, {
           toValue: 1,
           duration: 250,
@@ -96,7 +103,7 @@ export default function ReelItem({
         }).start();
       }
     } catch {}
-  }, [playerOpacity]);
+  }, [playerOpacity, videoKey]);
 
   const handleTap = useCallback(() => {
     router.push(`/movie/${movie.id}`);
