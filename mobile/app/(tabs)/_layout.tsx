@@ -10,10 +10,19 @@ import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
+import { WebView } from 'react-native-webview';
 import TabIcon from '../../components/ui/TabIcon';
 import { Colors, Layout } from '../../constants/theme';
 import { getDiscoverFeed } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
+
+// Warms the WKWebView URL cache with YouTube's iframe_api script on app start.
+// After this loads once, all WebViews in the same process load it from cache (~50ms vs 2-3s).
+const WARMUP_HTML = `<html><body><script>
+var s=document.createElement('script');
+s.src='https://www.youtube.com/iframe_api';
+document.head.appendChild(s);
+</script></body></html>`;
 
 function ChatFAB() {
   const router = useRouter();
@@ -107,11 +116,25 @@ export default function TabLayout() {
 
       {/* Floating chat bubble — visible on all tab screens */}
       <ChatFAB />
+
+      {/* 0×0 warmup WebView — pre-caches YouTube iframe_api on app start */}
+      <WebView
+        source={{ html: WARMUP_HTML, baseUrl: 'https://api.cinova.openova.io' }}
+        style={styles.warmup}
+        startInLoadingState={false}
+        renderLoading={() => <View />}
+        javaScriptEnabled
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  warmup: {
+    width: 0,
+    height: 0,
+    opacity: 0,
+  },
   fab: {
     position: 'absolute',
     right: 12,

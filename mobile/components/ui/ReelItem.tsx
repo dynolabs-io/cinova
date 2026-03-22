@@ -1,14 +1,12 @@
 /**
- * ReelItem — Full-screen vertical reel
+ * ReelItem — content overlay for a single reel.
  *
- * Plays verticalTrailerYoutubeKey (9:16 portrait, embeddable-verified) in a
- * portrait player that fills the screen. Falls back to backdrop image when
- * no vertical trailer is available.
+ * Video is handled by PersistentPlayer (one shared WebView for the whole screen).
+ * This component renders only: backdrop image, gradient, tap target, score, actions.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback } from 'react';
 import {
-  Animated,
   View,
   Text,
   StyleSheet,
@@ -20,7 +18,6 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import CinovaScore from './CinovaScore';
 import StreamingBadge from './StreamingBadge';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
@@ -30,11 +27,6 @@ import type { Movie, WatchProvider } from '../../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TMDB_IMAGE = 'https://image.tmdb.org/t/p/w1280';
-const EMBED_BASE = 'https://api.cinova.openova.io/api/v1/embed';
-
-// Module-level: tracks keys that have played at least once this session.
-// On remount (backward swipe past windowSize), opacity starts at 1 — no flash.
-const playedKeys = new Set<string>();
 
 interface ReelItemProps {
   movie: Movie;
@@ -69,41 +61,9 @@ export default function ReelItem({
   userRating,
 }: ReelItemProps) {
   const router = useRouter();
-  const webViewRef = useRef<WebView>(null);
-  const [playerReady, setPlayerReady] = useState(false);
   const primaryProvider = movie.providers?.[0] ?? null;
   const genreLabel = movie.genres.slice(0, 2).map((g) => g.name).join(' · ');
   const runtimeLabel = movie.runtime ? `${movie.runtime}m` : '';
-
-  // Only verified-embeddable portrait trailers
-  const videoKey = (movie.verticalTrailerYoutubeKey && movie.verticalTrailerYoutubeKey !== 'NOT_FOUND')
-    ? movie.verticalTrailerYoutubeKey
-    : null;
-
-  // Start at opacity 1 if this key has played before — no flash on remount
-  const playerOpacity = useRef(new Animated.Value(videoKey && playedKeys.has(videoKey) ? 1 : 0)).current;
-
-  // Play/pause via JS injection when active state changes — instant on swipe
-  useEffect(() => {
-    if (!playerReady || !videoKey) return;
-    const js = isActive ? 'player.playVideo(); true;' : 'player.pauseVideo(); true;';
-    webViewRef.current?.injectJavaScript(js);
-  }, [isActive, playerReady, videoKey]);
-
-  const onMessage = useCallback((e: WebViewMessageEvent) => {
-    try {
-      const msg = JSON.parse(e.nativeEvent.data);
-      if (msg.type === 'playerReady') setPlayerReady(true);
-      if (msg.type === 'playerPlaying') {
-        if (videoKey) playedKeys.add(videoKey);
-        Animated.timing(playerOpacity, {
-          toValue: 1,
-          duration: 250,
-          useNativeDriver: true,
-        }).start();
-      }
-    } catch {}
-  }, [playerOpacity, videoKey]);
 
   const handleTap = useCallback(() => {
     router.push(`/movie/${movie.id}`);
@@ -116,7 +76,7 @@ export default function ReelItem({
   return (
     <View style={styles.container}>
 
-      {/* Backdrop always shown — visible while player loads, or when no video key */}
+      {/* Backdrop — shows while video is buffering */}
       <Image
         source={movie.backdropPath ? { uri: `${TMDB_IMAGE}${movie.backdropPath}` } : undefined}
         style={styles.backdrop}
@@ -124,24 +84,6 @@ export default function ReelItem({
         transition={300}
         placeholder={{ blurhash: 'L00000fQfQfQfQfQfQfQfQfQfQfQ' }}
       />
-
-      {/* WebView fades in from opacity 0 when video first starts playing.
-           Backdrop shows through until then — no spinner, no YouTube logo flash. */}
-      {videoKey && (
-        <Animated.View style={[styles.player, { opacity: playerOpacity }]}>
-          <WebView
-            ref={webViewRef}
-            source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=0` }}
-            style={StyleSheet.absoluteFill}
-            allowsInlineMediaPlayback
-            mediaPlaybackRequiresUserAction={false}
-            scrollEnabled={false}
-            bounces={false}
-            startInLoadingState={false}
-            onMessage={onMessage}
-          />
-        </Animated.View>
-      )}
 
       {/* Gradient overlay */}
       <LinearGradient
@@ -239,12 +181,6 @@ function ActionButton({ label, sublabel, color, onPress }: ActionButtonProps) {
 
 const styles = StyleSheet.create({
   container: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
-    backgroundColor: '#000',
-  },
-  player: {
-    position: 'absolute',
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
     backgroundColor: '#000',
