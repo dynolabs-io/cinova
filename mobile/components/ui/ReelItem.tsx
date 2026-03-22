@@ -17,7 +17,6 @@ import {
   Linking,
   Platform,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
@@ -108,38 +107,24 @@ export default React.memo(function ReelItem({
   }, [isActive]);
 
   const showVideo = shouldLoad && videoKey;
-  const posterUri = movie.backdropPath
-    ? `https://image.tmdb.org/t/p/w780${movie.backdropPath}`
-    : movie.posterPath
-      ? `https://image.tmdb.org/t/p/w500${movie.posterPath}`
-      : null;
 
   return (
     <View style={styles.container}>
-
-      {/* Poster image — visible while video loads, behind WebView */}
-      {posterUri && (
-        <Image
-          source={{ uri: posterUri }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-        />
-      )}
 
       {/* Video layer — loads with autoplay=0, play/pause controlled via JS */}
       {showVideo && (
         <WebView
           ref={webViewRef}
           source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=0&controls=0&mute=0` }}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, { backgroundColor: 'transparent' }]}
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
           scrollEnabled={false}
           bounces={false}
           startInLoadingState={false}
-          renderLoading={() => <View style={styles.videoPlaceholder} />}
           onMessage={onMessage}
           pointerEvents="none"
+          transparent
         />
       )}
 
@@ -241,10 +226,6 @@ const styles = StyleSheet.create({
   container: {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
-    backgroundColor: '#000',
-  },
-  videoPlaceholder: {
-    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#000',
   },
   gradient: {
