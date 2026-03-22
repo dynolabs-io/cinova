@@ -19,7 +19,7 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import YoutubeIframe from 'react-native-youtube-iframe';
+import { WebView } from 'react-native-webview';
 import CinovaScore from './CinovaScore';
 import StreamingBadge from './StreamingBadge';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
@@ -29,6 +29,7 @@ import type { Movie, WatchProvider } from '../../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TMDB_IMAGE = 'https://image.tmdb.org/t/p/w1280';
+const EMBED_BASE = 'https://api.cinova.openova.io/api/v1/embed';
 
 interface ReelItemProps {
   movie: Movie;
@@ -84,23 +85,18 @@ export default function ReelItem({
   return (
     <View style={styles.container}>
 
-      {/* Portrait video player — react-native-youtube-iframe handles autoplay/origin.
-           CSS injected via webViewProps forces the YT.Player iframe to fill 100%×100%,
-           overriding the 16:9 inline dimensions YT.Player sets. */}
+      {/* Portrait video player — plain WebView loads our embed endpoint.
+           api.cinova.openova.io is a real HTTPS origin → no Error 153/152.
+           The endpoint serves YT.Player + CSS that fills 100%×100% of the viewport.
+           WebView sized to full screen → video fills the screen. */}
       {showVideo ? (
-        <YoutubeIframe
-          videoId={videoKey!}
-          width={SCREEN_WIDTH}
-          height={SCREEN_HEIGHT}
-          play={isActive}
-          mute={false}
-          initialPlayerParams={{ controls: 1, rel: 0, modestbranding: 1, loop: 1, playlist: videoKey! }}
-          webViewStyle={{ backgroundColor: '#000' }}
-          webViewProps={{
-            allowsInlineMediaPlayback: true,
-            mediaPlaybackRequiresUserAction: false,
-            injectedJavaScript: `(function(){var s=document.createElement('style');s.innerHTML='html,body{margin:0!important;overflow:hidden!important;height:100%!important;}.container{padding-bottom:0!important;height:100vh!important;width:100vw!important;position:fixed!important;top:0!important;left:0!important;}.video,#player,#player iframe{position:absolute!important;top:0!important;left:0!important;width:100%!important;height:100%!important;border:none!important;}';document.head.appendChild(s);})();true;`,
-          }}
+        <WebView
+          source={{ uri: `${EMBED_BASE}/${videoKey}` }}
+          style={styles.player}
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          scrollEnabled={false}
+          bounces={false}
         />
       ) : (
         <Image
@@ -208,6 +204,12 @@ function ActionButton({ label, sublabel, color, onPress }: ActionButtonProps) {
 
 const styles = StyleSheet.create({
   container: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+    backgroundColor: '#000',
+  },
+  player: {
+    position: 'absolute',
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
     backgroundColor: '#000',

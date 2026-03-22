@@ -29,7 +29,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import YoutubeIframe from 'react-native-youtube-iframe';
+import { WebView } from 'react-native-webview';
 import CinovaScore from '../../components/ui/CinovaScore';
 import { getDiscoverMosaicFeed, saveTitle } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
@@ -41,6 +41,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GAP = 1;
 const U = (SCREEN_WIDTH - GAP * 5) / 6; // 6-column grid unit
 const TMDB = 'https://image.tmdb.org/t/p';
+const EMBED_BASE = 'https://api.cinova.openova.io/api/v1/embed';
 
 // Video tile pixel dimensions (2-tile row with 1 gap → each unit = (SCREEN_WIDTH-GAP)/6)
 const TILE_UNIT = (SCREEN_WIDTH - GAP) / 6;
@@ -73,20 +74,14 @@ function MosaicCard({ movie, style, videoKey, videoW, videoH, savedIds, onSave }
   return (
     <View style={[cardStyles.card, style]}>
       {showVideo ? (
-        <YoutubeIframe
-          videoId={videoKey!}
-          width={videoW!}
-          height={videoH!}
-          play
-          mute
-          initialPlayerParams={{ controls: 0, rel: 0, modestbranding: 1, loop: 1, playlist: videoKey! }}
-          webViewStyle={{ backgroundColor: '#000' }}
-          webViewProps={{
-            allowsInlineMediaPlayback: true,
-            mediaPlaybackRequiresUserAction: false,
-            injectedJavaScript: `(function(){var s=document.createElement('style');s.innerHTML='html,body{margin:0!important;overflow:hidden!important;height:100%!important;}.container{padding-bottom:0!important;height:100vh!important;width:100vw!important;position:fixed!important;top:0!important;left:0!important;}.video,#player,#player iframe{position:absolute!important;top:0!important;left:0!important;width:100%!important;height:100%!important;border:none!important;}';document.head.appendChild(s);})();true;`,
-            onError: () => setVideoFailed(true),
-          }}
+        <WebView
+          source={{ uri: `${EMBED_BASE}/${videoKey}?mute=1&controls=0` }}
+          style={{ width: videoW, height: videoH }}
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          scrollEnabled={false}
+          bounces={false}
+          onError={() => setVideoFailed(true)}
         />
       ) : (
         <Image
