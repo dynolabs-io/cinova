@@ -31,7 +31,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import YoutubeIframe from 'react-native-youtube-iframe';
 import CinovaScore from '../../components/ui/CinovaScore';
-import { getDiscoverFeed, saveTitle } from '../../services/api';
+import { getDiscoverMosaicFeed, saveTitle } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
 import { hapticSuccess } from '../../services/haptics';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
@@ -379,7 +379,7 @@ export default function DiscoverScreen() {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
     useInfiniteQuery({
       queryKey: ['discover-feed', country, genre, theme, mood],
-      queryFn: ({ pageParam = 1 }) => getDiscoverFeed(country, pageParam as number),
+      queryFn: ({ pageParam = 1 }) => getDiscoverMosaicFeed(country, pageParam as number),
       initialPageParam: 1,
       getNextPageParam: (lastPage, allPages) =>
         lastPage.length === 20 ? allPages.length + 1 : undefined,

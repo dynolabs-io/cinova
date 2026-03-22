@@ -145,6 +145,11 @@ export async function getDiscoverFeed(country = 'US', page = 1): Promise<Movie[]
   return (data.reels ?? []).map(normalizeMedia) as Movie[];
 }
 
+export async function getDiscoverMosaicFeed(country = 'US', page = 1, limit = 20): Promise<Movie[]> {
+  const { data } = await api.get<{ movies: Movie[]; total: number }>('/api/v1/discover/mosaic', { params: { country, page, limit } });
+  return (data.movies ?? []).map(normalizeMedia) as Movie[];
+}
+
 export async function getRecommendations(country = 'US', limit = 20): Promise<Movie[]> {
   const { data } = await api.get<{ results: Movie[]; total: number }>('/api/v1/recommend', { params: { country, limit } });
   return (data.results ?? []).map(normalizeMedia) as Movie[];

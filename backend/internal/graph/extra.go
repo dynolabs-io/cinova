@@ -297,24 +297,17 @@ func (r *MovieRepository) GetPopular(ctx context.Context, country string, limit,
 	return movies, nil
 }
 
-// GetReels returns trending movies optimised for the Discover reel feed.
-// Results include backdrop_path, overview, genres, cinova_score, and streaming providers.
+// GetReels returns movies for the full-screen vertical reel feed.
+// ONLY returns movies with a verified embeddable vertical (9:16) trailer.
 // Applies age bias: effective_score = cinova_score × exp(−0.15 × age_years)
-// so classic films don't dominate the feed over recent releases.
-// Movies with embeddable vertical trailers appear first (score bonus ×1.5).
 func (r *MovieRepository) GetReels(ctx context.Context, country string, limit int) ([]models.Movie, error) {
 	records, err := r.driver.RunQuery(ctx, `
 		MATCH (m:Movie)-[:AVAILABLE_ON {country: $country}]->(:Provider)
-		WHERE m.backdrop_path IS NOT NULL AND m.backdrop_path <> ''
-		  AND m.overview IS NOT NULL AND m.overview <> ''
-		  AND m.cinova_score > 50
+		WHERE m.vertical_trailer_youtube_key IS NOT NULL
+		  AND m.vertical_trailer_youtube_key <> ''
+		  AND m.vertical_trailer_youtube_key <> 'NOT_FOUND'
 		WITH DISTINCT m,
-		     CASE WHEN m.vertical_trailer_youtube_key IS NOT NULL
-		               AND m.vertical_trailer_youtube_key <> ''
-		               AND m.vertical_trailer_youtube_key <> 'NOT_FOUND'
-		          THEN 1.5 ELSE 1.0 END AS video_bonus
-		WITH m, video_bonus,
-		     m.cinova_score * exp(-0.15 * toFloat(date().year - toInteger(substring(coalesce(m.release_date, '2000-01-01'), 0, 4)))) * (0.4 + rand() * 0.6) * video_bonus AS effective_score
+		     m.cinova_score * exp(-0.15 * toFloat(date().year - toInteger(substring(coalesce(m.release_date, '2000-01-01'), 0, 4)))) * (0.4 + rand() * 0.6) AS effective_score
 		ORDER BY effective_score DESC
 		LIMIT $limit
 		OPTIONAL MATCH (m)-[:IN_GENRE]->(g:Genre)
@@ -328,6 +321,48 @@ func (r *MovieRepository) GetReels(ctx context.Context, country string, limit in
 	`, map[string]interface{}{"country": country, "limit": limit})
 	if err != nil {
 		return nil, fmt.Errorf("GetReels query: %w", err)
+	}
+
+	movies := make([]models.Movie, 0, len(records))
+	for _, rec := range records {
+		node, _ := rec.Get("m")
+		m := movieNodeToModel(node)
+		if v, ok := rec.Get("genres"); ok {
+			m.Genres = toGenres(v)
+		}
+		if v, ok := rec.Get("providers"); ok {
+			m.Providers = toProviders(v)
+		}
+		movies = append(movies, *m)
+	}
+	return movies, nil
+}
+
+// GetDiscoverMosaic returns quality movies for the Discover mosaic grid.
+// Includes both trailer_youtube_key and vertical_trailer_youtube_key so the
+// mobile client can render video tiles at their native aspect ratio.
+// Applies age bias and random jitter for feed freshness. Supports pagination.
+func (r *MovieRepository) GetDiscoverMosaic(ctx context.Context, country string, limit, offset int) ([]models.Movie, error) {
+	records, err := r.driver.RunQuery(ctx, `
+		MATCH (m:Movie)-[:AVAILABLE_ON {country: $country}]->(:Provider)
+		WHERE m.poster_path IS NOT NULL AND m.poster_path <> ''
+		  AND m.cinova_score > 50
+		WITH DISTINCT m,
+		     m.cinova_score * exp(-0.15 * toFloat(date().year - toInteger(substring(coalesce(m.release_date, '2000-01-01'), 0, 4)))) * (0.4 + rand() * 0.6) AS effective_score
+		ORDER BY effective_score DESC
+		SKIP $offset
+		LIMIT $limit
+		OPTIONAL MATCH (m)-[:IN_GENRE]->(g:Genre)
+		OPTIONAL MATCH (m)-[avail:AVAILABLE_ON {country: $country}]->(prov:Provider)
+		RETURN m,
+		       collect(DISTINCT {id: g.id, name: g.name})              AS genres,
+		       collect(DISTINCT {provider_id: prov.provider_id,
+		                          provider_name: prov.provider_name,
+		                          logo_path: prov.logo_path,
+		                          type: avail.type})                    AS providers
+	`, map[string]interface{}{"country": country, "limit": limit, "offset": offset})
+	if err != nil {
+		return nil, fmt.Errorf("GetDiscoverMosaic query: %w", err)
 	}
 
 	movies := make([]models.Movie, 0, len(records))

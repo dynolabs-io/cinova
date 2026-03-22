@@ -259,6 +259,65 @@ func (h *MovieHandler) GetReels(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
+// GetDiscoverMosaic handles GET /api/v1/discover/mosaic?country=US&page=1&limit=20
+// Returns quality movies (score > 50) with both trailer keys for mixed tile rendering.
+func (h *MovieHandler) GetDiscoverMosaic(w http.ResponseWriter, r *http.Request) {
+	country := r.URL.Query().Get("country")
+	if country == "" {
+		country = "US"
+	}
+	page := 1
+	limit := 20
+	if v := r.URL.Query().Get("page"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			page = n
+		}
+	}
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 50 {
+			limit = n
+		}
+	}
+	offset := (page - 1) * limit
+
+	cacheKey := fmt.Sprintf("cinova:mosaic:%s:%d:%d", country, page, limit)
+
+	if cached, err := h.redis.Get(r.Context(), cacheKey); err == nil && cached != "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(cached))
+		return
+	}
+
+	movies, err := h.repo.GetDiscoverMosaic(r.Context(), country, limit, offset)
+	if err != nil {
+		log.Error().Err(err).Str("country", country).Msg("GetDiscoverMosaic")
+		writeError(w, "internal_error", "failed to fetch mosaic", http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"movies":  movies,
+		"country": country,
+		"page":    page,
+		"limit":   limit,
+		"total":   len(movies),
+	}
+
+	data, err := json.Marshal(response)
+	if err == nil {
+		if err := h.redis.Set(r.Context(), cacheKey, string(data), reelsCacheTTL); err != nil {
+			log.Warn().Err(err).Msg("failed to cache mosaic")
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Cache", "MISS")
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
+}
+
 // isNotFound returns true if the error message contains "not found".
 func isNotFound(err error) bool {
 	if err == nil {

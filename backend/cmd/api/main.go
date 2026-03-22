@@ -178,6 +178,7 @@ func main() {
 		r.Get("/trending", movieHandler.GetTrending)
 		r.Get("/popular", movieHandler.GetPopular)
 		r.Get("/discover/reels", movieHandler.GetReels)
+		r.Get("/discover/mosaic", movieHandler.GetDiscoverMosaic)
 		r.Get("/movie/{id}", movieHandler.GetMovie)
 		r.Get("/movie/{id}/providers", movieHandler.GetMovieProviders)
 		r.Get("/tv/{id}", movieHandler.GetTV)
