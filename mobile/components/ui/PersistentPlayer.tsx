@@ -2,10 +2,8 @@
  * PersistentPlayer — single long-lived WebView for the Reels screen.
  *
  * Loads the YouTube player ONCE via our embed endpoint. When the active
- * video key changes, injects player.loadVideoById() instead of creating
- * a new WebView. This eliminates the 3-4 second per-video overhead.
- *
- * No React Native overlay — the embed page handles spinner hiding internally.
+ * video key changes, calls switchVideo() defined in the embed page.
+ * All YouTube API calls happen in the embed page's JS context.
  */
 
 import React, { useRef, useEffect, useCallback } from 'react';
@@ -37,16 +35,12 @@ export default function PersistentPlayer({ initialVideoKey, videoKey, playing }:
         playerReadyRef.current = true;
         const key = pendingKeyRef.current;
         if (key && key !== currentKeyRef.current) {
+          // A different video was queued while the player was initialising
           currentKeyRef.current = key;
-          webViewRef.current?.injectJavaScript(
-            `player.loadVideoById('${key}'); ${playingRef.current ? 'player.playVideo();' : ''} true;`
-          );
+          webViewRef.current?.injectJavaScript(`switchVideo('${key}'); true;`);
         } else if (playingRef.current) {
-          webViewRef.current?.injectJavaScript('player.playVideo(); true;');
-        } else {
-          // Pre-buffer without playing (tab not focused yet)
-          const k = currentKeyRef.current;
-          if (k) webViewRef.current?.injectJavaScript(`player.cueVideoById('${k}'); true;`);
+          // Same video as initialVideoKey — already loaded, just play
+          webViewRef.current?.injectJavaScript('playAll(); true;');
         }
       }
     } catch {}
@@ -57,16 +51,16 @@ export default function PersistentPlayer({ initialVideoKey, videoKey, playing }:
     if (!playerReadyRef.current || !videoKey) return;
 
     if (videoKey === currentKeyRef.current) {
+      // Same video — just play or pause
       webViewRef.current?.injectJavaScript(
-        playing ? 'player.playVideo(); true;' : 'player.pauseVideo(); true;'
+        playing ? 'playAll(); true;' : 'pauseAll(); true;'
       );
       return;
     }
 
+    // Different video — switch via embed page function
     currentKeyRef.current = videoKey;
-    webViewRef.current?.injectJavaScript(
-      `player.loadVideoById('${videoKey}'); ${playing ? 'player.playVideo();' : 'player.pauseVideo();'} true;`
-    );
+    webViewRef.current?.injectJavaScript(`switchVideo('${videoKey}'); true;`);
   }, [videoKey, playing]);
 
   return (

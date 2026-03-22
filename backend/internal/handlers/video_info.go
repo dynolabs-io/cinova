@@ -61,11 +61,11 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 	if autoplay {
 		onReady += `e.target.playVideo();`
 	}
-	// onStateChange: hide spinner overlay when playing (1), show when buffering (3)
-	onStateChange := `var ov=document.getElementById('ov');` +
-		`if(e.data===1){ov.style.opacity='0';` +
+	// onStateChange: hide overlay on first play, never show it again on subsequent switches
+	onStateChange := `if(e.data===1){` +
+		`ov.style.opacity='0';firstPlay=false;` +
 		`if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'playerPlaying'}));}}` +
-		`else if(e.data===3){ov.style.opacity='1';}`
+		`else if(e.data===3&&firstPlay){ov.style.opacity='1';}`
 
 	html := `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">` +
 		`<style>*{margin:0;padding:0;box-sizing:border-box;}` +
@@ -74,9 +74,13 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 		`#ov{position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:10;pointer-events:none;transition:opacity 0.15s;}` +
 		`</style></head><body><div id="p"></div><div id="ov"></div>` +
 		`<script>` +
-		`var player;` +
+		`var player,ov,firstPlay=true;` +
 		`var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);` +
+		`function switchVideo(key){if(player&&player.loadVideoById){player.loadVideoById(key);}}` +
+		`function pauseAll(){if(player&&player.pauseVideo){player.pauseVideo();}}` +
+		`function playAll(){if(player&&player.playVideo){player.playVideo();}}` +
 		`function onYouTubeIframeAPIReady(){` +
+		`ov=document.getElementById('ov');` +
 		`player=new YT.Player('p',{videoId:'` + key + `',` +
 		`playerVars:{autoplay:0,mute:` + mute + `,controls:` + controls + `,loop:1,playlist:'` + key + `',rel:0,modestbranding:1,playsinline:1},` +
 		`events:{onReady:function(e){` + onReady + `},onStateChange:function(e){` + onStateChange + `}}});}` +
