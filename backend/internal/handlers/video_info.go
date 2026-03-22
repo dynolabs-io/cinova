@@ -52,10 +52,16 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("controls") == "0" {
 		controls = "0"
 	}
-	// Use YT.Player API with onReady:playVideo() — this is a JS-initiated play call
-	// which WKWebView allows with mediaPlaybackRequiresUserAction=false.
-	// autoplay=1 URL param alone is blocked by iOS for cross-origin iframes.
-	// CSS forces the player iframe to fill 100%x100% regardless of what YT.Player sets.
+	// autoplay=0 → player initialises and buffers but does not call playVideo().
+	// The React Native WebView injects playVideo()/pauseVideo() via JS when the
+	// item becomes active/inactive, enabling instant play on swipe (preload pattern).
+	autoplay := r.URL.Query().Get("autoplay") != "0"
+
+	onReady := `if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'playerReady'}));}`
+	if autoplay {
+		onReady += `e.target.playVideo();`
+	}
+
 	html := `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">` +
 		`<style>*{margin:0;padding:0;box-sizing:border-box;}` +
 		`html,body{width:100%;height:100%;background:#000;overflow:hidden;}` +
@@ -66,7 +72,7 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 		`function onYouTubeIframeAPIReady(){` +
 		`new YT.Player('p',{videoId:'` + key + `',` +
 		`playerVars:{autoplay:1,mute:` + mute + `,controls:` + controls + `,loop:1,playlist:'` + key + `',rel:0,modestbranding:1,playsinline:1},` +
-		`events:{onReady:function(e){e.target.playVideo();}}});}` +
+		`events:{onReady:function(e){` + onReady + `}}});}` +
 		`</script></body></html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

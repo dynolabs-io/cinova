@@ -6,7 +6,7 @@
  * no vertical trailer is available.
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,7 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { WebView } from 'react-native-webview';
+import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import CinovaScore from './CinovaScore';
 import StreamingBadge from './StreamingBadge';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
@@ -64,6 +64,8 @@ export default function ReelItem({
   userRating,
 }: ReelItemProps) {
   const router = useRouter();
+  const webViewRef = useRef<WebView>(null);
+  const [playerReady, setPlayerReady] = useState(false);
   const primaryProvider = movie.providers?.[0] ?? null;
   const genreLabel = movie.genres.slice(0, 2).map((g) => g.name).join(' · ');
   const runtimeLabel = movie.runtime ? `${movie.runtime}m` : '';
@@ -72,7 +74,20 @@ export default function ReelItem({
   const videoKey = (movie.verticalTrailerYoutubeKey && movie.verticalTrailerYoutubeKey !== 'NOT_FOUND')
     ? movie.verticalTrailerYoutubeKey
     : null;
-  const showVideo = isActive && !!videoKey;
+
+  // Play/pause via JS injection when active state changes — instant on swipe
+  useEffect(() => {
+    if (!playerReady || !videoKey) return;
+    const js = isActive ? 'player.playVideo(); true;' : 'player.pauseVideo(); true;';
+    webViewRef.current?.injectJavaScript(js);
+  }, [isActive, playerReady, videoKey]);
+
+  const onMessage = useCallback((e: WebViewMessageEvent) => {
+    try {
+      const msg = JSON.parse(e.nativeEvent.data);
+      if (msg.type === 'playerReady') setPlayerReady(true);
+    } catch {}
+  }, []);
 
   const handleTap = useCallback(() => {
     router.push(`/movie/${movie.id}`);
@@ -85,26 +100,27 @@ export default function ReelItem({
   return (
     <View style={styles.container}>
 
-      {/* Portrait video player — plain WebView loads our embed endpoint.
-           api.cinova.openova.io is a real HTTPS origin → no Error 153/152.
-           The endpoint serves YT.Player + CSS that fills 100%×100% of the viewport.
-           WebView sized to full screen → video fills the screen. */}
-      {showVideo ? (
+      {/* Backdrop always shown — visible while player loads, or when no video key */}
+      <Image
+        source={movie.backdropPath ? { uri: `${TMDB_IMAGE}${movie.backdropPath}` } : undefined}
+        style={styles.backdrop}
+        contentFit="cover"
+        transition={300}
+        placeholder={{ blurhash: 'L00000fQfQfQfQfQfQfQfQfQfQfQ' }}
+      />
+
+      {/* WebView always mounted (preloads adjacent items). Starts with autoplay=0 so
+           only the active item plays. JS injection controls play/pause on swipe. */}
+      {videoKey && (
         <WebView
-          source={{ uri: `${EMBED_BASE}/${videoKey}` }}
+          ref={webViewRef}
+          source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=0` }}
           style={styles.player}
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
           scrollEnabled={false}
           bounces={false}
-        />
-      ) : (
-        <Image
-          source={movie.backdropPath ? { uri: `${TMDB_IMAGE}${movie.backdropPath}` } : undefined}
-          style={styles.backdrop}
-          contentFit="cover"
-          transition={300}
-          placeholder={{ blurhash: 'L00000fQfQfQfQfQfQfQfQfQfQfQ' }}
+          onMessage={onMessage}
         />
       )}
 

@@ -115,7 +115,8 @@ export default function ReelsScreen() {
           offset: SCREEN_HEIGHT * index,
           index,
         })}
-        removeClippedSubviews
+        windowSize={3}
+        removeClippedSubviews={false}
       />
     </View>
   );
