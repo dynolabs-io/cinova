@@ -94,7 +94,6 @@ export default function ReelItem({
           javaScriptEnabled
           scrollEnabled={false}
           bounces={false}
-          injectedJavaScript="setTimeout(function(){var f=document.getElementById('yt');if(f)f.contentWindow.postMessage(JSON.stringify({event:'command',func:'playVideo',args:[]}),'*');},800);true;"
         />
       ) : (
         <Image

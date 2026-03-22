@@ -52,20 +52,21 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("controls") == "0" {
 		controls = "0"
 	}
-	// enablejsapi=1 is required for postMessage playVideo command to work
-	src := fmt.Sprintf(
-		"https://www.youtube.com/embed/%s?autoplay=1&mute=%s&controls=%s&loop=1&playlist=%s&rel=0&modestbranding=1&playsinline=1&enablejsapi=1",
-		key, mute, controls, key,
-	)
-	// After the iframe loads, repeatedly send postMessage playVideo commands.
-	// This bypasses iOS autoplay policy which blocks audio autoplay from URL params.
-	html := `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">` +
-		`<style>*{margin:0;padding:0;box-sizing:border-box;}html,body{width:100%;height:100%;background:#000;overflow:hidden;}` +
-		`iframe{width:100%;height:100%;border:none;display:block;}</style></head>` +
-		`<body><iframe id="yt" src="` + src + `" allow="autoplay; encrypted-media" allowfullscreen></iframe>` +
-		`<script>var f=document.getElementById('yt');` +
-		`function play(){try{f.contentWindow.postMessage(JSON.stringify({event:'command',func:'playVideo',args:[]}),'*');}catch(e){}}` +
-		`f.addEventListener('load',function(){setTimeout(play,400);setTimeout(play,1200);setTimeout(play,2500);});` +
+	// Use YT.Player API with onReady:playVideo() — this is a JS-initiated play call
+	// which WKWebView allows with mediaPlaybackRequiresUserAction=false.
+	// autoplay=1 URL param alone is blocked by iOS for cross-origin iframes.
+	// CSS forces the player iframe to fill 100%x100% regardless of what YT.Player sets.
+	html := `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">` +
+		`<style>*{margin:0;padding:0;box-sizing:border-box;}` +
+		`html,body{width:100%;height:100%;background:#000;overflow:hidden;}` +
+		`#p,#p iframe{position:absolute;top:0;left:0;width:100%!important;height:100%!important;border:none;}` +
+		`</style></head><body><div id="p"></div>` +
+		`<script>` +
+		`var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);` +
+		`function onYouTubeIframeAPIReady(){` +
+		`new YT.Player('p',{videoId:'` + key + `',` +
+		`playerVars:{autoplay:1,mute:` + mute + `,controls:` + controls + `,loop:1,playlist:'` + key + `',rel:0,modestbranding:1,playsinline:1},` +
+		`events:{onReady:function(e){e.target.playVideo();}}});}` +
 		`</script></body></html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
