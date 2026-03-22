@@ -31,9 +31,12 @@ import type { Movie, WatchProvider } from '../../types';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TMDB_IMAGE = 'https://image.tmdb.org/t/p/w1280';
 
-// Vertical trailer is 9:16 — scale to fill SCREEN_HEIGHT, crop sides
-const VIDEO_W = Math.ceil(SCREEN_HEIGHT * (9 / 16));
-const VIDEO_LEFT = -Math.floor(Math.max(0, VIDEO_W - SCREEN_WIDTH) / 2);
+// YouTube's IFrame player always renders 16:9 regardless of container shape.
+// Give it a 16:9 container that fills SCREEN_HEIGHT — the 9:16 portrait video
+// renders centered (479px wide) inside that 16:9 frame (1514px wide).
+// Center-crop clips the excess width to SCREEN_WIDTH.
+const VIDEO_W = Math.ceil(SCREEN_HEIGHT * (16 / 9));
+const VIDEO_LEFT = -Math.floor((VIDEO_W - SCREEN_WIDTH) / 2);
 
 interface ReelItemProps {
   movie: Movie;

@@ -321,52 +321,38 @@ function isPortraitVideo(movie: Movie): boolean {
   return !!(vk && vk !== 'NOT_FOUND');
 }
 
-// How many poster template groups appear between video rows
+// After this many template groups without a video row, insert one if the
+// current movie has a video key (and a next movie exists as companion).
 const VIDEO_EVERY = 3;
 
 function groupMovies(movies: Movie[]): Group[] {
   const groups: Group[] = [];
-  const videoList: Movie[] = [];
-  const posterList: Movie[] = [];
-
-  for (const m of movies) {
-    if (getVideoKey(m)) {
-      videoList.push(m);
-    } else {
-      posterList.push(m);
-    }
-  }
-
-  let pIdx = 0;
-  let vIdx = 0;
+  let i = 0;
   let seqPos = 0;
   let tGroupsSinceVideo = 0;
 
-  while (pIdx < posterList.length || vIdx < videoList.length) {
-    const wantVideo = vIdx < videoList.length &&
-      (tGroupsSinceVideo >= VIDEO_EVERY || pIdx >= posterList.length);
+  while (i < movies.length) {
+    const movie = movies[i];
+    const vk = getVideoKey(movie);
 
-    if (wantVideo && pIdx < posterList.length) {
-      // Video row: video tile + 1 companion poster
-      const vm = videoList[vIdx++];
-      const pm = posterList[pIdx++];
+    // Time for a video row? Only if current movie has a key and a companion exists.
+    if (tGroupsSinceVideo >= VIDEO_EVERY && vk && i + 1 < movies.length) {
       groups.push({
-        type: isPortraitVideo(vm) ? 'video_portrait' : 'video_landscape',
-        videoMovie: vm,
-        companion: pm,
+        type: isPortraitVideo(movie) ? 'video_portrait' : 'video_landscape',
+        videoMovie: movie,
+        companion: movies[i + 1],
       });
+      i += 2;
       tGroupsSinceVideo = 0;
-    } else if (pIdx < posterList.length) {
-      // Poster template group
+    } else {
+      // Poster template group — all movies (including video-having ones)
       const tIdx = SEQUENCE[seqPos % SEQUENCE.length];
       const count = TEMPLATES[tIdx].count;
-      if (pIdx + count > posterList.length) break; // not enough movies for this template
-      groups.push({ type: 'poster', tIdx, movies: posterList.slice(pIdx, pIdx + count) });
-      pIdx += count;
+      if (i + count > movies.length) break;
+      groups.push({ type: 'poster', tIdx, movies: movies.slice(i, i + count) });
+      i += count;
       seqPos++;
       tGroupsSinceVideo++;
-    } else {
-      break; // videos remain but no companion posters available
     }
   }
 
