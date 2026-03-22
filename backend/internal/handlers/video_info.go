@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"unicode"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
 )
 
@@ -28,6 +30,39 @@ type VideoInfoResponse struct {
 	AspectRatio float64 `json:"aspect_ratio"` // width / height, e.g. 1.778 for 16:9
 	Width       int     `json:"width"`
 	Height      int     `json:"height"`
+}
+
+// ServeEmbed handles GET /api/v1/embed/{key}
+// Returns an HTML page with a full-viewport YouTube iframe.
+// Serving from a real HTTPS origin (api.cinova.openova.io) allows YouTube embedding
+// without Error 153/152 — identical to what the catalog page does on Safari.
+func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
+	key := chi.URLParam(r, "key")
+	for _, c := range key {
+		if !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '-' && c != '_' {
+			http.Error(w, "invalid key", http.StatusBadRequest)
+			return
+		}
+	}
+	mute := "0"
+	if r.URL.Query().Get("mute") == "1" {
+		mute = "1"
+	}
+	controls := "1"
+	if r.URL.Query().Get("controls") == "0" {
+		controls = "0"
+	}
+	src := fmt.Sprintf(
+		"https://www.youtube.com/embed/%s?autoplay=1&mute=%s&controls=%s&loop=1&playlist=%s&rel=0&modestbranding=1&playsinline=1",
+		key, mute, controls, key,
+	)
+	html := `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">` +
+		`<style>*{margin:0;padding:0;box-sizing:border-box;}html,body{width:100%;height:100%;background:#000;overflow:hidden;}` +
+		`iframe{width:100%;height:100%;border:none;display:block;}</style></head>` +
+		`<body><iframe src="` + src + `" allow="autoplay; encrypted-media" allowfullscreen></iframe></body></html>`
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, html)
 }
 
 // GetVideoInfo handles GET /api/v1/video-info?youtube_key=XXXX

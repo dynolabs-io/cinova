@@ -184,6 +184,7 @@ func main() {
 		r.Get("/tv/{id}", movieHandler.GetTV)
 		r.Get("/person/{id}", personHandler.GetPerson)
 		r.Get("/video-info", videoInfoHandler.GetVideoInfo)
+		r.Get("/embed/{key}", videoInfoHandler.ServeEmbed)
 
 		// Protected routes (require valid JWT)
 		r.Group(func(r chi.Router) {
