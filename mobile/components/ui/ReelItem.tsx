@@ -1,12 +1,13 @@
 /**
  * ReelItem — Full-screen vertical reel (TikTok / Instagram Reels style)
  *
- * When isActive=true and the movie has a verticalTrailerYoutubeKey,
- * plays the vertical YouTube trailer full-screen. Otherwise shows the
- * backdrop image with a gradient. UI overlay (actions, title) is always on top.
+ * When isActive=true and the movie has an embeddable verticalTrailerYoutubeKey,
+ * plays it full-screen using react-native-youtube-iframe (handles embed auth).
+ * Center-crop: scales video to fill SCREEN_HEIGHT, clips overflowing width.
+ * Otherwise shows the backdrop image. UI overlay is always on top.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,7 +20,7 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { WebView } from 'react-native-webview';
+import YoutubeIframe from 'react-native-youtube-iframe';
 import CinovaScore from './CinovaScore';
 import StreamingBadge from './StreamingBadge';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
@@ -29,6 +30,10 @@ import type { Movie, WatchProvider } from '../../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TMDB_IMAGE = 'https://image.tmdb.org/t/p/w1280';
+
+// Vertical trailer is 9:16 — scale to fill SCREEN_HEIGHT, crop sides
+const VIDEO_W = Math.ceil(SCREEN_HEIGHT * (9 / 16));
+const VIDEO_LEFT = -Math.floor(Math.max(0, VIDEO_W - SCREEN_WIDTH) / 2);
 
 interface ReelItemProps {
   movie: Movie;
@@ -67,8 +72,8 @@ export default function ReelItem({
   const genreLabel = movie.genres.slice(0, 2).map((g) => g.name).join(' · ');
   const runtimeLabel = movie.runtime ? `${movie.runtime}m` : '';
 
-  // Prefer vertical trailer; fall back to regular TMDB trailer (embeddable, landscape cropped to fill portrait)
-  const videoKey = movie.verticalTrailerYoutubeKey || movie.trailerYoutubeKey || null;
+  // Only use verified-embeddable vertical trailers
+  const videoKey = movie.verticalTrailerYoutubeKey || null;
   const showVideo = isActive && !!videoKey;
 
   const handleTap = useCallback(() => {
@@ -81,39 +86,34 @@ export default function ReelItem({
 
   return (
     <View style={styles.container}>
-      {/* Background: vertical YouTube video or backdrop image */}
+      {/* Background: center-cropped YouTube video or backdrop image */}
       {showVideo ? (
-        <WebView
-          style={styles.videoContainer}
-          source={{ html: `<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<style>
-* { margin:0; padding:0; box-sizing:border-box; }
-html, body { width:100%; height:100%; background:#000; overflow:hidden; }
-iframe {
-  position:absolute;
-  top:50%; left:50%;
-  /* scale landscape 16:9 to cover portrait screen — crops sides */
-  width:${SCREEN_HEIGHT * (9 / 16)}px;
-  height:${SCREEN_HEIGHT}px;
-  transform:translateX(-50%) translateY(-50%);
-  border:none;
-}
-</style>
-</head>
-<body>
-<iframe
-  src="https://www.youtube.com/embed/${videoKey}?autoplay=1&playsinline=1&controls=1&loop=1&playlist=${videoKey}&rel=0&modestbranding=1"
-  allow="autoplay; fullscreen"
-></iframe>
-</body>
-</html>` }}
-          allowsInlineMediaPlayback
-          mediaPlaybackRequiresUserAction={false}
-          userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-        />
+        // Clip container to screen width — the YoutubeIframe is wider (VIDEO_W)
+        // and offset left so the video is centered. overflow:hidden crops the sides.
+        <View style={styles.videoClip}>
+          <View style={[styles.videoInner, { left: VIDEO_LEFT }]}>
+            <YoutubeIframe
+              videoId={videoKey!}
+              height={SCREEN_HEIGHT}
+              width={VIDEO_W}
+              play={isActive}
+              mute={false}
+              initialPlayerParams={{
+                controls: 1,
+                rel: 0,
+                modestbranding: 1,
+                loop: 1,
+                playlist: videoKey!,
+              }}
+              webViewStyle={{ backgroundColor: '#000' }}
+              webViewProps={{
+                userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+                allowsInlineMediaPlayback: true,
+                mediaPlaybackRequiresUserAction: false,
+              }}
+            />
+          </View>
+        </View>
       ) : (
         <Image
           source={movie.backdropPath ? { uri: `${TMDB_IMAGE}${movie.backdropPath}` } : undefined}
@@ -124,7 +124,7 @@ iframe {
         />
       )}
 
-      {/* Gradient overlay — needed for both video and image to make text readable */}
+      {/* Gradient overlay */}
       <LinearGradient
         colors={['transparent', 'transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.88)', Colors.background]}
         locations={[0, 0.35, 0.6, 0.8, 1]}
@@ -224,12 +224,21 @@ const styles = StyleSheet.create({
     height: SCREEN_HEIGHT,
     backgroundColor: '#000',
   },
-  videoContainer: {
+  // Clips the wider-than-screen YoutubeIframe to screen width
+  videoClip: {
     position: 'absolute',
     top: 0, left: 0,
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
+    overflow: 'hidden',
     backgroundColor: '#000',
+  },
+  // Inner view is VIDEO_W wide, offset left so video is centred
+  videoInner: {
+    position: 'absolute',
+    top: 0,
+    width: VIDEO_W,
+    height: SCREEN_HEIGHT,
   },
   backdrop: {
     position: 'absolute',
