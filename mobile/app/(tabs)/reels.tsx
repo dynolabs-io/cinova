@@ -101,7 +101,7 @@ export default function ReelsScreen() {
           <ReelItem
             movie={item}
             isActive={index === activeIndex && tabFocused}
-            shouldLoad={Math.abs(index - activeIndex) <= 1 && tabFocused}
+            shouldLoad={Math.abs(index - activeIndex) <= 2 && tabFocused}
             isSaved={savedIds.has(item.id)}
             userRating={ratings[item.id]}
             onSave={handleSave}
