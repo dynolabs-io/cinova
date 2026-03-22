@@ -75,10 +75,14 @@ function MosaicCard({ movie, style, videoKey, videoW, videoH, savedIds, onSave }
       {showVideo ? (
         <WebView
           style={{ width: videoW, height: videoH, backgroundColor: '#000' }}
-          source={{ uri: `https://api.cinova.openova.io/api/v1/embed/${videoKey}?mute=1&controls=0` }}
+          source={{
+            html: `<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'><style>*{margin:0;padding:0;box-sizing:border-box;}html,body{width:100%;height:100%;background:#000;overflow:hidden;}body iframe{position:absolute;top:0;left:0;width:100%!important;height:100%!important;border:none;}</style></head><body><div id='p'></div><script>var t=document.createElement('script');t.src='https://www.youtube.com/iframe_api';document.head.appendChild(t);function onYouTubeIframeAPIReady(){new YT.Player('p',{videoId:'${videoKey}',playerVars:{autoplay:1,mute:1,controls:0,loop:1,playlist:'${videoKey}',rel:0,modestbranding:1,playsinline:1},events:{onReady:function(e){e.target.playVideo();}}});}</script></body></html>`,
+            baseUrl: 'https://www.youtube.com',
+          }}
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
           javaScriptEnabled
+          originWhitelist={['*']}
           scrollEnabled={false}
           bounces={false}
           onError={() => setVideoFailed(true)}
