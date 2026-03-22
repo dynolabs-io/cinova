@@ -50,6 +50,10 @@ export default function PersistentPlayer({ initialVideoKey, videoKey, playing }:
         } else if (playingRef.current) {
           // Same video as initialVideoKey — already buffered, just play
           webViewRef.current?.injectJavaScript('player.playVideo(); true;');
+        } else {
+          // Not playing yet (tab not focused) — cue to start buffering without playing
+          const k = currentKeyRef.current;
+          if (k) webViewRef.current?.injectJavaScript(`player.cueVideoById('${k}'); true;`);
         }
       } else if (msg.type === 'playerPlaying') {
         setBuffering(false);
