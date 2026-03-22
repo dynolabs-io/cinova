@@ -60,12 +60,14 @@ function MosaicCard({ movie, style, savedIds, onSave, activeVideoId, onActivateV
   const router = useRouter();
   const [cardSize, setCardSize] = useState({ width: 0, height: 0 });
 
-  const hasVideo = !!movie.verticalTrailerYoutubeKey;
+  // Use vertical trailer if available, fall back to regular trailer
+  const videoKey = movie.verticalTrailerYoutubeKey || movie.trailerYoutubeKey || null;
+  const hasVideo = !!videoKey;
   const isPlaying = activeVideoId === movie.id;
 
   // Image source: YouTube thumbnail for video cards, TMDB poster for image cards
   const imageUri = hasVideo
-    ? `https://img.youtube.com/vi/${movie.verticalTrailerYoutubeKey}/hqdefault.jpg`
+    ? `https://img.youtube.com/vi/${videoKey}/hqdefault.jpg`
     : (movie.posterPath ? `${TMDB}/w500${movie.posterPath}` : '');
 
   const handlePress = useCallback(() => {
@@ -94,7 +96,7 @@ function MosaicCard({ movie, style, savedIds, onSave, activeVideoId, onActivateV
       {/* Video or image background */}
       {isPlaying && cardSize.width > 0 ? (
         <YoutubeIframe
-          videoId={movie.verticalTrailerYoutubeKey!}
+          videoId={videoKey!}
           width={cardSize.width}
           height={cardSize.height}
           play
@@ -126,8 +128,8 @@ function MosaicCard({ movie, style, savedIds, onSave, activeVideoId, onActivateV
 
       {/* Video badge — small camera icon top-right for video tiles */}
       {hasVideo && !isPlaying && (
-        <View style={cardStyles.videoBadge}>
-          <Text style={cardStyles.videoBadgeIcon}>▶</Text>
+        <View style={[cardStyles.videoBadge, movie.verticalTrailerYoutubeKey ? cardStyles.videoBadgeVertical : null]}>
+          <Text style={cardStyles.videoBadgeIcon}>{movie.verticalTrailerYoutubeKey ? '↕▶' : '▶'}</Text>
         </View>
       )}
 
@@ -177,6 +179,9 @@ const cardStyles = StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 4,
     paddingVertical: 2,
+  },
+  videoBadgeVertical: {
+    backgroundColor: 'rgba(99,102,241,0.75)',
   },
   videoBadgeIcon: { color: '#fff', fontSize: 8 },
   info: {

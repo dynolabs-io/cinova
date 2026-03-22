@@ -19,7 +19,7 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import YoutubeIframe from 'react-native-youtube-iframe';
+import { WebView } from 'react-native-webview';
 import CinovaScore from './CinovaScore';
 import StreamingBadge from './StreamingBadge';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
@@ -82,28 +82,37 @@ export default function ReelItem({
     <View style={styles.container}>
       {/* Background: vertical YouTube video or backdrop image */}
       {showVideo ? (
-        <View style={styles.videoContainer}>
-          <YoutubeIframe
-            videoId={verticalKey!}
-            height={SCREEN_HEIGHT}
-            width={SCREEN_WIDTH}
-            play={isActive}
-            mute={false}
-            initialPlayerParams={{
-              controls: 1,
-              rel: 0,
-              modestbranding: 1,
-              loop: 1,
-              playlist: verticalKey,
-            }}
-            webViewStyle={{ backgroundColor: '#000' }}
-            webViewProps={{
-              userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-              allowsInlineMediaPlayback: true,
-              mediaPlaybackRequiresUserAction: false,
-            }}
-          />
-        </View>
+        <WebView
+          style={styles.videoContainer}
+          source={{ html: `<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; background:#000; overflow:hidden; }
+iframe {
+  position:absolute;
+  top:50%; left:50%;
+  /* scale landscape 16:9 to cover portrait screen — crops sides */
+  width:${SCREEN_HEIGHT * (9 / 16)}px;
+  height:${SCREEN_HEIGHT}px;
+  transform:translateX(-50%) translateY(-50%);
+  border:none;
+}
+</style>
+</head>
+<body>
+<iframe
+  src="https://www.youtube.com/embed/${verticalKey}?autoplay=1&playsinline=1&controls=1&loop=1&playlist=${verticalKey}&rel=0&modestbranding=1"
+  allow="autoplay; fullscreen"
+></iframe>
+</body>
+</html>` }}
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        />
       ) : (
         <Image
           source={movie.backdropPath ? { uri: `${TMDB_IMAGE}${movie.backdropPath}` } : undefined}
