@@ -99,7 +99,7 @@ export default function ReelItem({
           webViewProps={{
             allowsInlineMediaPlayback: true,
             mediaPlaybackRequiresUserAction: false,
-            injectedJavaScript: `(function(){var s=document.createElement('style');s.innerHTML='#player,#player iframe,body>iframe{position:absolute!important;top:0!important;left:0!important;width:100%!important;height:100%!important;border:none!important;}';document.head.appendChild(s);})();true;`,
+            injectedJavaScript: `(function(){var s=document.createElement('style');s.innerHTML='html,body{margin:0!important;overflow:hidden!important;height:100%!important;}.container{padding-bottom:0!important;height:100vh!important;width:100vw!important;position:fixed!important;top:0!important;left:0!important;}.video,#player,#player iframe{position:absolute!important;top:0!important;left:0!important;width:100%!important;height:100%!important;border:none!important;}';document.head.appendChild(s);})();true;`,
           }}
         />
       ) : (
