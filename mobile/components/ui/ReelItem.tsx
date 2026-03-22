@@ -8,6 +8,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   View,
   Text,
   StyleSheet,
@@ -66,6 +67,7 @@ export default function ReelItem({
   const router = useRouter();
   const webViewRef = useRef<WebView>(null);
   const [playerReady, setPlayerReady] = useState(false);
+  const playerOpacity = useRef(new Animated.Value(0)).current;
   const primaryProvider = movie.providers?.[0] ?? null;
   const genreLabel = movie.genres.slice(0, 2).map((g) => g.name).join(' · ');
   const runtimeLabel = movie.runtime ? `${movie.runtime}m` : '';
@@ -86,8 +88,15 @@ export default function ReelItem({
     try {
       const msg = JSON.parse(e.nativeEvent.data);
       if (msg.type === 'playerReady') setPlayerReady(true);
+      if (msg.type === 'playerPlaying') {
+        Animated.timing(playerOpacity, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }).start();
+      }
     } catch {}
-  }, []);
+  }, [playerOpacity]);
 
   const handleTap = useCallback(() => {
     router.push(`/movie/${movie.id}`);
@@ -109,19 +118,22 @@ export default function ReelItem({
         placeholder={{ blurhash: 'L00000fQfQfQfQfQfQfQfQfQfQfQ' }}
       />
 
-      {/* WebView always mounted (preloads adjacent items). Starts with autoplay=0 so
-           only the active item plays. JS injection controls play/pause on swipe. */}
+      {/* WebView fades in from opacity 0 when video first starts playing.
+           Backdrop shows through until then — no spinner, no YouTube logo flash. */}
       {videoKey && (
-        <WebView
-          ref={webViewRef}
-          source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=0` }}
-          style={styles.player}
-          allowsInlineMediaPlayback
-          mediaPlaybackRequiresUserAction={false}
-          scrollEnabled={false}
-          bounces={false}
-          onMessage={onMessage}
-        />
+        <Animated.View style={[styles.player, { opacity: playerOpacity }]}>
+          <WebView
+            ref={webViewRef}
+            source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=0` }}
+            style={StyleSheet.absoluteFill}
+            allowsInlineMediaPlayback
+            mediaPlaybackRequiresUserAction={false}
+            scrollEnabled={false}
+            bounces={false}
+            startInLoadingState={false}
+            onMessage={onMessage}
+          />
+        </Animated.View>
       )}
 
       {/* Gradient overlay */}
