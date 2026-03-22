@@ -1,10 +1,9 @@
 /**
- * ReelItem — Full-screen vertical reel (TikTok / Instagram Reels style)
+ * ReelItem — Full-screen vertical reel
  *
- * When isActive=true and the movie has an embeddable verticalTrailerYoutubeKey,
- * plays it full-screen using react-native-youtube-iframe (handles embed auth).
- * Center-crop: scales video to fill SCREEN_HEIGHT, clips overflowing width.
- * Otherwise shows the backdrop image. UI overlay is always on top.
+ * Plays verticalTrailerYoutubeKey (9:16 portrait, embeddable-verified) in a
+ * portrait player that fills the screen. Falls back to backdrop image when
+ * no vertical trailer is available.
  */
 
 import React, { useCallback } from 'react';
@@ -30,13 +29,6 @@ import type { Movie, WatchProvider } from '../../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TMDB_IMAGE = 'https://image.tmdb.org/t/p/w1280';
-
-// YouTube's IFrame player always renders 16:9 regardless of container shape.
-// Give it a 16:9 container that fills SCREEN_HEIGHT — the 9:16 portrait video
-// renders centered (479px wide) inside that 16:9 frame (1514px wide).
-// Center-crop clips the excess width to SCREEN_WIDTH.
-const VIDEO_W = Math.ceil(SCREEN_HEIGHT * (16 / 9));
-const VIDEO_LEFT = -Math.floor((VIDEO_W - SCREEN_WIDTH) / 2);
 
 interface ReelItemProps {
   movie: Movie;
@@ -75,8 +67,10 @@ export default function ReelItem({
   const genreLabel = movie.genres.slice(0, 2).map((g) => g.name).join(' · ');
   const runtimeLabel = movie.runtime ? `${movie.runtime}m` : '';
 
-  // Only use verified-embeddable vertical trailers
-  const videoKey = movie.verticalTrailerYoutubeKey || null;
+  // Only verified-embeddable portrait trailers
+  const videoKey = (movie.verticalTrailerYoutubeKey && movie.verticalTrailerYoutubeKey !== 'NOT_FOUND')
+    ? movie.verticalTrailerYoutubeKey
+    : null;
   const showVideo = isActive && !!videoKey;
 
   const handleTap = useCallback(() => {
@@ -89,34 +83,29 @@ export default function ReelItem({
 
   return (
     <View style={styles.container}>
-      {/* Background: center-cropped YouTube video or backdrop image */}
+
+      {/* Portrait video player — fills the screen */}
       {showVideo ? (
-        // Clip container to screen width — the YoutubeIframe is wider (VIDEO_W)
-        // and offset left so the video is centered. overflow:hidden crops the sides.
-        <View style={styles.videoClip}>
-          <View style={[styles.videoInner, { left: VIDEO_LEFT }]}>
-            <YoutubeIframe
-              videoId={videoKey!}
-              height={SCREEN_HEIGHT}
-              width={VIDEO_W}
-              play={isActive}
-              mute={false}
-              initialPlayerParams={{
-                controls: 1,
-                rel: 0,
-                modestbranding: 1,
-                loop: 1,
-                playlist: videoKey!,
-              }}
-              webViewStyle={{ backgroundColor: '#000' }}
-              webViewProps={{
-                userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-                allowsInlineMediaPlayback: true,
-                mediaPlaybackRequiresUserAction: false,
-              }}
-            />
-          </View>
-        </View>
+        <YoutubeIframe
+          videoId={videoKey!}
+          width={SCREEN_WIDTH}
+          height={SCREEN_HEIGHT}
+          play={isActive}
+          mute={false}
+          initialPlayerParams={{
+            controls: 1,
+            rel: 0,
+            modestbranding: 1,
+            loop: 1,
+            playlist: videoKey!,
+          }}
+          webViewStyle={{ backgroundColor: '#000' }}
+          webViewProps={{
+            userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+            allowsInlineMediaPlayback: true,
+            mediaPlaybackRequiresUserAction: false,
+          }}
+        />
       ) : (
         <Image
           source={movie.backdropPath ? { uri: `${TMDB_IMAGE}${movie.backdropPath}` } : undefined}
@@ -135,7 +124,7 @@ export default function ReelItem({
         pointerEvents="none"
       />
 
-      {/* Tap target — whole screen navigates to detail */}
+      {/* Tap target — navigates to detail */}
       <TouchableOpacity
         activeOpacity={1}
         onPress={handleTap}
@@ -226,22 +215,6 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
     backgroundColor: '#000',
-  },
-  // Clips the wider-than-screen YoutubeIframe to screen width
-  videoClip: {
-    position: 'absolute',
-    top: 0, left: 0,
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
-    overflow: 'hidden',
-    backgroundColor: '#000',
-  },
-  // Inner view is VIDEO_W wide, offset left so video is centred
-  videoInner: {
-    position: 'absolute',
-    top: 0,
-    width: VIDEO_W,
-    height: SCREEN_HEIGHT,
   },
   backdrop: {
     position: 'absolute',
