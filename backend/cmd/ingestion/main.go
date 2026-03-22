@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -1071,9 +1072,14 @@ func runVerticalTrailerIngestion(ctx context.Context, repo *graph.MovieRepositor
 
 			key, err := finder.FindVerticalTrailer(m.Title, year)
 			if err != nil {
+				if errors.Is(err, youtube.ErrQuotaExceeded) {
+					log.Warn().
+						Int64("found", found).Int64("not_found", notFound).
+						Msg("YouTube daily quota exhausted — stopping; remaining movies will be processed tomorrow")
+					return // exit cleanly; do NOT mark remaining movies as NOT_FOUND
+				}
 				log.Error().Err(err).Str("title", m.Title).Msg("vertical trailer search failed")
 				atomic.AddInt64(&errors, 1)
-				// Mark as attempted with empty string so we don't retry endlessly
 				_ = repo.SetVerticalTrailerKey(ctx, int(m.TMDBID), "NOT_FOUND")
 				continue
 			}

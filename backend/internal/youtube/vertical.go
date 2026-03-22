@@ -2,13 +2,18 @@ package youtube
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 	"unicode"
 )
+
+// ErrQuotaExceeded is returned when the YouTube Data API daily quota is exhausted.
+var ErrQuotaExceeded = errors.New("youtube daily quota exceeded")
 
 const (
 	searchURL   = "https://www.googleapis.com/youtube/v3/search"
@@ -52,6 +57,9 @@ func (f *VerticalFinder) FindVerticalTrailer(title string, year int) (string, er
 	for _, q := range queries {
 		candidates, err := f.search(q)
 		if err != nil {
+			if errors.Is(err, ErrQuotaExceeded) {
+				return "", ErrQuotaExceeded // stop immediately, don't burn more quota
+			}
 			continue
 		}
 		for _, id := range candidates {
@@ -83,6 +91,15 @@ func (f *VerticalFinder) search(query string) ([]string, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == 403 || resp.StatusCode == 429 {
+		io.Copy(io.Discard, resp.Body) //nolint:errcheck
+		return nil, ErrQuotaExceeded
+	}
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("youtube search HTTP %d: %s", resp.StatusCode, body)
+	}
 
 	var result struct {
 		Items []struct {
