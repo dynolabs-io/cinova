@@ -15,7 +15,6 @@ import {
   Linking,
   Platform,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import CinovaScore from './CinovaScore';
@@ -26,7 +25,6 @@ import { hapticSuccess, hapticMedium } from '../../services/haptics';
 import type { Movie, WatchProvider } from '../../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const TMDB_IMAGE = 'https://image.tmdb.org/t/p/w1280';
 
 interface ReelItemProps {
   movie: Movie;
@@ -75,15 +73,6 @@ export default function ReelItem({
 
   return (
     <View style={styles.container}>
-
-      {/* Backdrop — shows while video is buffering */}
-      <Image
-        source={movie.backdropPath ? { uri: `${TMDB_IMAGE}${movie.backdropPath}` } : undefined}
-        style={styles.backdrop}
-        contentFit="cover"
-        transition={300}
-        placeholder={{ blurhash: 'L00000fQfQfQfQfQfQfQfQfQfQfQ' }}
-      />
 
       {/* Gradient overlay */}
       <LinearGradient
@@ -183,12 +172,7 @@ const styles = StyleSheet.create({
   container: {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
-    backgroundColor: '#000',
-  },
-  backdrop: {
-    position: 'absolute',
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
+    backgroundColor: 'transparent',
   },
   gradient: {
     position: 'absolute',
