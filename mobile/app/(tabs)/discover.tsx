@@ -75,7 +75,7 @@ function MosaicCard({ movie, style, videoKey, videoW, videoH, savedIds, onSave }
       {showVideo ? (
         <WebView
           style={{ width: videoW, height: videoH, backgroundColor: '#000' }}
-          source={{ html: `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box;}html,body{width:100%;height:100%;background:#000;overflow:hidden;}iframe{width:100%;height:100%;border:none;display:block;}</style></head><body><iframe src="https://www.youtube.com/embed/${videoKey}?autoplay=1&mute=1&controls=0&loop=1&playlist=${videoKey}&rel=0&modestbranding=1&playsinline=1" allow="autoplay; encrypted-media" allowfullscreen></iframe></body></html>` }}
+          source={{ html: `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box;}html,body{width:100%;height:100%;background:#000;overflow:hidden;}iframe{width:100%;height:100%;border:none;display:block;}</style></head><body><iframe src="https://www.youtube.com/embed/${videoKey}?autoplay=1&mute=1&controls=0&loop=1&playlist=${videoKey}&rel=0&modestbranding=1&playsinline=1" allow="autoplay; encrypted-media" allowfullscreen></iframe></body></html>`, baseUrl: 'https://www.youtube.com' }}
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
           javaScriptEnabled
