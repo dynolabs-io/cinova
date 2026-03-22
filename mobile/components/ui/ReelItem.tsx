@@ -17,6 +17,7 @@ import {
   Linking,
   Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
@@ -85,15 +86,29 @@ export default React.memo(function ReelItem({
 
   // Only mount WebView for items near the active one
   const showVideo = shouldLoad && videoKey;
-  const autoplay = isActive ? '1' : '0';
+  // Autoplay ALL preloaded videos so they're already playing when user swipes
+  const posterUri = movie.backdropPath
+    ? `https://image.tmdb.org/t/p/w780${movie.backdropPath}`
+    : movie.posterPath
+      ? `https://image.tmdb.org/t/p/w500${movie.posterPath}`
+      : null;
 
   return (
     <View style={styles.container}>
 
-      {/* Video layer — scrolls with the item */}
+      {/* Poster image — visible while video loads, behind WebView */}
+      {posterUri && (
+        <Image
+          source={{ uri: posterUri }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+        />
+      )}
+
+      {/* Video layer — scrolls with the item, renders on top of poster */}
       {showVideo && (
         <WebView
-          source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=${autoplay}&controls=0&mute=0` }}
+          source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=1&controls=0&mute=0` }}
           style={StyleSheet.absoluteFill}
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
@@ -104,9 +119,6 @@ export default React.memo(function ReelItem({
           pointerEvents="none"
         />
       )}
-
-      {/* Black placeholder when video not loaded */}
-      {!showVideo && <View style={styles.videoPlaceholder} />}
 
       {/* Gradient overlay */}
       <LinearGradient
