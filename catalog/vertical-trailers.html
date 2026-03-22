@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cinova — Vertical Trailer Catalog</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a0a;
+      color: #fff;
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 40px 40px 24px;
+      border-bottom: 1px solid #1f1f1f;
+    }
+
+    header h1 {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #fff;
+    }
+
+    header p {
+      margin-top: 8px;
+      color: #888;
+      font-size: 14px;
+    }
+
+    .stats {
+      display: flex;
+      gap: 32px;
+      margin-top: 20px;
+    }
+
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: #a78bfa;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      padding: 32px 40px;
+    }
+
+    .card {
+      background: #111;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #1f1f1f;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+      position: relative;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: #a78bfa;
+    }
+
+    .thumb-wrap {
+      position: relative;
+      width: 100%;
+      /* 9:16 portrait aspect ratio */
+      aspect-ratio: 9 / 16;
+      background: #1a1a1a;
+      overflow: hidden;
+    }
+
+    .thumb-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .play-btn {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.35);
+      opacity: 0;
+      transition: opacity 0.15s;
+      text-decoration: none;
+    }
+
+    .card:hover .play-btn {
+      opacity: 1;
+    }
+
+    .play-icon {
+      width: 56px;
+      height: 56px;
+      background: rgba(255,255,255,0.9);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .play-icon svg {
+      width: 24px;
+      height: 24px;
+      fill: #0a0a0a;
+      margin-left: 4px;
+    }
+
+    .score-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(167,139,250,0.9);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 99px;
+    }
+
+    .yt-badge {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.7);
+      color: #888;
+      font-size: 10px;
+      font-family: monospace;
+      padding: 3px 7px;
+      border-radius: 6px;
+      border: 1px solid #2a2a2a;
+    }
+
+    .card-body {
+      padding: 12px 14px 14px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.3;
+      margin-bottom: 4px;
+    }
+
+    .card-meta {
+      font-size: 12px;
+      color: #555;
+    }
+
+    .card-links {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: background 0.15s;
+      flex: 1;
+      justify-content: center;
+    }
+
+    .btn-yt {
+      background: #1f1f1f;
+      color: #ccc;
+      border: 1px solid #2a2a2a;
+    }
+
+    .btn-yt:hover {
+      background: #ff0000;
+      color: #fff;
+      border-color: #ff0000;
+    }
+
+    .btn-embed {
+      background: #1f1f1f;
+      color: #ccc;
+      border: 1px solid #2a2a2a;
+    }
+
+    .btn-embed:hover {
+      background: #a78bfa;
+      color: #fff;
+      border-color: #a78bfa;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.92);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal-inner {
+      position: relative;
+      /* 9:16 portrait player */
+      width: min(360px, 90vw);
+      aspect-ratio: 9 / 16;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.8);
+    }
+
+    .modal-inner iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: -44px;
+      right: 0;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 28px;
+      cursor: pointer;
+      line-height: 1;
+      opacity: 0.7;
+    }
+
+    .modal-close:hover { opacity: 1; }
+
+    footer {
+      padding: 24px 40px;
+      border-top: 1px solid #1f1f1f;
+      color: #444;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Cinova — Vertical Trailer Catalog</h1>
+  <p>Portrait 9:16 trailers verified embeddable via YouTube Data API</p>
+  <div class="stats">
+    <div class="stat">
+      <span class="stat-value" id="count">21</span>
+      <span class="stat-label">Vertical Trailers</span>
+    </div>
+    <div class="stat">
+      <span class="stat-value">19,417</span>
+      <span class="stat-label">Total Movies</span>
+    </div>
+    <div class="stat">
+      <span class="stat-value">~20/day</span>
+      <span class="stat-label">Ingestion Rate</span>
+    </div>
+  </div>
+</header>
+
+<div class="grid" id="grid"></div>
+
+<div class="modal-overlay" id="modal" onclick="closeModal(event)">
+  <div class="modal-inner" id="modal-inner">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <iframe id="modal-iframe" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+  </div>
+</div>
+
+<footer>
+  Last updated: 2026-03-22 · Ingestion runs daily at 02:00 UTC · YouTube quota: ~20 verified trailers/day
+</footer>
+
+<script>
+const TMDB = 'https://image.tmdb.org/t/p/w500';
+
+const movies = [
+  { title: "Sinners",                    year: 2025, key: "7qc6UK5xc6Y", poster: "/fWPgbnt2LSqkQ6cdQc0SZN9CpLm.jpg", score: 72.6 },
+  { title: "Marty Supreme",             year: 2025, key: "gWgNv48YfG0", poster: "/lYWEXbQgRTR4ZQleSXAgRbxAjvq.jpg", score: 65.0 },
+  { title: "Zootopia 2",                year: 2025, key: "GuJ60GeX6kQ", poster: "/oJ7g2CifqpStmoYQyaLQgEU32qO.jpg", score: 62.7 },
+  { title: "Predator: Badlands",        year: 2025, key: "K3WBOKrBxQ0", poster: "/erTRAi241eYF4K8KoGGOI8kFPox.jpg", score: 61.8 },
+  { title: "Avatar: Fire and Ash",      year: 2025, key: "dTfeXHR33bU", poster: "/bRBeSHfGHwkEpImlhxPmOcUsaeg.jpg", score: 60.3 },
+  { title: "War Machine",               year: 2017, key: "Yra87k11TKk", poster: "/tlPgDzwIE7VYYIIAGCTUOnN4wI1.jpg", score: 57.2 },
+  { title: "The Rip",                   year: 2026, key: "scKHdrtnRc8", poster: "/eZo31Dhl5BQ6GfbMNf3oU0tUvPZ.jpg", score: 56.9 },
+  { title: "Mercy",                     year: 2025, key: "DMtQBHUhzCQ", poster: "/91gH7E7Jqc2QSuKbp8OWQxbyh1Q.jpg", score: 56.3 },
+  { title: "Hoppers",                   year: 2025, key: "UDsac3vsb8w", poster: "/xjtWQ2CL1mpmMNwuU5HeS4Iuwuu.jpg", score: 56.3 },
+  { title: "Hidden Strike",             year: 2023, key: "IvyQFSK3jeQ", poster: "/zsbolOkw8RhTU4DKOrpf4M7KCmi.jpg", score: 56.3 },
+  { title: "David",                     year: 2025, key: "NHoXL1G2FYA", poster: "/7lFG1WrCwAxBfyGK8ahlBVzXno7.jpg", score: 55.9 },
+  { title: "Project Hail Mary",         year: 2025, key: "L1LzDNsEB1M", poster: "/huVzcVrlK8aiLd240ienleODvWl.jpg", score: 55.8 },
+  { title: "Crime 101",                 year: 2026, key: "SRjzyf5gk_A", poster: "/heMdO64ys1hR896YE2jvTv8JlBX.jpg", score: 55.1 },
+  { title: "Wuthering Heights",         year: 2025, key: "lH-8Kx_ktn4", poster: "/3YBce6dTh1D5oCMITXk2S5QhPt.jpg",  score: 55.0 },
+  { title: "Shelter",                   year: 2026, key: "aAD_gB3etAQ", poster: "/buPFnHZ3xQy6vZEHxbHgL1Pc6CR.jpg", score: 54.8 },
+  { title: "Spider-Man: Brand New Day", year: 2026, key: "ueaPRt4iSns", poster: "/ucQ0QBXXQPSxeUmWfh4YQenIuB9.jpg", score: 54.8 },
+  { title: "Wildcat",                   year: 2025, key: "PFOMWBBMvZY", poster: "/h893ImjM6Fsv5DFhKJdlZFZIJno.jpg", score: 54.7 },
+  { title: "Whistle",                   year: 2025, key: "BwSMd7-EMEo", poster: "/ieOiiCBbf0SNwR39iiA2xnGOnab.jpg", score: 54.5 },
+  { title: "Greenland 2: Migration",    year: 2026, key: "M8Zgso36PVs", poster: "/z2tqCJLsw6uEJ8nJV8BsQXGa3dr.jpg", score: 54.1 },
+  { title: "Anaconda",                  year: 2025, key: "jWg7C7artiQ", poster: "/hBxN6dwrANN1ic3a4G9x6JZcR3C.jpg", score: 49.8 },
+  { title: "War of the Worlds",         year: 2025, key: "tvxxAaX6c14", poster: "/yvirUYrva23IudARHn3mMGVxWqM.jpg", score: 47.7 },
+];
+
+function openModal(key) {
+  document.getElementById('modal-iframe').src =
+    `https://www.youtube.com/embed/${key}?autoplay=1&controls=1&loop=1&playlist=${key}&rel=0&modestbranding=1`;
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal')) return;
+  document.getElementById('modal').classList.remove('open');
+  document.getElementById('modal-iframe').src = '';
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+const grid = document.getElementById('grid');
+
+movies.forEach(m => {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="thumb-wrap">
+      <img src="${TMDB}${m.poster}" alt="${m.title}" loading="lazy"
+           onerror="this.style.display='none'">
+      <a class="play-btn" href="#" onclick="openModal('${m.key}');return false;" title="Play vertical trailer">
+        <div class="play-icon">
+          <svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>
+        </div>
+      </a>
+      <span class="score-badge">${m.score.toFixed(0)}</span>
+      <span class="yt-badge">${m.key}</span>
+    </div>
+    <div class="card-body">
+      <div class="card-title">${m.title}</div>
+      <div class="card-meta">${m.year}</div>
+      <div class="card-links">
+        <a class="btn btn-yt" href="https://www.youtube.com/watch?v=${m.key}" target="_blank" rel="noopener">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.5a3 3 0 0 0-2.1 2.1C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1c.5-1.9.5-5.8.5-5.8s0-3.9-.5-5.8zM9.5 15.6V8.4l6.3 3.6-6.3 3.6z"/></svg>
+          YouTube
+        </a>
+        <a class="btn btn-embed" href="#" onclick="openModal('${m.key}');return false;">
+          ▶ Preview
+        </a>
+      </div>
+    </div>
+  `;
+  grid.appendChild(card);
+});
+</script>
+</body>
+</html>
