@@ -1,11 +1,10 @@
 /**
  * Reels screen — Full-screen vertical swipe feed (TikTok / Instagram Reels style)
  *
- * PersistentPlayer is a sibling to FlatList in the SAME view — required for iOS
- * WKWebView video layer compositing to work correctly.
- *
- * The tab is forced to mount eagerly (lazy:false in _layout) so the WebView starts
- * loading before the user ever taps this tab.
+ * Each ReelItem has its own embedded WebView video player that scrolls with
+ * the list item — giving the Instagram effect where you see both videos
+ * during a half-drag. WebViews are only mounted for items within ±1 of the
+ * active index to keep memory usage low.
  */
 
 import React, { useCallback, useRef, useState } from 'react';
@@ -19,9 +18,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ReelItem from '../../components/ui/ReelItem';
-import PersistentPlayer from '../../components/ui/PersistentPlayer';
 import { getDiscoverFeed, saveTitle, rateTitle, dismissTitle } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
 import { Colors } from '../../constants/theme';
@@ -29,21 +26,13 @@ import type { Movie } from '../../types';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-function validKey(m: Movie | undefined): string | null {
-  if (!m) return null;
-  const k = m.verticalTrailerYoutubeKey;
-  return k && k !== 'NOT_FOUND' ? k : null;
-}
-
 export default function ReelsScreen() {
   const country = useAppStore((s) => s.country);
-  const insets = useSafeAreaInsets();
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [ratings, setRatings] = useState<Record<number, number>>({});
   const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
   const [activeIndex, setActiveIndex] = useState(0);
   const [tabFocused, setTabFocused] = useState(false);
-  const [initialVideoKey, setInitialVideoKey] = useState<string | null>(null);
 
   useFocusEffect(useCallback(() => {
     setTabFocused(true);
@@ -72,15 +61,6 @@ export default function ReelsScreen() {
   const movies: Movie[] = (data?.pages ?? [])
     .flat()
     .filter((m) => !dismissedIds.has(m.id));
-
-  // Set initialVideoKey once when data first arrives
-  if (!initialVideoKey && movies.length > 0) {
-    const k = validKey(movies[0]);
-    if (k) setInitialVideoKey(k);
-  }
-
-  const activeVideoKey = validKey(movies[activeIndex]);
-  console.log('[Reels] activeIndex=', activeIndex, 'activeVideoKey=', activeVideoKey, 'movie=', movies[activeIndex]?.title, 'vtk=', movies[activeIndex]?.verticalTrailerYoutubeKey);
 
   const handleSave = useCallback(async (movie: Movie) => {
     setSavedIds((prev) => new Set(prev).add(movie.id));
@@ -114,23 +94,14 @@ export default function ReelsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* PersistentPlayer must be a sibling to FlatList in the same View for
-          iOS WKWebView video compositing to work correctly */}
-      {initialVideoKey && (
-        <PersistentPlayer
-          initialVideoKey={initialVideoKey}
-          videoKey={activeVideoKey}
-          playing={tabFocused}
-        />
-      )}
-
       <FlatList
         data={movies}
         keyExtractor={(item, i) => `${item.id}-${i}`}
         renderItem={({ item, index }) => (
           <ReelItem
             movie={item}
-            isActive={index === activeIndex}
+            isActive={index === activeIndex && tabFocused}
+            shouldLoad={Math.abs(index - activeIndex) <= 1 && tabFocused}
             isSaved={savedIds.has(item.id)}
             userRating={ratings[item.id]}
             onSave={handleSave}

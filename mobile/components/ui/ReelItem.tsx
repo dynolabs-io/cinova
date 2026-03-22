@@ -1,8 +1,10 @@
 /**
- * ReelItem — content overlay for a single reel.
+ * ReelItem — single reel with embedded video player.
  *
- * Video is handled by PersistentPlayer (one shared WebView for the whole screen).
- * This component renders only: backdrop image, gradient, tap target, score, actions.
+ * Each ReelItem owns its own WebView. The parent only mounts WebViews for
+ * items within ±1 of the active index (`shouldLoad` prop), keeping memory low.
+ * Because the WebView is INSIDE the FlatList item, it scrolls naturally with
+ * the list — giving the Instagram-style half-drag two-video-visible effect.
  */
 
 import React, { useCallback } from 'react';
@@ -16,6 +18,7 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
 import CinovaScore from './CinovaScore';
 import StreamingBadge from './StreamingBadge';
@@ -25,15 +28,22 @@ import { hapticSuccess, hapticMedium } from '../../services/haptics';
 import type { Movie, WatchProvider } from '../../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const EMBED_BASE = 'https://api.cinova.openova.io/api/v1/embed';
 
 interface ReelItemProps {
   movie: Movie;
   isActive?: boolean;
+  shouldLoad?: boolean;
   onSave?: (movie: Movie) => void;
   onRate?: (movie: Movie) => void;
   onDismiss?: (movie: Movie) => void;
   isSaved?: boolean;
   userRating?: number;
+}
+
+function getVideoKey(movie: Movie): string | null {
+  const k = movie.verticalTrailerYoutubeKey;
+  return k && k !== 'NOT_FOUND' ? k : null;
 }
 
 async function watchOnProvider(provider: WatchProvider, movieId: number): Promise<void> {
@@ -49,9 +59,10 @@ async function watchOnProvider(provider: WatchProvider, movieId: number): Promis
   if (provider.link) await Linking.openURL(provider.link);
 }
 
-export default function ReelItem({
+export default React.memo(function ReelItem({
   movie,
   isActive = false,
+  shouldLoad = false,
   onSave,
   onRate,
   onDismiss,
@@ -62,6 +73,7 @@ export default function ReelItem({
   const primaryProvider = movie.providers?.[0] ?? null;
   const genreLabel = movie.genres.slice(0, 2).map((g) => g.name).join(' · ');
   const runtimeLabel = movie.runtime ? `${movie.runtime}m` : '';
+  const videoKey = getVideoKey(movie);
 
   const handleTap = useCallback(() => {
     router.push(`/movie/${movie.id}`);
@@ -71,8 +83,30 @@ export default function ReelItem({
     if (primaryProvider) await watchOnProvider(primaryProvider, movie.tmdbId);
   }, [primaryProvider, movie.tmdbId]);
 
+  // Only mount WebView for items near the active one
+  const showVideo = shouldLoad && videoKey;
+  const autoplay = isActive ? '1' : '0';
+
   return (
     <View style={styles.container}>
+
+      {/* Video layer — scrolls with the item */}
+      {showVideo && (
+        <WebView
+          source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=${autoplay}&controls=0&mute=0` }}
+          style={StyleSheet.absoluteFill}
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          scrollEnabled={false}
+          bounces={false}
+          startInLoadingState={false}
+          renderLoading={() => <View style={styles.videoPlaceholder} />}
+          pointerEvents="none"
+        />
+      )}
+
+      {/* Black placeholder when video not loaded */}
+      {!showVideo && <View style={styles.videoPlaceholder} />}
 
       {/* Gradient overlay */}
       <LinearGradient
@@ -148,7 +182,7 @@ export default function ReelItem({
       </View>
     </View>
   );
-}
+});
 
 interface ActionButtonProps {
   label: string;
@@ -172,7 +206,11 @@ const styles = StyleSheet.create({
   container: {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
-    backgroundColor: 'transparent',
+    backgroundColor: '#000',
+  },
+  videoPlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
   },
   gradient: {
     position: 'absolute',
