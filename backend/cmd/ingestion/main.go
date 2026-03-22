@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -1048,7 +1047,7 @@ func runVerticalTrailerIngestion(ctx context.Context, repo *graph.MovieRepositor
 	// We use a rate limiter: 1 movie per 5 seconds to stay well within quota.
 	limiter := rate.NewLimiter(rate.Every(5*time.Second), 1)
 
-	var found, notFound, errors int64
+	var found, notFound, errCount int64
 
 	for {
 		movies, err := repo.GetMoviesWithoutVerticalTrailer(ctx, batchSize)
@@ -1056,7 +1055,7 @@ func runVerticalTrailerIngestion(ctx context.Context, repo *graph.MovieRepositor
 			log.Fatal().Err(err).Msg("GetMoviesWithoutVerticalTrailer failed")
 		}
 		if len(movies) == 0 {
-			log.Info().Int64("found", found).Int64("not_found", notFound).Int64("errors", errors).Msg("vertical trailer ingestion complete")
+			log.Info().Int64("found", found).Int64("not_found", notFound).Int64("errors", errCount).Msg("vertical trailer ingestion complete")
 			return
 		}
 
@@ -1072,14 +1071,14 @@ func runVerticalTrailerIngestion(ctx context.Context, repo *graph.MovieRepositor
 
 			key, err := finder.FindVerticalTrailer(m.Title, year)
 			if err != nil {
-				if errors.Is(err, youtube.ErrQuotaExceeded) {
+				if err == youtube.ErrQuotaExceeded {
 					log.Warn().
 						Int64("found", found).Int64("not_found", notFound).
 						Msg("YouTube daily quota exhausted — stopping; remaining movies will be processed tomorrow")
 					return // exit cleanly; do NOT mark remaining movies as NOT_FOUND
 				}
 				log.Error().Err(err).Str("title", m.Title).Msg("vertical trailer search failed")
-				atomic.AddInt64(&errors, 1)
+				atomic.AddInt64(&errCount, 1)
 				_ = repo.SetVerticalTrailerKey(ctx, int(m.TMDBID), "NOT_FOUND")
 				continue
 			}
@@ -1087,14 +1086,13 @@ func runVerticalTrailerIngestion(ctx context.Context, repo *graph.MovieRepositor
 			if key == "" {
 				log.Debug().Str("title", m.Title).Int("year", year).Msg("no vertical trailer found")
 				atomic.AddInt64(&notFound, 1)
-				// Mark as attempted so we skip on next run
 				_ = repo.SetVerticalTrailerKey(ctx, int(m.TMDBID), "NOT_FOUND")
 				continue
 			}
 
 			if err := repo.SetVerticalTrailerKey(ctx, int(m.TMDBID), key); err != nil {
 				log.Error().Err(err).Str("title", m.Title).Str("key", key).Msg("failed to save vertical trailer key")
-				atomic.AddInt64(&errors, 1)
+				atomic.AddInt64(&errCount, 1)
 				continue
 			}
 
