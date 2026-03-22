@@ -14,6 +14,10 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { StyleSheet, Dimensions, View } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 
+// Only show the black buffering overlay if the video hasn't started within this window.
+// Cached / previously-seen videos typically play within 200ms so the overlay never appears.
+const BUFFERING_OVERLAY_DELAY_MS = 300;
+
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const EMBED_BASE = 'https://api.cinova.openova.io/api/v1/embed';
 
@@ -30,9 +34,22 @@ export default function PersistentPlayer({ initialVideoKey, videoKey, playing }:
   // Start with initialVideoKey — YouTube player already has this loaded from URL
   const currentKeyRef = useRef<string | null>(initialVideoKey);
   const playingRef = useRef(playing);
+  const bufferingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [buffering, setBuffering] = useState(true);
 
+  const showBufferingAfterDelay = useCallback(() => {
+    if (bufferingTimerRef.current) clearTimeout(bufferingTimerRef.current);
+    bufferingTimerRef.current = setTimeout(() => setBuffering(true), BUFFERING_OVERLAY_DELAY_MS);
+  }, []);
+
+  const cancelBuffering = useCallback(() => {
+    if (bufferingTimerRef.current) clearTimeout(bufferingTimerRef.current);
+    setBuffering(false);
+  }, []);
+
   useEffect(() => { playingRef.current = playing; }, [playing]);
+
+  useEffect(() => () => { if (bufferingTimerRef.current) clearTimeout(bufferingTimerRef.current); }, []);
 
   const onMessage = useCallback((e: WebViewMessageEvent) => {
     try {
@@ -43,7 +60,7 @@ export default function PersistentPlayer({ initialVideoKey, videoKey, playing }:
         if (key && key !== currentKeyRef.current) {
           // A different video was queued while the player was initialising
           currentKeyRef.current = key;
-          setBuffering(true);
+          showBufferingAfterDelay();
           webViewRef.current?.injectJavaScript(
             `player.loadVideoById('${key}'); ${playingRef.current ? 'player.playVideo();' : ''} true;`
           );
@@ -56,7 +73,7 @@ export default function PersistentPlayer({ initialVideoKey, videoKey, playing }:
           if (k) webViewRef.current?.injectJavaScript(`player.cueVideoById('${k}'); true;`);
         }
       } else if (msg.type === 'playerPlaying') {
-        setBuffering(false);
+        cancelBuffering();
       }
     } catch {}
   }, []);
@@ -73,9 +90,9 @@ export default function PersistentPlayer({ initialVideoKey, videoKey, playing }:
       return;
     }
 
-    // Different video — switch and show buffering overlay until playing
+    // Different video — schedule overlay (only shows if buffering takes > 300ms)
     currentKeyRef.current = videoKey;
-    setBuffering(true);
+    showBufferingAfterDelay();
     webViewRef.current?.injectJavaScript(
       `player.loadVideoById('${videoKey}'); ${playing ? 'player.playVideo();' : 'player.pauseVideo();'} true;`
     );
