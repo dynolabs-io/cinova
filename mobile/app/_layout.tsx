@@ -23,6 +23,22 @@ import * as SplashScreen from 'expo-splash-screen';
 import { initSession } from '../services/session';
 import { useAppStore } from '../store/useAppStore';
 import { Colors } from '../constants/theme';
+import PersistentPlayer from '../components/ui/PersistentPlayer';
+
+// Renders PersistentPlayer outside the tab navigator so it loads before Reels tab is tapped
+function ReelsPlayerPortal() {
+  const reelsInitialKey = useAppStore((s) => s.reelsInitialKey);
+  const reelsActiveKey = useAppStore((s) => s.reelsActiveKey);
+  const reelsPlaying = useAppStore((s) => s.reelsPlaying);
+  if (!reelsInitialKey) return null;
+  return (
+    <PersistentPlayer
+      initialVideoKey={reelsInitialKey}
+      videoKey={reelsActiveKey}
+      playing={reelsPlaying}
+    />
+  );
+}
 
 // Keep splash visible until fonts + session are ready
 SplashScreen.preventAutoHideAsync();
@@ -65,6 +81,8 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <StatusBar style="light" backgroundColor={Colors.background} />
+          {/* Pre-loaded before Reels tab is tapped — sits behind the Stack navigator */}
+          <ReelsPlayerPortal />
           <Stack
             screenOptions={{
               headerShown: false,

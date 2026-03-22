@@ -19,6 +19,11 @@ interface AppState {
 
   // UI state
   hasOnboarded: boolean;
+
+  // Reels player (non-persisted — reset on app restart)
+  reelsInitialKey: string | null;
+  reelsActiveKey: string | null;
+  reelsPlaying: boolean;
 }
 
 interface AppActions {
@@ -28,6 +33,9 @@ interface AppActions {
   setSessionId: (sessionId: string) => void;
   setHasOnboarded: (value: boolean) => void;
   logout: () => void;
+  setReelsInitialKey: (key: string | null) => void;
+  setReelsActiveKey: (key: string | null) => void;
+  setReelsPlaying: (playing: boolean) => void;
 }
 
 const initialState: AppState = {
@@ -37,6 +45,9 @@ const initialState: AppState = {
   country: 'US',
   scoringPreset: 'mainstream',
   hasOnboarded: false,
+  reelsInitialKey: null,
+  reelsActiveKey: null,
+  reelsPlaying: false,
 };
 
 export const useAppStore = create<AppState & AppActions>()(
@@ -64,6 +75,10 @@ export const useAppStore = create<AppState & AppActions>()(
           isAnonymous: true,
           // Keep sessionId and country — those survive logout
         }),
+
+      setReelsInitialKey: (key) => set({ reelsInitialKey: key }),
+      setReelsActiveKey: (key) => set({ reelsActiveKey: key }),
+      setReelsPlaying: (playing) => set({ reelsPlaying: playing }),
     }),
     {
       name: 'cinova-app-store',

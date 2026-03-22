@@ -14,6 +14,7 @@ import TabIcon from '../../components/ui/TabIcon';
 import { Colors, Layout } from '../../constants/theme';
 import { getDiscoverFeed } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
+import type { Movie } from '../../types';
 
 
 function ChatFAB() {
@@ -36,16 +37,27 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const country = useAppStore((s) => s.country);
+  const setReelsInitialKey = useAppStore((s) => s.setReelsInitialKey);
 
-  // Prefetch first page of reels immediately so data is ready before user taps the tab
+  // Prefetch reels data and prime the persistent video player before user taps Reels tab
   useEffect(() => {
     queryClient.prefetchInfiniteQuery({
       queryKey: ['reels-feed', country],
       queryFn: ({ pageParam = 1 }) => getDiscoverFeed(country, pageParam as number),
       initialPageParam: 1,
       pages: 1,
+    }).then(() => {
+      if (useAppStore.getState().reelsInitialKey) return; // already set
+      const cached = queryClient.getQueryData<{ pages: Movie[][] }>(['reels-feed', country]);
+      const movies = cached?.pages?.flat() ?? [];
+      const first = movies.find(
+        (m) => m.verticalTrailerYoutubeKey && m.verticalTrailerYoutubeKey !== 'NOT_FOUND'
+      );
+      if (first?.verticalTrailerYoutubeKey) {
+        setReelsInitialKey(first.verticalTrailerYoutubeKey);
+      }
     });
-  }, [queryClient, country]);
+  }, [queryClient, country, setReelsInitialKey]);
 
   return (
     <View style={{ flex: 1 }}>

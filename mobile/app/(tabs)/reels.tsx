@@ -1,12 +1,12 @@
 /**
  * Reels screen — Full-screen vertical swipe feed (TikTok / Instagram Reels style)
  *
- * Video is handled by a single PersistentPlayer WebView that stays alive for the
- * whole session. Switching reels injects player.loadVideoById() — no per-video
- * WebView initialization overhead after the first load.
+ * PersistentPlayer is mounted in the root layout (_layout.tsx) so the video
+ * starts buffering before the user ever taps this tab. This screen just controls
+ * play/pause and the active video key via the app store.
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -19,7 +19,6 @@ import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ReelItem from '../../components/ui/ReelItem';
-import PersistentPlayer from '../../components/ui/PersistentPlayer';
 import { getDiscoverFeed, saveTitle, rateTitle, dismissTitle } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
 import { Colors } from '../../constants/theme';
@@ -35,20 +34,19 @@ function validKey(m: Movie | undefined): string | null {
 
 export default function ReelsScreen() {
   const country = useAppStore((s) => s.country);
+  const setReelsActiveKey = useAppStore((s) => s.setReelsActiveKey);
+  const setReelsPlaying = useAppStore((s) => s.setReelsPlaying);
   const insets = useSafeAreaInsets();
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [ratings, setRatings] = useState<Record<number, number>>({});
   const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
   const [activeIndex, setActiveIndex] = useState(0);
-  const [tabFocused, setTabFocused] = useState(false);
 
-  // initialVideoKey is set once (first non-null key) — the WebView URL never changes
-  const [initialVideoKey, setInitialVideoKey] = useState<string | null>(null);
-
+  // Play when tab focused, pause when leaving
   useFocusEffect(useCallback(() => {
-    setTabFocused(true);
-    return () => setTabFocused(false);
-  }, []));
+    setReelsPlaying(true);
+    return () => setReelsPlaying(false);
+  }, [setReelsPlaying]));
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 60 });
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -73,13 +71,12 @@ export default function ReelsScreen() {
     .flat()
     .filter((m) => !dismissedIds.has(m.id));
 
-  // Set initialVideoKey once when data first arrives
-  if (!initialVideoKey && movies.length > 0) {
-    const k = validKey(movies[0]);
-    if (k) setInitialVideoKey(k);
-  }
-
   const activeVideoKey = validKey(movies[activeIndex]);
+
+  // Keep PersistentPlayer (in root layout) in sync with the active video
+  useEffect(() => {
+    setReelsActiveKey(activeVideoKey);
+  }, [activeVideoKey, setReelsActiveKey]);
 
   const handleSave = useCallback(async (movie: Movie) => {
     setSavedIds((prev) => new Set(prev).add(movie.id));
@@ -113,16 +110,6 @@ export default function ReelsScreen() {
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
-
-      {/* Single persistent video player — always behind the FlatList content */}
-      {initialVideoKey && (
-        <PersistentPlayer
-          initialVideoKey={initialVideoKey}
-          videoKey={activeVideoKey}
-          playing={tabFocused}
-        />
-      )}
-
       <FlatList
         data={movies}
         keyExtractor={(item, i) => `${item.id}-${i}`}
@@ -160,7 +147,7 @@ export default function ReelsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: 'transparent',
   },
   loading: {
     flex: 1,
