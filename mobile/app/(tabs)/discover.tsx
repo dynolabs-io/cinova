@@ -82,6 +82,7 @@ function MosaicCard({ movie, style, videoKey, videoW, videoH, savedIds, onSave }
           scrollEnabled={false}
           bounces={false}
           onError={() => setVideoFailed(true)}
+          injectedJavaScript="setTimeout(function(){var f=document.getElementById('yt');if(f)f.contentWindow.postMessage(JSON.stringify({event:'command',func:'playVideo',args:[]}),'*');},800);true;"
         />
       ) : (
         <Image
