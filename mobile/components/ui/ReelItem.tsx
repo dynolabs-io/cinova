@@ -7,7 +7,7 @@
  * the list — giving the Instagram-style half-drag two-video-visible effect.
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -71,6 +71,8 @@ export default React.memo(function ReelItem({
   userRating,
 }: ReelItemProps) {
   const router = useRouter();
+  const webViewRef = useRef<WebView>(null);
+  const readyRef = useRef(false);
   const primaryProvider = movie.providers?.[0] ?? null;
   const genreLabel = movie.genres.slice(0, 2).map((g) => g.name).join(' · ');
   const runtimeLabel = movie.runtime ? `${movie.runtime}m` : '';
@@ -84,9 +86,28 @@ export default React.memo(function ReelItem({
     if (primaryProvider) await watchOnProvider(primaryProvider, movie.tmdbId);
   }, [primaryProvider, movie.tmdbId]);
 
-  // Only mount WebView for items near the active one
+  // Play/pause when isActive changes
+  useEffect(() => {
+    if (!readyRef.current) return;
+    webViewRef.current?.injectJavaScript(
+      isActive ? 'playAll(); true;' : 'pauseAll(); true;'
+    );
+  }, [isActive]);
+
+  const onMessage = useCallback((e: any) => {
+    try {
+      const msg = JSON.parse(e.nativeEvent.data);
+      if (msg.type === 'playerReady') {
+        readyRef.current = true;
+        // Only autoplay if this is the active item
+        if (isActive) {
+          webViewRef.current?.injectJavaScript('playAll(); true;');
+        }
+      }
+    } catch {}
+  }, [isActive]);
+
   const showVideo = shouldLoad && videoKey;
-  // Autoplay ALL preloaded videos so they're already playing when user swipes
   const posterUri = movie.backdropPath
     ? `https://image.tmdb.org/t/p/w780${movie.backdropPath}`
     : movie.posterPath
@@ -105,10 +126,11 @@ export default React.memo(function ReelItem({
         />
       )}
 
-      {/* Video layer — scrolls with the item, renders on top of poster */}
+      {/* Video layer — loads with autoplay=0, play/pause controlled via JS */}
       {showVideo && (
         <WebView
-          source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=1&controls=0&mute=0` }}
+          ref={webViewRef}
+          source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=0&controls=0&mute=0` }}
           style={StyleSheet.absoluteFill}
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
@@ -116,6 +138,7 @@ export default React.memo(function ReelItem({
           bounces={false}
           startInLoadingState={false}
           renderLoading={() => <View style={styles.videoPlaceholder} />}
+          onMessage={onMessage}
           pointerEvents="none"
         />
       )}
