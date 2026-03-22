@@ -77,7 +77,9 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 		`<script>` +
 		`var player,ov,firstPlay=true;` +
 		`var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);` +
-		`function switchVideo(key){if(player&&player.loadVideoById){player.loadVideoById(key);}}` +
+		`function switchVideo(key){` +
+		`if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'switchVideo',key:key,hasPlayer:!!player,hasLoad:!!(player&&player.loadVideoById)}));}` +
+		`if(player&&player.loadVideoById){player.loadVideoById(key);firstPlay=true;ov.style.opacity='1';}}` +
 		`function pauseAll(){if(player&&player.pauseVideo){player.pauseVideo();}}` +
 		`function playAll(){if(player&&player.playVideo){player.playVideo();}}` +
 		`function onYouTubeIframeAPIReady(){` +
