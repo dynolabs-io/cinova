@@ -10,12 +10,15 @@
 import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
+  Text,
   StyleSheet,
   Dimensions,
   FlatList,
   ActivityIndicator,
   ViewToken,
 } from 'react-native';
+
+const BUILD_VERSION = 'v12-522a330';
 import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import ReelItem from '../../components/ui/ReelItem';
@@ -94,6 +97,11 @@ export default function ReelsScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={{ position: 'absolute', top: 50, left: 0, right: 0, zIndex: 9999, alignItems: 'center' }}>
+        <Text style={{ color: '#0f0', fontSize: 12, fontWeight: '800', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 4 }}>
+          {BUILD_VERSION}
+        </Text>
+      </View>
       <FlatList
         data={movies}
         keyExtractor={(item, i) => `${item.id}-${i}`}
