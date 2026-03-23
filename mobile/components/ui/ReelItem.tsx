@@ -17,6 +17,7 @@ import {
   Linking,
   Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
@@ -123,11 +124,28 @@ export default React.memo(function ReelItem({
   }, []);
 
   const showVideo = shouldLoad && videoKey;
+  // Show YouTube thumbnail for videos that haven't played yet
+  const thumbUri = videoKey ? `https://img.youtube.com/vi/${videoKey}/maxresdefault.jpg` : null;
+  // Track if this video has ever reached PLAYING state
+  const hasPlayedRef = useRef(false);
+  if (debugState === 'PLAYING' || debugState === 'MUTE+PAUSE' || debugState === 'PAUSING_AT_FRAME') {
+    hasPlayedRef.current = true;
+  }
 
   return (
     <View style={styles.container}>
 
-      {/* Video: autoplay=1&mute=1 for all — plays silently, paused at real frame if not active */}
+      {/* YouTube thumbnail — shows for videos that haven't played yet */}
+      {thumbUri && !hasPlayedRef.current && (
+        <Image
+          source={{ uri: thumbUri }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          priority="high"
+        />
+      )}
+
+      {/* WebView video player — on top of thumbnail */}
       {showVideo && (
         <WebView
           ref={webViewRef}
