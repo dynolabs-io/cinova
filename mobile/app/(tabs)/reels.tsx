@@ -1,12 +1,12 @@
 /**
- * Reels screen — Full-screen vertical swipe feed
+ * Reels screen — Single WebView player with gesture swipe
  *
- * All WebViews at top:0, no transform — all visible to iOS.
- * Active = high zIndex. Swipe animates ONLY the current slide away,
- * revealing the next one already underneath.
+ * One WebView stays on screen permanently. On swipe, we call
+ * switchVideo(key) to load the next video in the same player.
+ * No WebView remounting, no iOS autoplay restrictions.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -22,19 +22,27 @@ import Animated, {
   runOnJS,
   Easing,
 } from 'react-native-reanimated';
+import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
 
-const BUILD_VERSION = 'v20-flat';
+const BUILD_VERSION = 'v21-single';
 import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import ReelItem from '../../components/ui/ReelItem';
 import { getDiscoverFeed, saveTitle, rateTitle, dismissTitle } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
-import { Colors } from '../../constants/theme';
+import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
+import CinovaScore from '../../components/ui/CinovaScore';
+import StreamingBadge from '../../components/ui/StreamingBadge';
 import type { Movie } from '../../types';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const EMBED_BASE = 'https://api.cinova.openova.io/api/v1/embed';
 const SWIPE_THRESHOLD = SCREEN_HEIGHT * 0.15;
+
+function getVideoKey(movie: Movie): string | null {
+  const k = movie.verticalTrailerYoutubeKey;
+  return k && k !== 'NOT_FOUND' ? k : null;
+}
 
 export default function ReelsScreen() {
   const router = useRouter();
@@ -44,6 +52,10 @@ export default function ReelsScreen() {
   const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
   const [activeIndex, setActiveIndex] = useState(0);
   const [tabFocused, setTabFocused] = useState(false);
+  const [playerReady, setPlayerReady] = useState(false);
+  const [debugState, setDebugState] = useState('INIT');
+
+  const webViewRef = useRef<WebView>(null);
 
   useFocusEffect(useCallback(() => {
     setTabFocused(true);
@@ -84,73 +96,86 @@ export default function ReelsScreen() {
     try { await dismissTitle(movie.tmdbId); } catch {}
   }, []);
 
-  // --- Swipe state ---
-  const dragY = useSharedValue(0);
-  const swiping = useSharedValue(false);
-  const activeRef = useSharedValue(0);
+  // WebView message handler
+  const onMessage = useCallback((e: any) => {
+    try {
+      const msg = JSON.parse(e.nativeEvent.data);
+      if (msg.type === 'playerReady') {
+        setPlayerReady(true);
+        setDebugState('READY');
+      }
+      if (msg.type === 'playerPlaying') {
+        setDebugState(`PLAYING:${msg.videoKey?.slice(0, 6) || '?'}`);
+      }
+    } catch {}
+  }, []);
 
-  const finishSwipe = useCallback((nextIdx: number) => {
+  // --- Swipe logic ---
+  const activeRef = useSharedValue(0);
+  const overlayY = useSharedValue(0);
+
+  const switchTo = useCallback((nextIdx: number) => {
+    const movie = movies[nextIdx];
+    if (!movie) return;
+    const key = getVideoKey(movie);
+    if (!key) return;
     activeRef.value = nextIdx;
     setActiveIndex(nextIdx);
-    dragY.value = 0;
-    swiping.value = false;
-  }, [activeRef, dragY, swiping]);
+    overlayY.value = 0;
+    // Switch video in the existing player
+    webViewRef.current?.injectJavaScript(`switchVideo('${key}'); true;`);
+    setDebugState(`SWITCH:${key.slice(0, 6)}`);
+  }, [movies, activeRef, overlayY]);
 
-  const cancelSwipe = useCallback(() => {
-    dragY.value = 0;
-    swiping.value = false;
-  }, [dragY, swiping]);
-
-  const navigateToMovie = useCallback((idx: number) => {
-    if (movies[idx]) {
-      router.push(`/movie/${movies[idx].id}`);
-    }
-  }, [movies, router]);
+  const snapBack = useCallback(() => {
+    overlayY.value = 0;
+  }, [overlayY]);
 
   const pan = Gesture.Pan()
     .activeOffsetY([-10, 10])
-    .onStart(() => {
-      swiping.value = true;
-    })
     .onUpdate((e) => {
-      dragY.value = e.translationY;
+      overlayY.value = e.translationY;
     })
     .onEnd((e) => {
       const idx = activeRef.value;
       const len = movies.length;
 
       if (e.translationY < -SWIPE_THRESHOLD && idx < len - 1) {
-        // Swipe up — go to next
-        dragY.value = withTiming(-SCREEN_HEIGHT, {
+        // Swipe up → next
+        overlayY.value = withTiming(-SCREEN_HEIGHT, {
           duration: 200,
           easing: Easing.out(Easing.cubic),
         }, () => {
-          runOnJS(finishSwipe)(idx + 1);
+          runOnJS(switchTo)(idx + 1);
         });
       } else if (e.translationY > SWIPE_THRESHOLD && idx > 0) {
-        // Swipe down — go to prev
-        dragY.value = withTiming(SCREEN_HEIGHT, {
+        // Swipe down → prev
+        overlayY.value = withTiming(SCREEN_HEIGHT, {
           duration: 200,
           easing: Easing.out(Easing.cubic),
         }, () => {
-          runOnJS(finishSwipe)(idx - 1);
+          runOnJS(switchTo)(idx - 1);
         });
       } else {
-        // Snap back
-        dragY.value = withTiming(0, { duration: 150 }, () => {
-          runOnJS(cancelSwipe)();
-        });
+        overlayY.value = withTiming(0, { duration: 150 });
       }
     });
 
   const tap = Gesture.Tap()
     .onEnd(() => {
-      runOnJS(navigateToMovie)(activeRef.value);
+      const idx = activeRef.value;
+      const movie = movies[idx];
+      if (movie) runOnJS(router.push)(`/movie/${movie.id}`);
     });
 
   const gesture = Gesture.Race(pan, tap);
 
-  if (isLoading) {
+  // Animated overlay style (movie info moves with swipe)
+  const overlayStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: overlayY.value }],
+  }));
+
+  if (isLoading || movies.length === 0) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={Colors.primary} size="large" />
@@ -158,33 +183,67 @@ export default function ReelsScreen() {
     );
   }
 
+  const firstKey = getVideoKey(movies[0]);
+  const currentMovie = movies[activeIndex];
+  const genreLabel = currentMovie?.genres.slice(0, 2).map((g: any) => g.name).join(' · ') || '';
+  const runtimeLabel = currentMovie?.runtime ? `${currentMovie.runtime}m` : '';
+
   return (
     <View style={styles.container}>
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>
-          {BUILD_VERSION} | idx={activeIndex} | {movies.length} vids
-        </Text>
-      </View>
-
-      {/* All WebViews at top:0 — truly overlapping, all visible to iOS */}
-      {movies.map((movie, index) => (
-        <ReelSlide
-          key={movie.id}
-          movie={movie}
-          index={index}
-          activeIndex={activeIndex}
-          dragY={dragY}
-          swiping={swiping}
-          tabFocused={tabFocused}
-          savedIds={savedIds}
-          ratings={ratings}
-          onSave={handleSave}
-          onRate={handleRate}
-          onDismiss={handleDismiss}
+      {/* Single WebView — always on screen, never remounted */}
+      {firstKey && (
+        <WebView
+          ref={webViewRef}
+          source={{ uri: `${EMBED_BASE}/${firstKey}?autoplay=1&controls=0&mute=1` }}
+          style={StyleSheet.absoluteFill}
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          scrollEnabled={false}
+          bounces={false}
+          startInLoadingState={false}
+          onMessage={onMessage}
+          pointerEvents="none"
         />
-      ))}
+      )}
 
-      {/* Gesture layer on top of everything */}
+      {/* Animated overlay with movie info — moves on swipe */}
+      <Animated.View style={[StyleSheet.absoluteFill, overlayStyle]} pointerEvents="none">
+        {/* Debug badges */}
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>
+            {BUILD_VERSION} | idx={activeIndex} | {debugState}
+          </Text>
+        </View>
+
+        {/* CinovaScore */}
+        {currentMovie?.cinovaScore != null && (
+          <View style={styles.scoreContainer}>
+            <CinovaScore score={currentMovie.cinovaScore} size="md" />
+          </View>
+        )}
+
+        {/* Bottom content */}
+        <View style={styles.bottomContent}>
+          {currentMovie?.providers && currentMovie.providers.length > 0 && (
+            <View style={styles.providerRow}>
+              {currentMovie.providers.slice(0, 4).map((p: any, i: number) => (
+                <StreamingBadge key={`${p.providerId}-${i}`} provider={p} variant="icon" size={32} />
+              ))}
+            </View>
+          )}
+          <Text style={styles.title} numberOfLines={2}>{currentMovie?.title}</Text>
+          <Text style={styles.meta}>
+            {[currentMovie?.year, genreLabel, runtimeLabel].filter(Boolean).join(' · ')}
+          </Text>
+          {(currentMovie?.cinovaSynopsis ?? currentMovie?.aiDescription ?? currentMovie?.overview) ? (
+            <Text style={styles.synopsis} numberOfLines={2}>
+              {currentMovie.cinovaSynopsis ?? currentMovie.aiDescription ?? currentMovie.overview}
+            </Text>
+          ) : null}
+        </View>
+      </Animated.View>
+
+      {/* Gesture layer on top */}
       <GestureDetector gesture={gesture}>
         <Animated.View style={styles.gestureLayer} />
       </GestureDetector>
@@ -192,69 +251,16 @@ export default function ReelsScreen() {
   );
 }
 
-// Separate component so each slide gets its own animated style
-function ReelSlide({
-  movie, index, activeIndex, dragY, swiping, tabFocused,
-  savedIds, ratings, onSave, onRate, onDismiss,
-}: any) {
-  const isCurrent = index === activeIndex;
-  const isNext = index === activeIndex + 1;
-  const isPrev = index === activeIndex - 1;
-
-  const animStyle = useAnimatedStyle(() => {
-    if (isCurrent && swiping.value) {
-      // Current slide moves with drag
-      return { transform: [{ translateY: dragY.value }], zIndex: 10 };
-    }
-    if (isCurrent) {
-      return { transform: [{ translateY: 0 }], zIndex: 10 };
-    }
-    if (isNext) {
-      // Next slide sits underneath, no transform
-      return { transform: [{ translateY: 0 }], zIndex: 5 };
-    }
-    if (isPrev) {
-      // Prev slide sits underneath, no transform
-      return { transform: [{ translateY: 0 }], zIndex: 5 };
-    }
-    // All others: still at top:0 but behind everything
-    return { transform: [{ translateY: 0 }], zIndex: 1 };
-  });
-
-  return (
-    <Animated.View style={[styles.slide, animStyle]}>
-      <ReelItem
-        movie={movie}
-        isActive={isCurrent && tabFocused}
-        shouldLoad={tabFocused}
-        isSaved={savedIds.has(movie.id)}
-        userRating={ratings[movie.id]}
-        onSave={onSave}
-        onRate={onRate}
-        onDismiss={onDismiss}
-      />
-    </Animated.View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-    overflow: 'hidden',
+    backgroundColor: '#000',
   },
   loading: {
     flex: 1,
     backgroundColor: Colors.background,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  slide: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: SCREEN_HEIGHT,
   },
   gestureLayer: {
     ...StyleSheet.absoluteFillObject,
@@ -265,7 +271,6 @@ const styles = StyleSheet.create({
     top: 50,
     left: 0,
     right: 0,
-    zIndex: 9999,
     alignItems: 'center',
   },
   badgeText: {
@@ -276,5 +281,46 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 4,
+  },
+  scoreContainer: {
+    position: 'absolute',
+    top: 60,
+    right: Spacing[4],
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: Radius.full,
+    padding: Spacing[1.5],
+  },
+  bottomContent: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: Spacing[4],
+    paddingBottom: Spacing[10],
+  },
+  providerRow: {
+    flexDirection: 'row',
+    gap: Spacing[2],
+    marginBottom: Spacing[3],
+  },
+  title: {
+    color: Colors.textPrimary,
+    fontSize: Typography['2xl'],
+    fontWeight: Typography.black,
+    letterSpacing: Typography.tighter,
+    lineHeight: Typography['2xl'] * 1.15,
+    marginBottom: Spacing[1.5],
+  },
+  meta: {
+    color: Colors.textSecondary,
+    fontSize: Typography.sm,
+    fontWeight: Typography.medium,
+    marginBottom: Spacing[2],
+  },
+  synopsis: {
+    color: Colors.textSecondary,
+    fontSize: Typography.sm,
+    fontStyle: 'italic',
+    lineHeight: Typography.sm * 1.5,
   },
 });
