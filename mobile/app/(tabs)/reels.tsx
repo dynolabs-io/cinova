@@ -15,17 +15,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  runOnJS,
-  Easing,
-} from 'react-native-reanimated';
+import Animated, { useSharedValue, runOnJS } from 'react-native-reanimated';
 import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
 
-const BUILD_VERSION = 'v21-single';
+const BUILD_VERSION = 'v22-unmute';
 import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { getDiscoverFeed, saveTitle, rateTitle, dismissTitle } from '../../services/api';
@@ -103,16 +97,19 @@ export default function ReelsScreen() {
       if (msg.type === 'playerReady') {
         setPlayerReady(true);
         setDebugState('READY');
+        // Unmute after player is ready
+        webViewRef.current?.injectJavaScript('player.unMute(); true;');
       }
       if (msg.type === 'playerPlaying') {
         setDebugState(`PLAYING:${msg.videoKey?.slice(0, 6) || '?'}`);
+        // Always ensure unmuted when playing
+        webViewRef.current?.injectJavaScript('player.unMute(); true;');
       }
     } catch {}
   }, []);
 
   // --- Swipe logic ---
   const activeRef = useSharedValue(0);
-  const overlayY = useSharedValue(0);
 
   const switchTo = useCallback((nextIdx: number) => {
     const movie = movies[nextIdx];
@@ -121,43 +118,21 @@ export default function ReelsScreen() {
     if (!key) return;
     activeRef.value = nextIdx;
     setActiveIndex(nextIdx);
-    overlayY.value = 0;
     // Switch video in the existing player
     webViewRef.current?.injectJavaScript(`switchVideo('${key}'); true;`);
     setDebugState(`SWITCH:${key.slice(0, 6)}`);
-  }, [movies, activeRef, overlayY]);
-
-  const snapBack = useCallback(() => {
-    overlayY.value = 0;
-  }, [overlayY]);
+  }, [movies, activeRef]);
 
   const pan = Gesture.Pan()
     .activeOffsetY([-10, 10])
-    .onUpdate((e) => {
-      overlayY.value = e.translationY;
-    })
     .onEnd((e) => {
       const idx = activeRef.value;
       const len = movies.length;
 
       if (e.translationY < -SWIPE_THRESHOLD && idx < len - 1) {
-        // Swipe up → next
-        overlayY.value = withTiming(-SCREEN_HEIGHT, {
-          duration: 200,
-          easing: Easing.out(Easing.cubic),
-        }, () => {
-          runOnJS(switchTo)(idx + 1);
-        });
+        runOnJS(switchTo)(idx + 1);
       } else if (e.translationY > SWIPE_THRESHOLD && idx > 0) {
-        // Swipe down → prev
-        overlayY.value = withTiming(SCREEN_HEIGHT, {
-          duration: 200,
-          easing: Easing.out(Easing.cubic),
-        }, () => {
-          runOnJS(switchTo)(idx - 1);
-        });
-      } else {
-        overlayY.value = withTiming(0, { duration: 150 });
+        runOnJS(switchTo)(idx - 1);
       }
     });
 
@@ -169,11 +144,6 @@ export default function ReelsScreen() {
     });
 
   const gesture = Gesture.Race(pan, tap);
-
-  // Animated overlay style (movie info moves with swipe)
-  const overlayStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: overlayY.value }],
-  }));
 
   if (isLoading || movies.length === 0) {
     return (
@@ -206,8 +176,8 @@ export default function ReelsScreen() {
         />
       )}
 
-      {/* Animated overlay with movie info — moves on swipe */}
-      <Animated.View style={[StyleSheet.absoluteFill, overlayStyle]} pointerEvents="none">
+      {/* Movie info overlay */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {/* Debug badges */}
         <View style={styles.badge}>
           <Text style={styles.badgeText}>
@@ -241,7 +211,7 @@ export default function ReelsScreen() {
             </Text>
           ) : null}
         </View>
-      </Animated.View>
+      </View>
 
       {/* Gesture layer on top */}
       <GestureDetector gesture={gesture}>
