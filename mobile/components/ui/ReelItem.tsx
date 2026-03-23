@@ -156,13 +156,6 @@ export default React.memo(function ReelItem({
         pointerEvents="none"
       />
 
-      {/* Tap target — navigates to detail */}
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={handleTap}
-        style={StyleSheet.absoluteFill}
-      />
-
       {/* CinovaScore top-right */}
       {movie.cinovaScore != null && (
         <View style={styles.scoreContainer}>
