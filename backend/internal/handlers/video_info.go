@@ -78,7 +78,7 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 		`function playAll(){if(player&&player.playVideo){player.playVideo();}}` +
 		`function onYouTubeIframeAPIReady(){` +
 		`player=new YT.Player('p',{videoId:'` + key + `',` +
-		`playerVars:{autoplay:0,mute:` + mute + `,controls:` + controls + `,rel:0,modestbranding:1,playsinline:1},` +
+		`playerVars:{autoplay:1,mute:` + mute + `,controls:` + controls + `,rel:0,modestbranding:1,playsinline:1},` +
 		`events:{onReady:function(e){` + onReady + `},onStateChange:function(e){` + onStateChange + `}}});}` +
 		`</script></body></html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
