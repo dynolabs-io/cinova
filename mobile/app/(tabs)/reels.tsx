@@ -18,7 +18,7 @@ import {
   ViewToken,
 } from 'react-native';
 
-const BUILD_VERSION = 'v14-thumbonly';
+const BUILD_VERSION = 'v15-allplay';
 import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import ReelItem from '../../components/ui/ReelItem';
@@ -63,7 +63,8 @@ export default function ReelsScreen() {
 
   const movies: Movie[] = (data?.pages ?? [])
     .flat()
-    .filter((m) => !dismissedIds.has(m.id));
+    .filter((m) => !dismissedIds.has(m.id))
+    .slice(0, 4);
 
   const handleSave = useCallback(async (movie: Movie) => {
     setSavedIds((prev) => new Set(prev).add(movie.id));

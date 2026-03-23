@@ -7,7 +7,7 @@
  * the list — giving the Instagram-style half-drag two-video-visible effect.
  */
 
-import React, { useCallback, useRef, useEffect, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import {
   Linking,
   Platform,
 } from 'react-native';
-import { Image } from 'expo-image';
+// Image import removed — no thumbnails
 import { LinearGradient } from 'expo-linear-gradient';
 import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
@@ -87,65 +87,26 @@ export default React.memo(function ReelItem({
     if (primaryProvider) await watchOnProvider(primaryProvider, movie.tmdbId);
   }, [primaryProvider, movie.tmdbId]);
 
-  // Play/pause + mute/unmute when isActive changes
-  useEffect(() => {
-    if (!readyRef.current) return;
-    if (isActive) {
-      setDebugState('UNMUTE+PLAY');
-      webViewRef.current?.injectJavaScript('player.unMute(); playAll(); true;');
-    } else {
-      setDebugState('MUTE+PAUSE');
-      webViewRef.current?.injectJavaScript('player.mute(); pauseAll(); true;');
-    }
-  }, [isActive]);
-
-  const isActiveRef = useRef(isActive);
-  useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
-
+  // No play/pause gating — all 4 videos play simultaneously
   const onMessage = useCallback((e: any) => {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
       if (msg.type === 'playerReady') {
         readyRef.current = true;
-        setDebugState(isActiveRef.current ? 'READY+ACTIVE' : 'READY+PRELOAD');
-        if (isActiveRef.current) {
-          webViewRef.current?.injectJavaScript('player.unMute(); true;');
-        }
+        setDebugState('READY');
       }
       if (msg.type === 'playerPlaying') {
-        if (!isActiveRef.current) {
-          setDebugState('PAUSING_AT_FRAME');
-          webViewRef.current?.injectJavaScript('pauseAll(); true;');
-        } else {
-          setDebugState('PLAYING');
-        }
+        setDebugState('PLAYING');
       }
     } catch {}
   }, []);
 
-  const thumbUri = videoKey ? `https://img.youtube.com/vi/${videoKey}/maxresdefault.jpg` : null;
-  // Track if this item has ever been active — only mount WebView after first activation
-  const hasBeenActiveRef = useRef(isActive);
-  if (isActive) hasBeenActiveRef.current = true;
-  // Mount WebView only if: within load window AND has been active at least once
-  const showWebView = shouldLoad && videoKey && hasBeenActiveRef.current;
-  // Show thumbnail when WebView is not mounted
-  const showThumb = thumbUri && !showWebView;
+  const showWebView = !!videoKey;
 
   return (
     <View style={styles.container}>
 
-      {/* YouTube thumbnail — clean video frame, no red button */}
-      {showThumb && (
-        <Image
-          source={{ uri: thumbUri }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          priority="high"
-        />
-      )}
-
-      {/* WebView — only mounted after item has been active */}
+      {/* WebView — all videos mount and play immediately */}
       {showWebView && (
         <WebView
           ref={webViewRef}
@@ -165,7 +126,7 @@ export default React.memo(function ReelItem({
       {/* DEBUG: visible state indicator */}
       <View style={{ position: 'absolute', top: 100, left: 12, backgroundColor: 'rgba(255,0,0,0.8)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, zIndex: 999 }}>
         <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
-          {debugState} | {showWebView ? 'WV' : 'THUMB'} | {isActive ? 'ACTIVE' : 'IDLE'} | {videoKey ? videoKey.slice(0, 6) : 'NOKEY'}
+          {debugState} | WV | {videoKey ? videoKey.slice(0, 6) : 'NOKEY'}
         </Text>
       </View>
 
