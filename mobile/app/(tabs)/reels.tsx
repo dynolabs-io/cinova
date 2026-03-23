@@ -18,7 +18,7 @@ import {
   ViewToken,
 } from 'react-native';
 
-const BUILD_VERSION = 'v15-allplay';
+const BUILD_VERSION = 'v16-muted';
 import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import ReelItem from '../../components/ui/ReelItem';

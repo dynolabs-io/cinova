@@ -110,7 +110,7 @@ export default React.memo(function ReelItem({
       {showWebView && (
         <WebView
           ref={webViewRef}
-          source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=1&controls=0&mute=0` }}
+          source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=1&controls=0&mute=1` }}
           style={[StyleSheet.absoluteFill, { backgroundColor: 'transparent' }]}
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
