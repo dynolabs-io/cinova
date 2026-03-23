@@ -302,7 +302,7 @@ func (r *MovieRepository) GetPopular(ctx context.Context, country string, limit,
 // Applies age bias: effective_score = cinova_score × exp(−0.15 × age_years)
 func (r *MovieRepository) GetReels(ctx context.Context, country string, limit int) ([]models.Movie, error) {
 	records, err := r.driver.RunQuery(ctx, `
-		MATCH (m:Movie)-[:AVAILABLE_ON {country: $country}]->(:Provider)
+		MATCH (m:Movie)
 		WHERE m.vertical_trailer_youtube_key IS NOT NULL
 		  AND m.vertical_trailer_youtube_key <> ''
 		  AND m.vertical_trailer_youtube_key <> 'NOT_FOUND'
