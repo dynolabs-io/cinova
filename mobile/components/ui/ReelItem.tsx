@@ -7,7 +7,7 @@
  * the list — giving the Instagram-style half-drag two-video-visible effect.
  */
 
-import React, { useCallback, useRef, useEffect } from 'react';
+import React, { useCallback, useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -72,6 +72,7 @@ export default React.memo(function ReelItem({
   const router = useRouter();
   const webViewRef = useRef<WebView>(null);
   const readyRef = useRef(false);
+  const [debugState, setDebugState] = useState('INIT');
   const primaryProvider = movie.providers?.[0] ?? null;
   const genreLabel = movie.genres.slice(0, 2).map((g) => g.name).join(' · ');
   const runtimeLabel = movie.runtime ? `${movie.runtime}m` : '';
@@ -89,8 +90,10 @@ export default React.memo(function ReelItem({
   useEffect(() => {
     if (!readyRef.current) return;
     if (isActive) {
+      setDebugState('UNMUTE+PLAY');
       webViewRef.current?.injectJavaScript('player.unMute(); playAll(); true;');
     } else {
+      setDebugState('MUTE+PAUSE');
       webViewRef.current?.injectJavaScript('player.mute(); pauseAll(); true;');
     }
   }, [isActive]);
@@ -101,19 +104,23 @@ export default React.memo(function ReelItem({
   const onMessage = useCallback((e: any) => {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
-      console.log('[ReelItem]', movie.title, 'msg=', msg.type, 'isActive=', isActiveRef.current);
       if (msg.type === 'playerReady') {
         readyRef.current = true;
+        setDebugState(isActiveRef.current ? 'READY+ACTIVE' : 'READY+PRELOAD');
         if (isActiveRef.current) {
           webViewRef.current?.injectJavaScript('player.unMute(); true;');
         }
       }
-      if (msg.type === 'playerPlaying' && !isActiveRef.current) {
-        console.log('[ReelItem]', movie.title, 'PAUSING at frame (not active)');
-        webViewRef.current?.injectJavaScript('pauseAll(); true;');
+      if (msg.type === 'playerPlaying') {
+        if (!isActiveRef.current) {
+          setDebugState('PAUSING_AT_FRAME');
+          webViewRef.current?.injectJavaScript('pauseAll(); true;');
+        } else {
+          setDebugState('PLAYING');
+        }
       }
     } catch {}
-  }, [movie.title]);
+  }, []);
 
   const showVideo = shouldLoad && videoKey;
 
@@ -136,6 +143,13 @@ export default React.memo(function ReelItem({
           transparent
         />
       )}
+
+      {/* DEBUG: visible state indicator */}
+      <View style={{ position: 'absolute', top: 100, left: 12, backgroundColor: 'rgba(255,0,0,0.8)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, zIndex: 999 }}>
+        <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
+          {debugState} | {shouldLoad ? 'LOAD' : 'UNLOAD'} | {isActive ? 'ACTIVE' : 'IDLE'} | {videoKey ? videoKey.slice(0, 6) : 'NOKEY'}
+        </Text>
+      </View>
 
       {/* Gradient overlay */}
       <LinearGradient
