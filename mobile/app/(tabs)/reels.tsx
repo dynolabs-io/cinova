@@ -18,7 +18,7 @@ import {
   ViewToken,
 } from 'react-native';
 
-const BUILD_VERSION = 'v25-seek5';
+const BUILD_VERSION = 'v12-522a330';
 import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import ReelItem from '../../components/ui/ReelItem';
