@@ -1,10 +1,9 @@
 /**
- * Reels screen — Full-screen vertical swipe feed (TikTok / Instagram Reels style)
+ * Reels screen — Full-screen vertical swipe feed
  *
- * Each ReelItem has its own embedded WebView video player that scrolls with
- * the list item — giving the Instagram effect where you see both videos
- * during a half-drag. WebViews are only mounted for items within ±1 of the
- * active index to keep memory usage low.
+ * Option 3: All 4 WebViews stacked at full screen (all "visible" to iOS).
+ * Active video shown via translateY animation. Pan gesture for swiping.
+ * All videos autoplay muted; active one gets unmuted.
  */
 
 import React, { useCallback, useRef, useState } from 'react';
@@ -13,12 +12,17 @@ import {
   Text,
   StyleSheet,
   Dimensions,
-  FlatList,
   ActivityIndicator,
-  ViewToken,
 } from 'react-native';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
 
-const BUILD_VERSION = 'v17-muteswap';
+const BUILD_VERSION = 'v18-stacked';
 import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import ReelItem from '../../components/ui/ReelItem';
@@ -28,6 +32,7 @@ import { Colors } from '../../constants/theme';
 import type { Movie } from '../../types';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const SWIPE_THRESHOLD = SCREEN_HEIGHT * 0.2;
 
 export default function ReelsScreen() {
   const country = useAppStore((s) => s.country);
@@ -42,16 +47,8 @@ export default function ReelsScreen() {
     return () => setTabFocused(false);
   }, []));
 
-  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 60 });
-  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    if (viewableItems.length > 0) setActiveIndex(viewableItems[0].index ?? 0);
-  });
-
   const {
     data,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
     isLoading,
   } = useInfiniteQuery({
     queryKey: ['reels-feed', country],
@@ -84,9 +81,44 @@ export default function ReelsScreen() {
     try { await dismissTitle(movie.tmdbId); } catch {}
   }, []);
 
-  const onEndReached = useCallback(() => {
-    if (hasNextPage && !isFetchingNextPage) fetchNextPage();
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+  // --- Gesture / animation ---
+  const translateY = useSharedValue(0);
+  const activeIndexRef = useRef(0);
+
+  const goTo = useCallback((idx: number) => {
+    activeIndexRef.current = idx;
+    setActiveIndex(idx);
+  }, []);
+
+  const pan = Gesture.Pan()
+    .onUpdate((e) => {
+      // Allow drag only within bounds
+      const idx = activeIndexRef.current;
+      const newY = -idx * SCREEN_HEIGHT + e.translationY;
+      const minY = -(movies.length - 1) * SCREEN_HEIGHT;
+      translateY.value = Math.max(minY, Math.min(0, newY));
+    })
+    .onEnd((e) => {
+      const idx = activeIndexRef.current;
+      let nextIdx = idx;
+      if (e.translationY < -SWIPE_THRESHOLD && idx < movies.length - 1) {
+        nextIdx = idx + 1;
+      } else if (e.translationY > SWIPE_THRESHOLD && idx > 0) {
+        nextIdx = idx - 1;
+      }
+      translateY.value = withSpring(-nextIdx * SCREEN_HEIGHT, {
+        damping: 50,
+        stiffness: 300,
+        mass: 1,
+      });
+      if (nextIdx !== idx) {
+        runOnJS(goTo)(nextIdx);
+      }
+    });
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
 
   if (isLoading) {
     return (
@@ -100,40 +132,27 @@ export default function ReelsScreen() {
     <View style={styles.container}>
       <View style={{ position: 'absolute', top: 50, left: 0, right: 0, zIndex: 9999, alignItems: 'center' }}>
         <Text style={{ color: '#0f0', fontSize: 12, fontWeight: '800', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 4 }}>
-          {BUILD_VERSION}
+          {BUILD_VERSION} | idx={activeIndex}
         </Text>
       </View>
-      <FlatList
-        data={movies}
-        keyExtractor={(item, i) => `${item.id}-${i}`}
-        renderItem={({ item, index }) => (
-          <ReelItem
-            movie={item}
-            isActive={index === activeIndex && tabFocused}
-            shouldLoad={Math.abs(index - activeIndex) <= 2 && tabFocused}
-            isSaved={savedIds.has(item.id)}
-            userRating={ratings[item.id]}
-            onSave={handleSave}
-            onRate={handleRate}
-            onDismiss={handleDismiss}
-          />
-        )}
-        pagingEnabled
-        showsVerticalScrollIndicator={false}
-        snapToInterval={SCREEN_HEIGHT}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        onEndReached={onEndReached}
-        onEndReachedThreshold={2}
-        onViewableItemsChanged={onViewableItemsChanged.current}
-        viewabilityConfig={viewabilityConfig.current}
-        getItemLayout={(_, index) => ({
-          length: SCREEN_HEIGHT,
-          offset: SCREEN_HEIGHT * index,
-          index,
-        })}
-        removeClippedSubviews={false}
-      />
+      <GestureDetector gesture={pan}>
+        <Animated.View style={[styles.stack, animatedStyle]}>
+          {movies.map((movie, index) => (
+            <View key={movie.id} style={[styles.slide, { top: index * SCREEN_HEIGHT }]}>
+              <ReelItem
+                movie={movie}
+                isActive={index === activeIndex && tabFocused}
+                shouldLoad={tabFocused}
+                isSaved={savedIds.has(movie.id)}
+                userRating={ratings[movie.id]}
+                onSave={handleSave}
+                onRate={handleRate}
+                onDismiss={handleDismiss}
+              />
+            </View>
+          ))}
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }
@@ -142,11 +161,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+    overflow: 'hidden',
   },
   loading: {
     flex: 1,
     backgroundColor: Colors.background,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  stack: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: SCREEN_HEIGHT * 4,
+  },
+  slide: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: SCREEN_HEIGHT,
   },
 });
