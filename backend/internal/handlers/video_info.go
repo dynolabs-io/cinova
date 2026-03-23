@@ -61,9 +61,9 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 	if autoplay {
 		onReady += `e.target.playVideo();`
 	}
-	// onStateChange: notify RN, loop on end
+	// onStateChange: notify RN with current video key, loop on end
 	onStateChange := `if(e.data===1){` +
-		`if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'playerPlaying'}));}}` +
+		`if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'playerPlaying',videoKey:currentKey}));}}` +
 		`else if(e.data===0){e.target.seekTo(0);e.target.playVideo();}`
 
 	html := `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">` +
@@ -72,10 +72,11 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 		`#p,#p iframe{position:absolute;top:0;left:0;width:100%!important;height:100%!important;border:none;}` +
 		`</style></head><body><div id="p"></div>` +
 		`<script>` +
-		`var player;` +
+		`var player;var currentKey='` + key + `';` +
 		`var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);` +
 		`function pauseAll(){if(player&&player.pauseVideo){player.pauseVideo();}}` +
 		`function playAll(){if(player&&player.playVideo){player.playVideo();}}` +
+		`function switchVideo(key){currentKey=key;if(player&&player.loadVideoById){player.loadVideoById(key);}}` +
 		`function onYouTubeIframeAPIReady(){` +
 		`player=new YT.Player('p',{videoId:'` + key + `',` +
 		`playerVars:{autoplay:1,mute:` + mute + `,controls:` + controls + `,rel:0,modestbranding:1,playsinline:1},` +
