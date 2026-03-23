@@ -15,11 +15,18 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, runOnJS } from 'react-native-reanimated';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSequence,
+  runOnJS,
+  Easing,
+} from 'react-native-reanimated';
 import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
 
-const BUILD_VERSION = 'v22-unmute';
+const BUILD_VERSION = 'v23-swipe';
 import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { getDiscoverFeed, saveTitle, rateTitle, dismissTitle } from '../../services/api';
@@ -110,29 +117,64 @@ export default function ReelsScreen() {
 
   // --- Swipe logic ---
   const activeRef = useSharedValue(0);
+  const dragY = useSharedValue(0);
+  const isAnimating = useSharedValue(false);
 
-  const switchTo = useCallback((nextIdx: number) => {
+  const doSwitch = useCallback((nextIdx: number, direction: 'up' | 'down') => {
     const movie = movies[nextIdx];
     if (!movie) return;
     const key = getVideoKey(movie);
     if (!key) return;
     activeRef.value = nextIdx;
     setActiveIndex(nextIdx);
-    // Switch video in the existing player
     webViewRef.current?.injectJavaScript(`switchVideo('${key}'); true;`);
     setDebugState(`SWITCH:${key.slice(0, 6)}`);
-  }, [movies, activeRef]);
+    // Snap in from opposite direction
+    dragY.value = direction === 'up' ? SCREEN_HEIGHT * 0.3 : -SCREEN_HEIGHT * 0.3;
+    dragY.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) }, () => {
+      isAnimating.value = false;
+    });
+  }, [movies, activeRef, dragY, isAnimating]);
+
+  const snapBack = useCallback(() => {
+    isAnimating.value = false;
+  }, [isAnimating]);
 
   const pan = Gesture.Pan()
     .activeOffsetY([-10, 10])
+    .onUpdate((e) => {
+      if (!isAnimating.value) {
+        dragY.value = e.translationY;
+      }
+    })
     .onEnd((e) => {
+      if (isAnimating.value) return;
       const idx = activeRef.value;
       const len = movies.length;
 
       if (e.translationY < -SWIPE_THRESHOLD && idx < len - 1) {
-        runOnJS(switchTo)(idx + 1);
+        // Swipe up → slide out up, then switch and slide in from below
+        isAnimating.value = true;
+        dragY.value = withTiming(-SCREEN_HEIGHT, {
+          duration: 200,
+          easing: Easing.in(Easing.cubic),
+        }, () => {
+          runOnJS(doSwitch)(idx + 1, 'up');
+        });
       } else if (e.translationY > SWIPE_THRESHOLD && idx > 0) {
-        runOnJS(switchTo)(idx - 1);
+        // Swipe down → slide out down, then switch and slide in from above
+        isAnimating.value = true;
+        dragY.value = withTiming(SCREEN_HEIGHT, {
+          duration: 200,
+          easing: Easing.in(Easing.cubic),
+        }, () => {
+          runOnJS(doSwitch)(idx - 1, 'down');
+        });
+      } else {
+        // Snap back
+        dragY.value = withTiming(0, { duration: 150 }, () => {
+          runOnJS(snapBack)();
+        });
       }
     });
 
@@ -144,6 +186,11 @@ export default function ReelsScreen() {
     });
 
   const gesture = Gesture.Race(pan, tap);
+
+  // Animate the entire content (WebView + overlay) together
+  const contentStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: dragY.value }],
+  }));
 
   if (isLoading || movies.length === 0) {
     return (
@@ -160,24 +207,26 @@ export default function ReelsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Single WebView — always on screen, never remounted */}
-      {firstKey && (
-        <WebView
-          ref={webViewRef}
-          source={{ uri: `${EMBED_BASE}/${firstKey}?autoplay=1&controls=0&mute=1` }}
-          style={StyleSheet.absoluteFill}
-          allowsInlineMediaPlayback
-          mediaPlaybackRequiresUserAction={false}
-          scrollEnabled={false}
-          bounces={false}
-          startInLoadingState={false}
-          onMessage={onMessage}
-          pointerEvents="none"
-        />
-      )}
+      {/* Animated content — WebView + overlay move together on swipe */}
+      <Animated.View style={[StyleSheet.absoluteFill, contentStyle]}>
+        {/* Single WebView — always on screen, never remounted */}
+        {firstKey && (
+          <WebView
+            ref={webViewRef}
+            source={{ uri: `${EMBED_BASE}/${firstKey}?autoplay=1&controls=0&mute=1` }}
+            style={StyleSheet.absoluteFill}
+            allowsInlineMediaPlayback
+            mediaPlaybackRequiresUserAction={false}
+            scrollEnabled={false}
+            bounces={false}
+            startInLoadingState={false}
+            onMessage={onMessage}
+            pointerEvents="none"
+          />
+        )}
 
-      {/* Movie info overlay */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {/* Movie info overlay */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {/* Debug badges */}
         <View style={styles.badge}>
           <Text style={styles.badgeText}>
@@ -212,6 +261,7 @@ export default function ReelsScreen() {
           ) : null}
         </View>
       </View>
+      </Animated.View>
 
       {/* Gesture layer on top */}
       <GestureDetector gesture={gesture}>
