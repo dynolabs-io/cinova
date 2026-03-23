@@ -85,12 +85,14 @@ export default React.memo(function ReelItem({
     if (primaryProvider) await watchOnProvider(primaryProvider, movie.tmdbId);
   }, [primaryProvider, movie.tmdbId]);
 
-  // Play/pause when isActive changes
+  // Play/pause + mute/unmute when isActive changes
   useEffect(() => {
     if (!readyRef.current) return;
-    webViewRef.current?.injectJavaScript(
-      isActive ? 'playAll(); true;' : 'pauseAll(); true;'
-    );
+    if (isActive) {
+      webViewRef.current?.injectJavaScript('player.unMute(); playAll(); true;');
+    } else {
+      webViewRef.current?.injectJavaScript('player.mute(); pauseAll(); true;');
+    }
   }, [isActive]);
 
   const onMessage = useCallback((e: any) => {
@@ -98,10 +100,15 @@ export default React.memo(function ReelItem({
       const msg = JSON.parse(e.nativeEvent.data);
       if (msg.type === 'playerReady') {
         readyRef.current = true;
-        // Only autoplay if this is the active item
+        // Player loaded with autoplay=1&mute=1, it will auto-play silently.
+        // If active, unmute it now.
         if (isActive) {
-          webViewRef.current?.injectJavaScript('playAll(); true;');
+          webViewRef.current?.injectJavaScript('player.unMute(); true;');
         }
+      }
+      if (msg.type === 'playerPlaying' && !isActive) {
+        // Preloaded video started playing — pause it at the current frame
+        webViewRef.current?.injectJavaScript('pauseAll(); true;');
       }
     } catch {}
   }, [isActive]);
@@ -111,11 +118,11 @@ export default React.memo(function ReelItem({
   return (
     <View style={styles.container}>
 
-      {/* Video layer — loads with autoplay=0, play/pause controlled via JS */}
+      {/* Video: autoplay=1&mute=1 for all — plays silently, paused at real frame if not active */}
       {showVideo && (
         <WebView
           ref={webViewRef}
-          source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=0&controls=0&mute=0` }}
+          source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=1&controls=0&mute=1` }}
           style={[StyleSheet.absoluteFill, { backgroundColor: 'transparent' }]}
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
