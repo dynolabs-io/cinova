@@ -95,23 +95,25 @@ export default React.memo(function ReelItem({
     }
   }, [isActive]);
 
+  const isActiveRef = useRef(isActive);
+  useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
+
   const onMessage = useCallback((e: any) => {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
+      console.log('[ReelItem]', movie.title, 'msg=', msg.type, 'isActive=', isActiveRef.current);
       if (msg.type === 'playerReady') {
         readyRef.current = true;
-        // Player loaded with autoplay=1&mute=1, it will auto-play silently.
-        // If active, unmute it now.
-        if (isActive) {
+        if (isActiveRef.current) {
           webViewRef.current?.injectJavaScript('player.unMute(); true;');
         }
       }
-      if (msg.type === 'playerPlaying' && !isActive) {
-        // Preloaded video started playing — pause it at the current frame
+      if (msg.type === 'playerPlaying' && !isActiveRef.current) {
+        console.log('[ReelItem]', movie.title, 'PAUSING at frame (not active)');
         webViewRef.current?.injectJavaScript('pauseAll(); true;');
       }
     } catch {}
-  }, [isActive]);
+  }, [movie.title]);
 
   const showVideo = shouldLoad && videoKey;
 
