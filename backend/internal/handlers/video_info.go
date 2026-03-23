@@ -61,23 +61,19 @@ func (h *VideoInfoHandler) ServeEmbed(w http.ResponseWriter, r *http.Request) {
 	if autoplay {
 		onReady += `e.target.playVideo();`
 	}
-	// onStateChange: show player on first play (hides spinner), loop on end
-	// State 5 = VIDEO_CUED — video loaded first frame, safe to show
-	// State 1 = PLAYING — also safe to show
-	onStateChange := `if(e.data===1||e.data===5){showPlayer();` +
-		`if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:e.data===1?'playerPlaying':'playerCued'}));}}` +
+	// onStateChange: notify RN, loop on end
+	onStateChange := `if(e.data===1){` +
+		`if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'playerPlaying'}));}}` +
 		`else if(e.data===0){e.target.seekTo(0);e.target.playVideo();}`
 
 	html := `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">` +
 		`<style>*{margin:0;padding:0;box-sizing:border-box;}` +
 		`html,body{width:100%;height:100%;background:transparent;overflow:hidden;}` +
-		`#p{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;transition:opacity 0.15s;}` +
-		`#p iframe{position:absolute;top:0;left:0;width:100%!important;height:100%!important;border:none;}` +
+		`#p,#p iframe{position:absolute;top:0;left:0;width:100%!important;height:100%!important;border:none;}` +
 		`</style></head><body><div id="p"></div>` +
 		`<script>` +
-		`var player,shown=false;` +
+		`var player;` +
 		`var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);` +
-		`function showPlayer(){if(!shown){shown=true;document.getElementById('p').style.opacity='1';}}` +
 		`function pauseAll(){if(player&&player.pauseVideo){player.pauseVideo();}}` +
 		`function playAll(){if(player&&player.playVideo){player.playVideo();}}` +
 		`function onYouTubeIframeAPIReady(){` +
