@@ -19,14 +19,13 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  withSequence,
   runOnJS,
   Easing,
 } from 'react-native-reanimated';
 import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
 
-const BUILD_VERSION = 'v23-swipe';
+const BUILD_VERSION = 'v24-flick';
 import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { getDiscoverFeed, saveTitle, rateTitle, dismissTitle } from '../../services/api';
@@ -118,9 +117,8 @@ export default function ReelsScreen() {
   // --- Swipe logic ---
   const activeRef = useSharedValue(0);
   const dragY = useSharedValue(0);
-  const isAnimating = useSharedValue(false);
 
-  const doSwitch = useCallback((nextIdx: number, direction: 'up' | 'down') => {
+  const doSwitch = useCallback((nextIdx: number) => {
     const movie = movies[nextIdx];
     if (!movie) return;
     const key = getVideoKey(movie);
@@ -129,52 +127,28 @@ export default function ReelsScreen() {
     setActiveIndex(nextIdx);
     webViewRef.current?.injectJavaScript(`switchVideo('${key}'); true;`);
     setDebugState(`SWITCH:${key.slice(0, 6)}`);
-    // Snap in from opposite direction
-    dragY.value = direction === 'up' ? SCREEN_HEIGHT * 0.3 : -SCREEN_HEIGHT * 0.3;
-    dragY.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) }, () => {
-      isAnimating.value = false;
-    });
-  }, [movies, activeRef, dragY, isAnimating]);
-
-  const snapBack = useCallback(() => {
-    isAnimating.value = false;
-  }, [isAnimating]);
+  }, [movies, activeRef]);
 
   const pan = Gesture.Pan()
     .activeOffsetY([-10, 10])
     .onUpdate((e) => {
-      if (!isAnimating.value) {
-        dragY.value = e.translationY;
-      }
+      dragY.value = e.translationY;
     })
     .onEnd((e) => {
-      if (isAnimating.value) return;
       const idx = activeRef.value;
       const len = movies.length;
 
       if (e.translationY < -SWIPE_THRESHOLD && idx < len - 1) {
-        // Swipe up → slide out up, then switch and slide in from below
-        isAnimating.value = true;
-        dragY.value = withTiming(-SCREEN_HEIGHT, {
-          duration: 200,
-          easing: Easing.in(Easing.cubic),
-        }, () => {
-          runOnJS(doSwitch)(idx + 1, 'up');
-        });
+        // Swipe up → snap back to center + switch video
+        runOnJS(doSwitch)(idx + 1);
+        dragY.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) });
       } else if (e.translationY > SWIPE_THRESHOLD && idx > 0) {
-        // Swipe down → slide out down, then switch and slide in from above
-        isAnimating.value = true;
-        dragY.value = withTiming(SCREEN_HEIGHT, {
-          duration: 200,
-          easing: Easing.in(Easing.cubic),
-        }, () => {
-          runOnJS(doSwitch)(idx - 1, 'down');
-        });
+        // Swipe down → snap back to center + switch video
+        runOnJS(doSwitch)(idx - 1);
+        dragY.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) });
       } else {
         // Snap back
-        dragY.value = withTiming(0, { duration: 150 }, () => {
-          runOnJS(snapBack)();
-        });
+        dragY.value = withTiming(0, { duration: 150 });
       }
     });
 
