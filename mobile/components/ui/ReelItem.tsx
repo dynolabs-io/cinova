@@ -123,20 +123,20 @@ export default React.memo(function ReelItem({
     } catch {}
   }, []);
 
-  const showVideo = shouldLoad && videoKey;
-  // Show YouTube thumbnail for videos that haven't played yet
   const thumbUri = videoKey ? `https://img.youtube.com/vi/${videoKey}/maxresdefault.jpg` : null;
-  // Track if this video has ever reached PLAYING state
-  const hasPlayedRef = useRef(false);
-  if (debugState === 'PLAYING' || debugState === 'MUTE+PAUSE' || debugState === 'PAUSING_AT_FRAME') {
-    hasPlayedRef.current = true;
-  }
+  // Track if this item has ever been active — only mount WebView after first activation
+  const hasBeenActiveRef = useRef(isActive);
+  if (isActive) hasBeenActiveRef.current = true;
+  // Mount WebView only if: within load window AND has been active at least once
+  const showWebView = shouldLoad && videoKey && hasBeenActiveRef.current;
+  // Show thumbnail when WebView is not mounted
+  const showThumb = thumbUri && !showWebView;
 
   return (
     <View style={styles.container}>
 
-      {/* YouTube thumbnail — shows for videos that haven't played yet */}
-      {thumbUri && !hasPlayedRef.current && (
+      {/* YouTube thumbnail — clean video frame, no red button */}
+      {showThumb && (
         <Image
           source={{ uri: thumbUri }}
           style={StyleSheet.absoluteFill}
@@ -145,11 +145,11 @@ export default React.memo(function ReelItem({
         />
       )}
 
-      {/* WebView video player — on top of thumbnail */}
-      {showVideo && (
+      {/* WebView — only mounted after item has been active */}
+      {showWebView && (
         <WebView
           ref={webViewRef}
-          source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=1&controls=0&mute=1` }}
+          source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=1&controls=0&mute=0` }}
           style={[StyleSheet.absoluteFill, { backgroundColor: 'transparent' }]}
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
@@ -165,7 +165,7 @@ export default React.memo(function ReelItem({
       {/* DEBUG: visible state indicator */}
       <View style={{ position: 'absolute', top: 100, left: 12, backgroundColor: 'rgba(255,0,0,0.8)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, zIndex: 999 }}>
         <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
-          {debugState} | {shouldLoad ? 'LOAD' : 'UNLOAD'} | {isActive ? 'ACTIVE' : 'IDLE'} | {videoKey ? videoKey.slice(0, 6) : 'NOKEY'}
+          {debugState} | {showWebView ? 'WV' : 'THUMB'} | {isActive ? 'ACTIVE' : 'IDLE'} | {videoKey ? videoKey.slice(0, 6) : 'NOKEY'}
         </Text>
       </View>
 

@@ -18,7 +18,7 @@ import {
   ViewToken,
 } from 'react-native';
 
-const BUILD_VERSION = 'v13-thumb';
+const BUILD_VERSION = 'v14-thumbonly';
 import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import ReelItem from '../../components/ui/ReelItem';
