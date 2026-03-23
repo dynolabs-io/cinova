@@ -1,12 +1,12 @@
 /**
  * Reels screen — Full-screen vertical swipe feed
  *
- * All 4 WebViews stacked at the SAME position (top:0) so iOS considers
- * them all "on screen" and allows muted autoplay. Active video shown via
- * zIndex. Pan gesture for swipe, tap gesture for movie detail navigation.
+ * All WebViews at top:0, no transform — all visible to iOS.
+ * Active = high zIndex. Swipe animates ONLY the current slide away,
+ * revealing the next one already underneath.
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -24,7 +24,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 
-const BUILD_VERSION = 'v19-overlap';
+const BUILD_VERSION = 'v20-flat';
 import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import ReelItem from '../../components/ui/ReelItem';
@@ -84,87 +84,71 @@ export default function ReelsScreen() {
     try { await dismissTitle(movie.tmdbId); } catch {}
   }, []);
 
-  // --- Animation state ---
-  const activeIndexRef = useRef(0);
-  // Animated values for each slide's translateY (for swipe transition)
-  const transitionY = useSharedValue(0); // drag offset during gesture
-  const [transitioning, setTransitioning] = useState(false);
-  const directionRef = useRef<'up' | 'down' | null>(null);
+  // --- Swipe state ---
+  const dragY = useSharedValue(0);
+  const swiping = useSharedValue(false);
+  const activeRef = useSharedValue(0);
 
-  const goTo = useCallback((idx: number) => {
-    activeIndexRef.current = idx;
-    setActiveIndex(idx);
-    setTransitioning(false);
-    transitionY.value = 0;
-  }, [transitionY]);
+  const finishSwipe = useCallback((nextIdx: number) => {
+    activeRef.value = nextIdx;
+    setActiveIndex(nextIdx);
+    dragY.value = 0;
+    swiping.value = false;
+  }, [activeRef, dragY, swiping]);
 
-  const handleTap = useCallback((idx: number) => {
+  const cancelSwipe = useCallback(() => {
+    dragY.value = 0;
+    swiping.value = false;
+  }, [dragY, swiping]);
+
+  const navigateToMovie = useCallback((idx: number) => {
     if (movies[idx]) {
       router.push(`/movie/${movies[idx].id}`);
     }
   }, [movies, router]);
 
-  // Combined gesture: pan for swipe, tap for navigation
   const pan = Gesture.Pan()
+    .activeOffsetY([-10, 10])
     .onStart(() => {
-      runOnJS(setTransitioning)(true);
+      swiping.value = true;
     })
     .onUpdate((e) => {
-      transitionY.value = e.translationY;
+      dragY.value = e.translationY;
     })
     .onEnd((e) => {
-      const idx = activeIndexRef.current;
-      let nextIdx = idx;
-      if (e.translationY < -SWIPE_THRESHOLD && idx < movies.length - 1) {
-        nextIdx = idx + 1;
-        directionRef.current = 'up';
-      } else if (e.translationY > SWIPE_THRESHOLD && idx > 0) {
-        nextIdx = idx - 1;
-        directionRef.current = 'down';
-      }
+      const idx = activeRef.value;
+      const len = movies.length;
 
-      if (nextIdx !== idx) {
-        // Animate current slide out, then switch
-        const target = e.translationY < 0 ? -SCREEN_HEIGHT : SCREEN_HEIGHT;
-        transitionY.value = withTiming(target, {
-          duration: 250,
+      if (e.translationY < -SWIPE_THRESHOLD && idx < len - 1) {
+        // Swipe up — go to next
+        dragY.value = withTiming(-SCREEN_HEIGHT, {
+          duration: 200,
           easing: Easing.out(Easing.cubic),
         }, () => {
-          runOnJS(goTo)(nextIdx);
+          runOnJS(finishSwipe)(idx + 1);
+        });
+      } else if (e.translationY > SWIPE_THRESHOLD && idx > 0) {
+        // Swipe down — go to prev
+        dragY.value = withTiming(SCREEN_HEIGHT, {
+          duration: 200,
+          easing: Easing.out(Easing.cubic),
+        }, () => {
+          runOnJS(finishSwipe)(idx - 1);
         });
       } else {
         // Snap back
-        transitionY.value = withTiming(0, { duration: 200 });
-        runOnJS(setTransitioning)(false);
+        dragY.value = withTiming(0, { duration: 150 }, () => {
+          runOnJS(cancelSwipe)();
+        });
       }
     });
 
   const tap = Gesture.Tap()
     .onEnd(() => {
-      const idx = activeIndexRef.current;
-      runOnJS(handleTap)(idx);
+      runOnJS(navigateToMovie)(activeRef.value);
     });
 
   const gesture = Gesture.Race(pan, tap);
-
-  // Animated style for the CURRENT active slide (moves with drag)
-  const currentSlideStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: transitionY.value }],
-  }));
-
-  // Animated style for the NEXT slide (peeks from below during upward swipe)
-  const nextSlideStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: transitionY.value < 0
-      ? SCREEN_HEIGHT + transitionY.value
-      : SCREEN_HEIGHT }],
-  }));
-
-  // Animated style for the PREV slide (peeks from above during downward swipe)
-  const prevSlideStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: transitionY.value > 0
-      ? -SCREEN_HEIGHT + transitionY.value
-      : -SCREEN_HEIGHT }],
-  }));
 
   if (isLoading) {
     return (
@@ -176,59 +160,80 @@ export default function ReelsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={{ position: 'absolute', top: 50, left: 0, right: 0, zIndex: 9999, alignItems: 'center' }}>
-        <Text style={{ color: '#0f0', fontSize: 12, fontWeight: '800', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 4 }}>
+      <View style={styles.badge}>
+        <Text style={styles.badgeText}>
           {BUILD_VERSION} | idx={activeIndex} | {movies.length} vids
         </Text>
       </View>
 
-      {/* All WebViews rendered at position absolute top:0 — all "visible" to iOS */}
-      {movies.map((movie, index) => {
-        // Determine z-order and animation
-        const isCurrent = index === activeIndex;
-        const isNext = index === activeIndex + 1;
-        const isPrev = index === activeIndex - 1;
+      {/* All WebViews at top:0 — truly overlapping, all visible to iOS */}
+      {movies.map((movie, index) => (
+        <ReelSlide
+          key={movie.id}
+          movie={movie}
+          index={index}
+          activeIndex={activeIndex}
+          dragY={dragY}
+          swiping={swiping}
+          tabFocused={tabFocused}
+          savedIds={savedIds}
+          ratings={ratings}
+          onSave={handleSave}
+          onRate={handleRate}
+          onDismiss={handleDismiss}
+        />
+      ))}
 
-        let zIndex = 1;
-        let animStyle = undefined;
-
-        if (isCurrent) {
-          zIndex = 10;
-          animStyle = transitioning ? currentSlideStyle : undefined;
-        } else if (isNext) {
-          zIndex = 5;
-          animStyle = transitioning ? nextSlideStyle : undefined;
-        } else if (isPrev) {
-          zIndex = 5;
-          animStyle = transitioning ? prevSlideStyle : undefined;
-        }
-
-        const Wrapper = animStyle ? Animated.View : View;
-        const wrapperStyle = animStyle
-          ? [styles.slide, { zIndex }, animStyle]
-          : [styles.slide, { zIndex, transform: [{ translateY: isCurrent ? 0 : SCREEN_HEIGHT * 2 }] }];
-
-        return (
-          <Wrapper key={movie.id} style={wrapperStyle}>
-            <ReelItem
-              movie={movie}
-              isActive={isCurrent && tabFocused}
-              shouldLoad={tabFocused}
-              isSaved={savedIds.has(movie.id)}
-              userRating={ratings[movie.id]}
-              onSave={handleSave}
-              onRate={handleRate}
-              onDismiss={handleDismiss}
-            />
-          </Wrapper>
-        );
-      })}
-
-      {/* Gesture layer on top */}
+      {/* Gesture layer on top of everything */}
       <GestureDetector gesture={gesture}>
         <Animated.View style={styles.gestureLayer} />
       </GestureDetector>
     </View>
+  );
+}
+
+// Separate component so each slide gets its own animated style
+function ReelSlide({
+  movie, index, activeIndex, dragY, swiping, tabFocused,
+  savedIds, ratings, onSave, onRate, onDismiss,
+}: any) {
+  const isCurrent = index === activeIndex;
+  const isNext = index === activeIndex + 1;
+  const isPrev = index === activeIndex - 1;
+
+  const animStyle = useAnimatedStyle(() => {
+    if (isCurrent && swiping.value) {
+      // Current slide moves with drag
+      return { transform: [{ translateY: dragY.value }], zIndex: 10 };
+    }
+    if (isCurrent) {
+      return { transform: [{ translateY: 0 }], zIndex: 10 };
+    }
+    if (isNext) {
+      // Next slide sits underneath, no transform
+      return { transform: [{ translateY: 0 }], zIndex: 5 };
+    }
+    if (isPrev) {
+      // Prev slide sits underneath, no transform
+      return { transform: [{ translateY: 0 }], zIndex: 5 };
+    }
+    // All others: still at top:0 but behind everything
+    return { transform: [{ translateY: 0 }], zIndex: 1 };
+  });
+
+  return (
+    <Animated.View style={[styles.slide, animStyle]}>
+      <ReelItem
+        movie={movie}
+        isActive={isCurrent && tabFocused}
+        shouldLoad={tabFocused}
+        isSaved={savedIds.has(movie.id)}
+        userRating={ratings[movie.id]}
+        onSave={onSave}
+        onRate={onRate}
+        onDismiss={onDismiss}
+      />
+    </Animated.View>
   );
 }
 
@@ -254,5 +259,22 @@ const styles = StyleSheet.create({
   gestureLayer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 100,
+  },
+  badge: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    zIndex: 9999,
+    alignItems: 'center',
+  },
+  badgeText: {
+    color: '#0f0',
+    fontSize: 12,
+    fontWeight: '800',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 4,
   },
 });
