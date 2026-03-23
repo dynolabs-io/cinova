@@ -17,7 +17,6 @@ import {
   Linking,
   Platform,
 } from 'react-native';
-// Image import removed — no thumbnails
 import { LinearGradient } from 'expo-linear-gradient';
 import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
@@ -87,45 +86,49 @@ export default React.memo(function ReelItem({
     if (primaryProvider) await watchOnProvider(primaryProvider, movie.tmdbId);
   }, [primaryProvider, movie.tmdbId]);
 
-  // Unmute active video, mute others — all 4 keep playing
-  const isActiveRef = useRef(isActive);
-  useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
-
+  // Play/pause + mute/unmute when isActive changes
   useEffect(() => {
     if (!readyRef.current) return;
     if (isActive) {
-      webViewRef.current?.injectJavaScript('player.unMute(); true;');
-      setDebugState('PLAYING+UNMUTED');
+      setDebugState('UNMUTE+PLAY');
+      webViewRef.current?.injectJavaScript('player.unMute(); playAll(); true;');
     } else {
-      webViewRef.current?.injectJavaScript('player.mute(); true;');
-      setDebugState('PLAYING+MUTED');
+      setDebugState('MUTE+PAUSE');
+      webViewRef.current?.injectJavaScript('player.mute(); pauseAll(); true;');
     }
   }, [isActive]);
+
+  const isActiveRef = useRef(isActive);
+  useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
 
   const onMessage = useCallback((e: any) => {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
       if (msg.type === 'playerReady') {
         readyRef.current = true;
-        setDebugState('READY');
-        // Unmute immediately if this is the active video
+        setDebugState(isActiveRef.current ? 'READY+ACTIVE' : 'READY+PRELOAD');
         if (isActiveRef.current) {
           webViewRef.current?.injectJavaScript('player.unMute(); true;');
         }
       }
       if (msg.type === 'playerPlaying') {
-        setDebugState(isActiveRef.current ? 'PLAYING+UNMUTED' : 'PLAYING+MUTED');
+        if (!isActiveRef.current) {
+          setDebugState('PAUSING_AT_FRAME');
+          webViewRef.current?.injectJavaScript('pauseAll(); true;');
+        } else {
+          setDebugState('PLAYING');
+        }
       }
     } catch {}
   }, []);
 
-  const showWebView = !!videoKey;
+  const showVideo = shouldLoad && videoKey;
 
   return (
     <View style={styles.container}>
 
-      {/* WebView — all videos mount and play immediately */}
-      {showWebView && (
+      {/* Video: autoplay=1&mute=1 for all — plays silently, paused at real frame if not active */}
+      {showVideo && (
         <WebView
           ref={webViewRef}
           source={{ uri: `${EMBED_BASE}/${videoKey}?autoplay=1&controls=0&mute=1` }}
@@ -144,7 +147,7 @@ export default React.memo(function ReelItem({
       {/* DEBUG: visible state indicator */}
       <View style={{ position: 'absolute', top: 100, left: 12, backgroundColor: 'rgba(255,0,0,0.8)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, zIndex: 999 }}>
         <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
-          {debugState} | WV | {videoKey ? videoKey.slice(0, 6) : 'NOKEY'}
+          {debugState} | {shouldLoad ? 'LOAD' : 'UNLOAD'} | {isActive ? 'ACTIVE' : 'IDLE'} | {videoKey ? videoKey.slice(0, 6) : 'NOKEY'}
         </Text>
       </View>
 
@@ -154,6 +157,13 @@ export default React.memo(function ReelItem({
         locations={[0, 0.35, 0.6, 0.8, 1]}
         style={styles.gradient}
         pointerEvents="none"
+      />
+
+      {/* Tap target — navigates to detail */}
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={handleTap}
+        style={StyleSheet.absoluteFill}
       />
 
       {/* CinovaScore top-right */}

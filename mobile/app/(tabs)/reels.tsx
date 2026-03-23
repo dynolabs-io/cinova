@@ -1,9 +1,10 @@
 /**
- * Reels screen — Single WebView player with gesture swipe
+ * Reels screen — Full-screen vertical swipe feed (TikTok / Instagram Reels style)
  *
- * One WebView stays on screen permanently. On swipe, we call
- * switchVideo(key) to load the next video in the same player.
- * No WebView remounting, no iOS autoplay restrictions.
+ * Each ReelItem has its own embedded WebView video player that scrolls with
+ * the list item — giving the Instagram effect where you see both videos
+ * during a half-drag. WebViews are only mounted for items within ±1 of the
+ * active index to keep memory usage low.
  */
 
 import React, { useCallback, useRef, useState } from 'react';
@@ -12,58 +13,45 @@ import {
   Text,
   StyleSheet,
   Dimensions,
+  FlatList,
   ActivityIndicator,
+  ViewToken,
 } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  runOnJS,
-  Easing,
-} from 'react-native-reanimated';
-import { WebView } from 'react-native-webview';
-import { useRouter } from 'expo-router';
 
-const BUILD_VERSION = 'v24-flick';
+const BUILD_VERSION = 'v12-522a330';
 import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
+import ReelItem from '../../components/ui/ReelItem';
 import { getDiscoverFeed, saveTitle, rateTitle, dismissTitle } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
-import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
-import CinovaScore from '../../components/ui/CinovaScore';
-import StreamingBadge from '../../components/ui/StreamingBadge';
+import { Colors } from '../../constants/theme';
 import type { Movie } from '../../types';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const EMBED_BASE = 'https://api.cinova.openova.io/api/v1/embed';
-const SWIPE_THRESHOLD = SCREEN_HEIGHT * 0.15;
-
-function getVideoKey(movie: Movie): string | null {
-  const k = movie.verticalTrailerYoutubeKey;
-  return k && k !== 'NOT_FOUND' ? k : null;
-}
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function ReelsScreen() {
-  const router = useRouter();
   const country = useAppStore((s) => s.country);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [ratings, setRatings] = useState<Record<number, number>>({});
   const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
   const [activeIndex, setActiveIndex] = useState(0);
   const [tabFocused, setTabFocused] = useState(false);
-  const [playerReady, setPlayerReady] = useState(false);
-  const [debugState, setDebugState] = useState('INIT');
-
-  const webViewRef = useRef<WebView>(null);
 
   useFocusEffect(useCallback(() => {
     setTabFocused(true);
     return () => setTabFocused(false);
   }, []));
 
+  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 60 });
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    if (viewableItems.length > 0) setActiveIndex(viewableItems[0].index ?? 0);
+  });
+
   const {
     data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
     isLoading,
   } = useInfiniteQuery({
     queryKey: ['reels-feed', country],
@@ -75,8 +63,7 @@ export default function ReelsScreen() {
 
   const movies: Movie[] = (data?.pages ?? [])
     .flat()
-    .filter((m) => !dismissedIds.has(m.id))
-    .slice(0, 4);
+    .filter((m) => !dismissedIds.has(m.id));
 
   const handleSave = useCallback(async (movie: Movie) => {
     setSavedIds((prev) => new Set(prev).add(movie.id));
@@ -96,77 +83,11 @@ export default function ReelsScreen() {
     try { await dismissTitle(movie.tmdbId); } catch {}
   }, []);
 
-  // WebView message handler
-  const onMessage = useCallback((e: any) => {
-    try {
-      const msg = JSON.parse(e.nativeEvent.data);
-      if (msg.type === 'playerReady') {
-        setPlayerReady(true);
-        setDebugState('READY');
-        // Unmute after player is ready
-        webViewRef.current?.injectJavaScript('player.unMute(); true;');
-      }
-      if (msg.type === 'playerPlaying') {
-        setDebugState(`PLAYING:${msg.videoKey?.slice(0, 6) || '?'}`);
-        // Always ensure unmuted when playing
-        webViewRef.current?.injectJavaScript('player.unMute(); true;');
-      }
-    } catch {}
-  }, []);
+  const onEndReached = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
-  // --- Swipe logic ---
-  const activeRef = useSharedValue(0);
-  const dragY = useSharedValue(0);
-
-  const doSwitch = useCallback((nextIdx: number) => {
-    const movie = movies[nextIdx];
-    if (!movie) return;
-    const key = getVideoKey(movie);
-    if (!key) return;
-    activeRef.value = nextIdx;
-    setActiveIndex(nextIdx);
-    webViewRef.current?.injectJavaScript(`switchVideo('${key}'); true;`);
-    setDebugState(`SWITCH:${key.slice(0, 6)}`);
-  }, [movies, activeRef]);
-
-  const pan = Gesture.Pan()
-    .activeOffsetY([-10, 10])
-    .onUpdate((e) => {
-      dragY.value = e.translationY;
-    })
-    .onEnd((e) => {
-      const idx = activeRef.value;
-      const len = movies.length;
-
-      if (e.translationY < -SWIPE_THRESHOLD && idx < len - 1) {
-        // Swipe up → snap back to center + switch video
-        runOnJS(doSwitch)(idx + 1);
-        dragY.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) });
-      } else if (e.translationY > SWIPE_THRESHOLD && idx > 0) {
-        // Swipe down → snap back to center + switch video
-        runOnJS(doSwitch)(idx - 1);
-        dragY.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) });
-      } else {
-        // Snap back
-        dragY.value = withTiming(0, { duration: 150 });
-      }
-    });
-
-  const tap = Gesture.Tap()
-    .onEnd(() => {
-      const idx = activeRef.value;
-      const movie = movies[idx];
-      if (movie) runOnJS(router.push)(`/movie/${movie.id}`);
-    });
-
-  const gesture = Gesture.Race(pan, tap);
-
-  // Animate the entire content (WebView + overlay) together
-  const contentStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: dragY.value }],
-  }));
-
-  if (isLoading || movies.length === 0) {
+  if (isLoading) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={Colors.primary} size="large" />
@@ -174,73 +95,44 @@ export default function ReelsScreen() {
     );
   }
 
-  const firstKey = getVideoKey(movies[0]);
-  const currentMovie = movies[activeIndex];
-  const genreLabel = currentMovie?.genres.slice(0, 2).map((g: any) => g.name).join(' · ') || '';
-  const runtimeLabel = currentMovie?.runtime ? `${currentMovie.runtime}m` : '';
-
   return (
     <View style={styles.container}>
-      {/* Animated content — WebView + overlay move together on swipe */}
-      <Animated.View style={[StyleSheet.absoluteFill, contentStyle]}>
-        {/* Single WebView — always on screen, never remounted */}
-        {firstKey && (
-          <WebView
-            ref={webViewRef}
-            source={{ uri: `${EMBED_BASE}/${firstKey}?autoplay=1&controls=0&mute=1` }}
-            style={StyleSheet.absoluteFill}
-            allowsInlineMediaPlayback
-            mediaPlaybackRequiresUserAction={false}
-            scrollEnabled={false}
-            bounces={false}
-            startInLoadingState={false}
-            onMessage={onMessage}
-            pointerEvents="none"
+      <View style={{ position: 'absolute', top: 50, left: 0, right: 0, zIndex: 9999, alignItems: 'center' }}>
+        <Text style={{ color: '#0f0', fontSize: 12, fontWeight: '800', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 4 }}>
+          {BUILD_VERSION}
+        </Text>
+      </View>
+      <FlatList
+        data={movies}
+        keyExtractor={(item, i) => `${item.id}-${i}`}
+        renderItem={({ item, index }) => (
+          <ReelItem
+            movie={item}
+            isActive={index === activeIndex && tabFocused}
+            shouldLoad={Math.abs(index - activeIndex) <= 2 && tabFocused}
+            isSaved={savedIds.has(item.id)}
+            userRating={ratings[item.id]}
+            onSave={handleSave}
+            onRate={handleRate}
+            onDismiss={handleDismiss}
           />
         )}
-
-        {/* Movie info overlay */}
-        <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {/* Debug badges */}
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>
-            {BUILD_VERSION} | idx={activeIndex} | {debugState}
-          </Text>
-        </View>
-
-        {/* CinovaScore */}
-        {currentMovie?.cinovaScore != null && (
-          <View style={styles.scoreContainer}>
-            <CinovaScore score={currentMovie.cinovaScore} size="md" />
-          </View>
-        )}
-
-        {/* Bottom content */}
-        <View style={styles.bottomContent}>
-          {currentMovie?.providers && currentMovie.providers.length > 0 && (
-            <View style={styles.providerRow}>
-              {currentMovie.providers.slice(0, 4).map((p: any, i: number) => (
-                <StreamingBadge key={`${p.providerId}-${i}`} provider={p} variant="icon" size={32} />
-              ))}
-            </View>
-          )}
-          <Text style={styles.title} numberOfLines={2}>{currentMovie?.title}</Text>
-          <Text style={styles.meta}>
-            {[currentMovie?.year, genreLabel, runtimeLabel].filter(Boolean).join(' · ')}
-          </Text>
-          {(currentMovie?.cinovaSynopsis ?? currentMovie?.aiDescription ?? currentMovie?.overview) ? (
-            <Text style={styles.synopsis} numberOfLines={2}>
-              {currentMovie.cinovaSynopsis ?? currentMovie.aiDescription ?? currentMovie.overview}
-            </Text>
-          ) : null}
-        </View>
-      </View>
-      </Animated.View>
-
-      {/* Gesture layer on top */}
-      <GestureDetector gesture={gesture}>
-        <Animated.View style={styles.gestureLayer} />
-      </GestureDetector>
+        pagingEnabled
+        showsVerticalScrollIndicator={false}
+        snapToInterval={SCREEN_HEIGHT}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        onEndReached={onEndReached}
+        onEndReachedThreshold={2}
+        onViewableItemsChanged={onViewableItemsChanged.current}
+        viewabilityConfig={viewabilityConfig.current}
+        getItemLayout={(_, index) => ({
+          length: SCREEN_HEIGHT,
+          offset: SCREEN_HEIGHT * index,
+          index,
+        })}
+        removeClippedSubviews={false}
+      />
     </View>
   );
 }
@@ -248,73 +140,12 @@ export default function ReelsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: Colors.background,
   },
   loading: {
     flex: 1,
     backgroundColor: Colors.background,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  gestureLayer: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 100,
-  },
-  badge: {
-    position: 'absolute',
-    top: 50,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  badgeText: {
-    color: '#0f0',
-    fontSize: 12,
-    fontWeight: '800',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  scoreContainer: {
-    position: 'absolute',
-    top: 60,
-    right: Spacing[4],
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: Radius.full,
-    padding: Spacing[1.5],
-  },
-  bottomContent: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: Spacing[4],
-    paddingBottom: Spacing[10],
-  },
-  providerRow: {
-    flexDirection: 'row',
-    gap: Spacing[2],
-    marginBottom: Spacing[3],
-  },
-  title: {
-    color: Colors.textPrimary,
-    fontSize: Typography['2xl'],
-    fontWeight: Typography.black,
-    letterSpacing: Typography.tighter,
-    lineHeight: Typography['2xl'] * 1.15,
-    marginBottom: Spacing[1.5],
-  },
-  meta: {
-    color: Colors.textSecondary,
-    fontSize: Typography.sm,
-    fontWeight: Typography.medium,
-    marginBottom: Spacing[2],
-  },
-  synopsis: {
-    color: Colors.textSecondary,
-    fontSize: Typography.sm,
-    fontStyle: 'italic',
-    lineHeight: Typography.sm * 1.5,
   },
 });
