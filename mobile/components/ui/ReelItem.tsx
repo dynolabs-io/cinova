@@ -113,8 +113,8 @@ export default React.memo(function ReelItem({
       }
       if (msg.type === 'playerPlaying') {
         if (!isActiveRef.current) {
-          setDebugState('PAUSING_AT_FRAME');
-          webViewRef.current?.injectJavaScript('pauseAll(); true;');
+          setDebugState('SEEK+PAUSE');
+          webViewRef.current?.injectJavaScript('player.seekTo(0.17); setTimeout(function(){pauseAll();},150); true;');
         } else {
           setDebugState('PLAYING');
         }
