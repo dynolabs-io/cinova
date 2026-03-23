@@ -7,7 +7,7 @@
  * the list — giving the Instagram-style half-drag two-video-visible effect.
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -87,16 +87,34 @@ export default React.memo(function ReelItem({
     if (primaryProvider) await watchOnProvider(primaryProvider, movie.tmdbId);
   }, [primaryProvider, movie.tmdbId]);
 
-  // No play/pause gating — all 4 videos play simultaneously
+  // Unmute active video, mute others — all 4 keep playing
+  const isActiveRef = useRef(isActive);
+  useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
+
+  useEffect(() => {
+    if (!readyRef.current) return;
+    if (isActive) {
+      webViewRef.current?.injectJavaScript('player.unMute(); true;');
+      setDebugState('PLAYING+UNMUTED');
+    } else {
+      webViewRef.current?.injectJavaScript('player.mute(); true;');
+      setDebugState('PLAYING+MUTED');
+    }
+  }, [isActive]);
+
   const onMessage = useCallback((e: any) => {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
       if (msg.type === 'playerReady') {
         readyRef.current = true;
         setDebugState('READY');
+        // Unmute immediately if this is the active video
+        if (isActiveRef.current) {
+          webViewRef.current?.injectJavaScript('player.unMute(); true;');
+        }
       }
       if (msg.type === 'playerPlaying') {
-        setDebugState('PLAYING');
+        setDebugState(isActiveRef.current ? 'PLAYING+UNMUTED' : 'PLAYING+MUTED');
       }
     } catch {}
   }, []);
