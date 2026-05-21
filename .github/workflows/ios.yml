@@ -501,21 +501,27 @@ jobs:
 
       - name: Install app + grant permissions on simulator
         run: |
-          set -euo pipefail
+          set -u    # NOT -e or pipefail — find/grep pipes return non-zero on empty match
           # Discover the app — the Podfile patch sets DEPLOYMENT_LOCATION=YES
           # + INSTALL_PATH=$(LOCAL_APPS_DIR), so xcodebuild deploys the .app
           # to /tmp/<App>.dst/Applications/<App>.app for SIM Release builds
           # (not just for archives). Search both locations.
-          APP=$(find $RUNNER_TEMP/sim-build/Build/Products/Release-iphonesimulator /tmp -maxdepth 5 -type d -name "*.app" 2>/dev/null | grep -v dSYM | head -1)
+          # `-not -path *dSYM*` filters out dSYM bundles directly in find;
+          # no pipe to grep (which would exit 1 on no-match and kill `set -e`).
+          APP=$(find "$RUNNER_TEMP/sim-build/Build/Products/Release-iphonesimulator" /tmp \
+                -maxdepth 5 -type d -name "*.app" -not -path "*dSYM*" 2>/dev/null | head -1)
           if [ -z "$APP" ] || [ ! -d "$APP" ]; then
             echo "::error::No .app found in either Products dir or /tmp/*.dst/"
-            echo "=== /tmp tree ==="
-            find /tmp -maxdepth 5 -type d -name "*.app" 2>/dev/null
-            echo "=== sim-build tree ==="
-            find $RUNNER_TEMP/sim-build/Build/Products -maxdepth 4 -type d -name "*.app" 2>/dev/null
+            echo "=== /tmp tree (any .app) ==="
+            find /tmp -maxdepth 6 -type d -name "*.app" 2>/dev/null | head -30
+            echo "=== sim-build tree (full) ==="
+            find "$RUNNER_TEMP/sim-build/Build/Products" -maxdepth 6 -type d 2>/dev/null | head -50
+            echo "=== Anything Cinova-named anywhere ==="
+            find /tmp "$RUNNER_TEMP" "$HOME/Library/Developer/Xcode" -maxdepth 8 -name "Cinova*" 2>/dev/null | head -20
             exit 1
           fi
           echo "Found app: $APP"
+          set -e    # re-enable for the actual install commands
           echo "Installing $APP onto $SIM_UDID"
           xcrun simctl install "$SIM_UDID" "$APP"
           # Cinova declares camera/mic/location in Info.plist for SDK
