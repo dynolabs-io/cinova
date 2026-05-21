@@ -495,13 +495,20 @@ jobs:
       - name: Install app + grant permissions on simulator
         run: |
           set -euo pipefail
-          # Discover the app — slug-derived name may vary
-          APP=$(find $RUNNER_TEMP/sim-build/Build/Products/Release-iphonesimulator -maxdepth 1 -type d -name "*.app" | head -1)
+          # Discover the app — the Podfile patch sets DEPLOYMENT_LOCATION=YES
+          # + INSTALL_PATH=$(LOCAL_APPS_DIR), so xcodebuild deploys the .app
+          # to /tmp/<App>.dst/Applications/<App>.app for SIM Release builds
+          # (not just for archives). Search both locations.
+          APP=$(find $RUNNER_TEMP/sim-build/Build/Products/Release-iphonesimulator /tmp -maxdepth 5 -type d -name "*.app" 2>/dev/null | grep -v dSYM | head -1)
           if [ -z "$APP" ] || [ ! -d "$APP" ]; then
-            echo "::error::Expected .app under $RUNNER_TEMP/sim-build/Build/Products/Release-iphonesimulator/"
-            find $RUNNER_TEMP/sim-build/Build/Products -maxdepth 3 -type d -name "*.app" 2>/dev/null
+            echo "::error::No .app found in either Products dir or /tmp/*.dst/"
+            echo "=== /tmp tree ==="
+            find /tmp -maxdepth 5 -type d -name "*.app" 2>/dev/null
+            echo "=== sim-build tree ==="
+            find $RUNNER_TEMP/sim-build/Build/Products -maxdepth 4 -type d -name "*.app" 2>/dev/null
             exit 1
           fi
+          echo "Found app: $APP"
           echo "Installing $APP onto $SIM_UDID"
           xcrun simctl install "$SIM_UDID" "$APP"
           # Cinova declares camera/mic/location in Info.plist for SDK
