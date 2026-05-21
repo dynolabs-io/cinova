@@ -293,19 +293,26 @@ jobs:
           dist_types = {'DISTRIBUTION', 'IOS_DISTRIBUTION'}
           certs = [c for c in all_certs if c['attributes'].get('certificateType') in dist_types]
           print(f"existing distribution certs: {len(certs)} (of {len(all_certs)} total)")
-          if len(certs) >= 2:
+          # Apple's effective limit appears to be 2 distribution certs total
+          # (across DISTRIBUTION + IOS_DISTRIBUTION). Revoking only one isn't
+          # enough when 3+ pre-exist (run 26222345040 confirmed this). Since
+          # each CI run creates an ephemeral keychain that's destroyed at
+          # job end, ALL pre-existing certs are useless to us — their private
+          # keys are gone. Revoke them all; fastlane cert below creates one
+          # fresh that we actually have the key for.
+          if len(certs) >= 1:
               certs.sort(key=lambda c: c['attributes'].get('expirationDate') or '')
-              victim = certs[0]
-              print(f"revoking oldest: {victim['id']} ({victim['attributes'].get('name')})")
-              dreq = urllib.request.Request(
-                  f"https://api.appstoreconnect.apple.com/v1/certificates/{victim['id']}",
-                  headers=hdrs, method='DELETE',
-              )
-              try:
-                  urllib.request.urlopen(dreq).read()
-                  print('revoked OK')
-              except urllib.error.HTTPError as e:
-                  print(f'revoke HTTP {e.code}: {e.read().decode()[:200]}')
+              for victim in certs:
+                  print(f"revoking: {victim['id']} ({victim['attributes'].get('name')})")
+                  dreq = urllib.request.Request(
+                      f"https://api.appstoreconnect.apple.com/v1/certificates/{victim['id']}",
+                      headers=hdrs, method='DELETE',
+                  )
+                  try:
+                      urllib.request.urlopen(dreq).read()
+                      print('  revoked OK')
+                  except urllib.error.HTTPError as e:
+                      print(f'  revoke HTTP {e.code}: {e.read().decode()[:200]}')
 
           PROFILE_NAME = "Dynolabs Cinova App Store"
           preq = urllib.request.Request(
