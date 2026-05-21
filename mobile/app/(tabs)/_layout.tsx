@@ -44,6 +44,7 @@ export default function TabLayout() {
       queryFn: ({ pageParam = 1 }) => getDiscoverFeed(country, pageParam as number),
       initialPageParam: 1,
       pages: 1,
+      getNextPageParam: (_lastPage, allPages) => allPages.length + 1,
     });
   }, [queryClient, country]);
 

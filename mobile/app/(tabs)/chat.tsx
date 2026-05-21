@@ -14,10 +14,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
-  SafeAreaView,
   Alert,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Audio } from 'expo-av';
 import { streamChatMessage, transcribeAudio } from '../../services/api';
 import type { ChatSuggestion } from '../../services/api';
@@ -380,7 +379,7 @@ function EmptyState() {
       </View>
       <Text style={styles.emptyTitle}>What are you in the mood for?</Text>
       <Text style={styles.emptyBody}>
-        Tell me a genre, a feeling, a movie you loved — I'll find the perfect watch for you.
+        Tell me a genre, a feeling, a movie you loved — I&apos;ll find the perfect watch for you.
       </Text>
     </View>
   );

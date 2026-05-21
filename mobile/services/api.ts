@@ -71,7 +71,7 @@ api.interceptors.request.use(
 
 // Response interceptor: refresh JWT on 401
 let isRefreshing = false;
-let failedQueue: Array<{ resolve: (t: string) => void; reject: (e: unknown) => void }> = [];
+let failedQueue: { resolve: (t: string) => void; reject: (e: unknown) => void }[] = [];
 
 function processQueue(error: unknown, token: string | null = null) {
   failedQueue.forEach(({ resolve, reject }) => (error ? reject(error) : resolve(token!)));
@@ -159,7 +159,7 @@ export async function getRecommendations(country = 'US', limit = 20): Promise<Mo
 
 export async function getMovie(id: number, country = 'US'): Promise<Movie> {
   const { data } = await api.get<Movie>(`/api/v1/movie/${id}`, { params: { country } });
-  return normalizeMedia(data as Record<string, unknown>) as unknown as Movie;
+  return normalizeMedia(data as unknown as Record<string, unknown>) as unknown as Movie;
 }
 
 export async function getMovieProviders(id: number, country = 'US'): Promise<WatchProvider[]> {

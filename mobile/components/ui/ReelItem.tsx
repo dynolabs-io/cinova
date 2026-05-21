@@ -140,6 +140,11 @@ export default React.memo(function ReelItem({
           startInLoadingState={false}
           onMessage={onMessage}
           pointerEvents="none"
+          // react-native-webview dropped the `transparent` prop from its public
+          // typings but the iOS implementation still honors it at runtime; the
+          // backgroundColor on `style` above is necessary but not sufficient
+          // for full content transparency on iOS WKWebView in this codepath.
+          // @ts-expect-error -- intentional: runtime-valid, types-untyped
           transparent
         />
       )}

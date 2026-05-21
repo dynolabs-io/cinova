@@ -16,7 +16,7 @@ export default function AuthLayout() {
         headerStyle: { backgroundColor: Colors.background },
         headerTintColor: Colors.textPrimary,
         headerShadowVisible: false,
-        headerBackTitleVisible: false,
+        headerBackTitle: '',
         contentStyle: { backgroundColor: Colors.background },
         animation: 'slide_from_right',
       }}
