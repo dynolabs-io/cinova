@@ -8,8 +8,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  API_IMAGE: ghcr.io/foundrylab-app/cinova/api
-  INGESTION_IMAGE: ghcr.io/foundrylab-app/cinova/ingestion
+  API_IMAGE: ghcr.io/dynolabs-io/cinova/api
+  INGESTION_IMAGE: ghcr.io/dynolabs-io/cinova/ingestion
 
 jobs:
   build-api:
@@ -137,7 +137,7 @@ jobs:
         run: |
           cd openova-private
           git config user.name "cinova-bot"
-          git config user.email "bot@foundrylab.app"
+          git config user.email "bot@dynolabs.io"
           git add clusters/contabo-mkt/apps/cinova/
           git diff --staged --quiet && echo "No changes to commit" && exit 0
           git commit -m "deploy: update cinova images to ${SHA_SHORT}"
