@@ -49,9 +49,26 @@ npx expo start
 `backend/**` push → build API + ingestion images → push GHCR → bump SHA in `openova-private/clusters/contabo-mkt/apps/cinova/services/api.yaml` → Flux reconciles.
 `mobile/**` push → expo export check; EAS builds are manual.
 
+## Canonical docs
+
+Full documentation lives under [`docs/`](docs/) per user-global `~/.claude/CLAUDE.md` §11 (lean-docs strategy).
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how it works, API surface, CinovaScore formula
+- [docs/PRINCIPLES.md](docs/PRINCIPLES.md) — cinova-specific engineering rules + anti-pattern catalog
+- [docs/DOD.md](docs/DOD.md) — definition of done (operator-walk gate is the metric)
+- [docs/STATUS.md](docs/STATUS.md) — what's built vs design
+- [docs/RUNBOOKS.md](docs/RUNBOOKS.md) — setup, CI/CD, rollback, ingestion ops
+- [docs/SECURITY.md](docs/SECURITY.md) — threat model + secrets policy
+- [docs/GLOSSARY.md](docs/GLOSSARY.md) — canonical terms + banned terms
+- [docs/ledger/](docs/ledger/) — TRUST.md verification ledger + TRACKER.md open-work snapshot
+- [docs/adr/](docs/adr/) — architecture decision records
+
+Tree-view entry: [`README.md`](README.md).
+
 ## Known issues
 
-- (empty for now — populate as discovered)
+- Reels surface is fragile — see [docs/PRINCIPLES.md](docs/PRINCIPLES.md) rule 1 (revert before fixing).
+- Production manifests live in `openova-private`, not this repo's `deploy/` — see [docs/PRINCIPLES.md](docs/PRINCIPLES.md) rule 4.
 
 ## Sub-agent cap for this project
 
