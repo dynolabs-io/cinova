@@ -15,7 +15,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   ios: {
     supportsTablet: false,
-    bundleIdentifier: 'io.openova.cinova',
+    bundleIdentifier: 'io.dynolabs.cinova',
     buildNumber: '1',
     infoPlist: {
       NSCameraUsageDescription: 'Used for profile photo.',
@@ -28,7 +28,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#0A0A0F',
     },
-    package: 'io.openova.cinova',
+    package: 'io.dynolabs.cinova',
     versionCode: 1,
     permissions: [
       'RECEIVE_BOOT_COMPLETED',

@@ -28,6 +28,6 @@
     "android": "Teen"
   },
   "appStoreId": "",
-  "bundleId": "io.openova.cinova",
-  "androidPackage": "io.openova.cinova"
+  "bundleId": "io.dynolabs.cinova",
+  "androidPackage": "io.dynolabs.cinova"
 }

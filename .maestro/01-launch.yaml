@@ -1,16 +1,27 @@
 appId: io.dynolabs.cinova
 ---
-# App launches. JS bundle loads. Tab bar renders.
-# This is the floor — proves the app reaches first interactive frame
-# without crashing on native bridge / missing autolinked module / etc.
+# App launches. JS bundle loads. Onboarding animation completes
+# (~3s: spring logo + 1200ms hold + 500ms fade), router lands on (tabs)/index,
+# tab bar renders.
 - clearState
 - launchApp
-# Generous wait — cold start on CI sim + first-launch hydration
+# Wait out the onboarding animation (initial render is also a few seconds on
+# cold-boot CI sim — generous timeout).
 - waitForAnimationToEnd:
-    timeout: 15000
-# At least one tab label must be visible after launch. The tab navigator
-# defines Home / Reels / Discover / Watchlist / Profile; checking for the
-# first one is sufficient for the smoke gate.
+    timeout: 20000
+# Either onboarding tagline OR a tab label MUST be visible — anything less
+# means the bundle failed to load OR native bridge crashed before first frame.
+# Try onboarding first (since clearState resets hasOnboarded).
 - assertVisible:
-    text: "Home"
+    text: "Discover what to watch next"
     optional: true
+# Wait for onboarding fade-out + tab bar to render.
+- extendedWaitUntil:
+    visible:
+      text: "Home"
+    timeout: 15000
+- assertVisible: "Home"
+- assertVisible: "Reels"
+- assertVisible: "Discover"
+- assertVisible: "Watchlist"
+- assertVisible: "Profile"
