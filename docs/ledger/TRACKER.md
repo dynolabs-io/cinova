@@ -33,7 +33,8 @@ iOS pipeline iteration log (live):
 | 26221495210 | `8749da6` | failure | POST /v1/apps: HTTP 403 "apps does not allow CREATE" (Apple-side limit) | Drop POST /v1/apps; keep bundleId create; let altool auto-create on first upload |
 | 26221703006 | `94aea95` | failure | "Expected .app under Release-iphonesimulator/" — Podfile's DEPLOYMENT_LOCATION=YES sent it to `/tmp/Cinova.dst/` | Find in both locations |
 | 26222345040 | `836105e` | failure | fastlane cert: "reached the maximum number of Distribution certificates" — 3 dist certs existed; revoke-oldest only removed 1, leaving 2 | Revoke ALL pre-existing dist certs (CI keychains are ephemeral) |
-| 26222547474 | `372d2d4` | in-flight (watching) | — | — |
+| 26222547474 | `372d2d4` | failure | install-app step exited 1 with NO diagnostic output — `set -euo pipefail` + `find ... \| grep -v dSYM \| head -1` killed bash before the diagnostic if-block when grep found 0 non-dSYM matches | Drop pipe-to-grep; use `find -not -path "*dSYM*"` and `set -u` (no -e/pipefail) for discovery block |
+| 26223284361 | `ecb3383` | in-flight (watching) | — | — |
 
 Cleared in-flight (substrate):
 - Apple Developer bundle ID `io.dynolabs.cinova` (T8F2BSD4H7) — created via `POST /v1/bundleIds` in run 26221495210; persistent
