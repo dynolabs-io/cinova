@@ -170,22 +170,18 @@ jobs:
                   print(f'::error::Bundle ID create HTTP {r.status_code}: {r.text[:500]}')
                   sys.exit(1)
 
-          # 2. ASC app record (App Store Connect)
+          # 2. ASC app record — Apple's API does NOT allow creating apps
+          # ("The resource 'apps' does not allow 'CREATE'" — confirmed in run
+          # 26221495210). Report state; continue. altool will auto-create the
+          # ASC record on first IPA upload if Apple's account-level setting
+          # for "Auto-create apps on first build upload" is on, OR will fail
+          # the upload with a precise error pointing to the ASC web UI.
           r = requests.get(f'{base}/v1/apps?filter[bundleId]={BID}', headers=h, timeout=15)
           apps = r.json().get('data', []) if r.status_code == 200 else []
           if apps:
-              print(f'::notice::ASC app already exists: id={apps[0]["id"]} name={apps[0]["attributes"]["name"]}')
-              sys.exit(0)
-          payload = {'data': {'type': 'apps', 'attributes': {
-              'bundleId': BID, 'name': 'Cinova', 'primaryLocale': 'en-US',
-              'sku': 'cinova-2026'}}}
-          r = requests.post(f'{base}/v1/apps', headers=h, json=payload, timeout=30)
-          if r.status_code in (200, 201):
-              print(f'::notice::Created ASC app: id={r.json()["data"]["id"]}')
-              sys.exit(0)
-          # Inspect 409 / 403 / etc
-          print(f'::error::ASC app create HTTP {r.status_code}: {r.text[:800]}')
-          sys.exit(1)
+              print(f'::notice::ASC app exists: id={apps[0]["id"]} name={apps[0]["attributes"]["name"]}')
+          else:
+              print(f'::warning::No ASC record for {BID} yet — altool will attempt auto-create on first upload. If altool fails with "No App in App Store Connect", create manually at https://appstoreconnect.apple.com (Apple Team {os.environ["APPLE_TEAM_ID"]}) — Apple has not exposed CREATE on the apps resource via API.')
           PY
 
       - name: Ensure "Founders" beta group exists (idempotent)
@@ -207,7 +203,11 @@ jobs:
           h = {'Authorization': f'Bearer {tok}'}
           base = 'https://api.appstoreconnect.apple.com'
           r = requests.get(f'{base}/v1/apps?filter[bundleId]=io.dynolabs.cinova', headers=h, timeout=15)
-          app_id = r.json()['data'][0]['id']
+          apps = r.json().get('data', []) if r.status_code == 200 else []
+          if not apps:
+              print('::warning::ASC app does not exist yet — skipping beta group create. Will be re-attempted by the post-upload assign step.')
+              sys.exit(0)
+          app_id = apps[0]['id']
           r = requests.get(f'{base}/v1/betaGroups?filter[app]={app_id}', headers=h, timeout=15)
           groups = [g['attributes']['name'] for g in r.json().get('data', [])]
           if 'Founders' in groups:
