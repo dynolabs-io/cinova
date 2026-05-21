@@ -170,6 +170,32 @@ jobs:
                   print(f'::error::Bundle ID create HTTP {r.status_code}: {r.text[:500]}')
                   sys.exit(1)
 
+          # 1b. Enable required capabilities on the bundle ID.
+          # cinova's entitlements (from expo-notifications plugin) require
+          # aps-environment → maps to PUSH_NOTIFICATIONS capability. Without
+          # this, xcodebuild archive fails with "Provisioning profile doesn't
+          # include the aps-environment entitlement" (run 26225696674).
+          required_caps = ['PUSH_NOTIFICATIONS']
+          r = requests.get(f'{base}/v1/bundleIds/{bundle_id_resource}/capabilities', headers=h, timeout=15)
+          existing_caps = {c['attributes']['capabilityType'] for c in r.json().get('data', [])} if r.status_code == 200 else set()
+          for cap in required_caps:
+              if cap in existing_caps:
+                  print(f'Capability {cap}: already enabled')
+                  continue
+              payload = {'data': {
+                  'type': 'bundleIdCapabilities',
+                  'attributes': {'capabilityType': cap},
+                  'relationships': {'bundleId': {'data': {'type': 'bundleIds', 'id': bundle_id_resource}}},
+              }}
+              r = requests.post(f'{base}/v1/bundleIdCapabilities', headers=h, json=payload, timeout=15)
+              if r.status_code in (200, 201):
+                  print(f'Capability {cap}: enabled')
+              elif r.status_code == 409:
+                  print(f'Capability {cap}: already exists (409)')
+              else:
+                  print(f'::error::Capability {cap} POST HTTP {r.status_code}: {r.text[:400]}')
+                  sys.exit(1)
+
           # 2. ASC app record — Apple's API does NOT allow creating apps
           # ("The resource 'apps' does not allow 'CREATE'" — confirmed in run
           # 26221495210). Report state; continue. altool will auto-create the
