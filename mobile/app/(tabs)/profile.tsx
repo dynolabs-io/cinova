@@ -122,7 +122,7 @@ export default function ProfileScreen() {
           <View style={styles.anonIcon}>
             <Text style={styles.anonIconText}>👤</Text>
           </View>
-          <Text style={styles.anonTitle}>You're not signed in</Text>
+          <Text style={styles.anonTitle}>You&apos;re not signed in</Text>
           <Text style={styles.anonSubtitle}>
             Create an account to sync your watchlist and ratings across devices.
           </Text>

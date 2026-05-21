@@ -41,9 +41,9 @@ export default function WatchlistScreen() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<FilterType>('all');
 
-  const { data: watchlist, isLoading } = useQuery({
+  const { data: watchlist, isLoading } = useQuery<Movie[]>({
     queryKey: ['watchlist'],
-    queryFn: getWatchlist,
+    queryFn: () => getWatchlist(),
   });
 
   const removeMutation = useMutation({
@@ -154,7 +154,7 @@ function EmptyState({ onDiscover }: { onDiscover: () => void }) {
       <Text style={styles.emptyIcon}>🎬</Text>
       <Text style={styles.emptyTitle}>Nothing saved yet</Text>
       <Text style={styles.emptySubtitle}>
-        Save movies and shows you want to watch later. They'll appear here.
+        Save movies and shows you want to watch later. They&apos;ll appear here.
       </Text>
       <TouchableOpacity
         style={styles.discoverBtn}

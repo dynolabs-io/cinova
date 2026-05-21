@@ -17,8 +17,6 @@ import {
   ActivityIndicator,
   ViewToken,
 } from 'react-native';
-
-const BUILD_VERSION = 'v12-522a330';
 import { useFocusEffect } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import ReelItem from '../../components/ui/ReelItem';
@@ -26,6 +24,8 @@ import { getDiscoverFeed, saveTitle, rateTitle, dismissTitle } from '../../servi
 import { useAppStore } from '../../store/useAppStore';
 import { Colors } from '../../constants/theme';
 import type { Movie } from '../../types';
+
+const BUILD_VERSION = 'v12-522a330';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 

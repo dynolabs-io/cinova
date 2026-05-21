@@ -85,7 +85,7 @@ export default function PersonDetailScreen() {
     : null;
 
   const filmographySorted = [...(person.filmography ?? [])].sort(
-    (a, b) => b.year - a.year
+    (a, b) => Number(b.year ?? 0) - Number(a.year ?? 0)
   );
 
   return (

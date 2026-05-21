@@ -27,7 +27,7 @@ export default function NotFoundScreen() {
       <Text style={styles.code}>404</Text>
       <Text style={styles.title}>Page Not Found</Text>
       <Text style={styles.subtitle}>
-        The screen you're looking for doesn't exist or has been moved.
+        The screen you&apos;re looking for doesn&apos;t exist or has been moved.
       </Text>
 
       <TouchableOpacity
