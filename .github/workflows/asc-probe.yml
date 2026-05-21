@@ -1,0 +1,81 @@
+name: asc-probe (one-shot)
+
+# One-shot: probe ASC for the io.dynolabs.cinova app record + the "Founders"
+# beta group. Print which exist + which need manual creation. Logs the
+# results without leaking secret values. Delete this workflow once the
+# state is known.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pyjwt cryptography requests
+      - env:
+          KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY_B64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          BUNDLE_ID: io.dynolabs.cinova
+        run: |
+          python3 - <<'PY'
+          import os, base64, time, jwt, requests, sys
+
+          # P8 was stored as base64 of the raw file. fastlane sometimes stores
+          # the PEM literally, sometimes base64. Try both.
+          raw = os.environ['PRIVATE_KEY_B64']
+          try:
+              key = base64.b64decode(raw)
+              # Sanity-check: PEM starts with "-----BEGIN"
+              if not key.startswith(b'-----BEGIN'):
+                  key = raw.encode()
+          except Exception:
+              key = raw.encode()
+
+          token = jwt.encode(
+              {'iss': os.environ['ISSUER_ID'], 'iat': int(time.time()),
+               'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'},
+              key, algorithm='ES256',
+              headers={'kid': os.environ['KEY_ID']})
+          h = {'Authorization': f'Bearer {token}'}
+          base = 'https://api.appstoreconnect.apple.com'
+          bid = os.environ['BUNDLE_ID']
+
+          # 1. Check app record on App Store Connect
+          r = requests.get(f'{base}/v1/apps?filter[bundleId]={bid}', headers=h, timeout=20)
+          if r.status_code != 200:
+              print(f'::error::ASC apps query failed HTTP {r.status_code}: {r.text[:300]}')
+              sys.exit(1)
+          apps = r.json().get('data', [])
+          app_id = apps[0]['id'] if apps else None
+          name = apps[0]['attributes']['name'] if apps else None
+          print(f'ASC app for {bid}: {"YES id=" + app_id + " name=" + name if apps else "MISSING (needs creation)"}')
+
+          # 2. Check bundle ID registration in Apple Developer portal
+          r = requests.get(f'{base}/v1/bundleIds?filter[identifier]={bid}', headers=h, timeout=20)
+          bids = r.json().get('data', []) if r.status_code == 200 else []
+          print(f'Apple Developer bundle ID {bid}: {"YES id=" + bids[0]["id"] if bids else "MISSING (fastlane sigh will create on first profile fetch)"}')
+
+          # 3. Check beta groups (only if app exists)
+          if app_id:
+              r = requests.get(f'{base}/v1/betaGroups?filter[app]={app_id}', headers=h, timeout=20)
+              if r.status_code == 200:
+                  groups = [g['attributes']['name'] for g in r.json().get('data', [])]
+                  founders_present = 'Founders' in groups
+                  print(f'Beta groups for app: {groups}')
+                  print(f'"Founders" beta group: {"YES" if founders_present else "MISSING"}')
+              else:
+                  print(f'beta groups query HTTP {r.status_code}: {r.text[:200]}')
+
+          # 4. List existing apps on team (debug aid — see other apps)
+          r = requests.get(f'{base}/v1/apps?limit=50', headers=h, timeout=20)
+          if r.status_code == 200:
+              other_apps = [(a['attributes']['bundleId'], a['attributes']['name']) for a in r.json().get('data', [])]
+              print(f'All ASC apps on team ({len(other_apps)}):')
+              for b, n in other_apps:
+                  print(f'  - {b}  ({n})')
+          PY
