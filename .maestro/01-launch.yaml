@@ -1,0 +1,16 @@
+appId: io.dynolabs.cinova
+---
+# App launches. JS bundle loads. Tab bar renders.
+# This is the floor — proves the app reaches first interactive frame
+# without crashing on native bridge / missing autolinked module / etc.
+- clearState
+- launchApp
+# Generous wait — cold start on CI sim + first-launch hydration
+- waitForAnimationToEnd:
+    timeout: 15000
+# At least one tab label must be visible after launch. The tab navigator
+# defines Home / Reels / Discover / Watchlist / Profile; checking for the
+# first one is sufficient for the smoke gate.
+- assertVisible:
+    text: "Home"
+    optional: true

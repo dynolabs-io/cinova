@@ -26,8 +26,10 @@ Cinova is a mobile-first AI-powered movie and TV discovery app. The product surf
 | Data sources | TMDB API v3 + Wikidata SPARQL + YouTube (vertical trailers) |
 | Mobile | React Native 0.81 + Expo SDK 54 (expo-router) |
 | Infrastructure | K3s + Flux GitOps |
-| Container registry | GHCR (`ghcr.io/foundrylab-app/cinova`) |
+| Container registry | GHCR (`ghcr.io/dynolabs-io/cinova`) |
 | Deploy target | `contabo-mkt` K3s cluster (legacy Sovereign instance) |
+| iOS distribution | TestFlight via App Store Connect (no Expo Go) — built on GitHub-hosted `macos-latest` runners |
+| Mobile bundle ID | `io.dynolabs.cinova` (iOS + Android) |
 
 ## Repository layout
 
@@ -126,14 +128,21 @@ GitOps:
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  GitHub Actions                                          │
-│  backend/** → build → push GHCR → update SHA manifest    │
-│  mobile/**  → tsc + expo export check                    │
+│  GitHub Actions (dynolabs-io/cinova)                     │
+│  backend/**  → build → push GHCR → bump SHA in Flux      │
+│  mobile/**   → ci.yml: tsc + lint (ubuntu-latest)        │
+│  mobile/** + .maestro/** → ios.yml: macos-latest         │
+│                  │ prebuild → patch Podfile              │
+│                  │ → sim build + Maestro E2E gate        │
+│                  │ → archive → IPA → altool TestFlight   │
+│                  │ → ASC: assign build to "Founders"     │
 │                     ▼                                    │
 │  Flux CD → K3s (namespace: cinova) on contabo-mkt        │
 │    neo4j, postgres, valkey, api, ingestion CronJobs      │
 └──────────────────────────────────────────────────────────┘
 ```
+
+Manual fallback workflow: `asc-assign-build.yml` re-assigns a specific CFBundleVersion to the "Founders" beta group (used when the post-upload assignment in `ios.yml` was skipped because the build hadn't finished ASC processing).
 
 ## CinovaScore — computation
 

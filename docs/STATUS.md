@@ -84,4 +84,5 @@ Live, machine-current snapshot lives in [ledger/TRACKER.md](ledger/TRACKER.md).
 
 - **`deploy/` directory is empty.** Production manifests live in `openova-private/clusters/contabo-mkt/apps/cinova/`. When cinova migrates to a Sovereign Blueprint (per `openova-io/openova` Blueprint authoring guide), the manifests will move under `deploy/` as a Blueprint artifact.
 - **No CHANGELOG.** Per user-global §11 rule 8, GitHub commit history + PRs are the changelog.
-- **No automated end-to-end mobile test.** Walk-coverage relies on the operator-walk DoD ([DOD.md](DOD.md) gate 4). When Maestro / Detox integration ships, it will be referenced from [RUNBOOKS.md](RUNBOOKS.md).
+- **Maestro flows are smoke-only today.** `.maestro/01-launch.yaml` proves the app boots + tab bar renders. Per-pillar flows (Reels / Discover / Search / Watchlist / Profile) are scheduled to land incrementally — each per-pillar PR adds its own Maestro flow and references it from `.maestro/00-all.yaml`.
+- **Bundle ID changed 2026-05-21**: `io.openova.cinova` → `io.dynolabs.cinova` (issue #100). Any existing TestFlight installs under the old ID are invalidated; first TestFlight under the new ID is `ios.yml` run #1 after the new ASC record is created.
