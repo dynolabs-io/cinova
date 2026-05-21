@@ -76,3 +76,4 @@ logs/
 # ---- Testing ----
 coverage/
 *.coverprofile
+.claude/
