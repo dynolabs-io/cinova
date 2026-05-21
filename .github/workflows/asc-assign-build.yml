@@ -1,0 +1,55 @@
+name: ASC Assign Build to Founders (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_version:
+        description: 'CFBundleVersion to assign'
+        required: true
+        default: '1'
+
+jobs:
+  assign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pyjwt cryptography requests
+      - env:
+          KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY_B64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          BUILD_VERSION: ${{ inputs.build_version }}
+        run: |
+          python3 - <<'PY'
+          import os, base64, time, jwt, requests, json, sys
+          key = base64.b64decode(os.environ['PRIVATE_KEY_B64'])
+          token = jwt.encode(
+              { 'iss': os.environ['ISSUER_ID'], 'iat': int(time.time()),
+                'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1' },
+              key, algorithm='ES256', headers={ 'kid': os.environ['KEY_ID'] })
+          h = { 'Authorization': f'Bearer {token}' }
+          base = 'https://api.appstoreconnect.apple.com'
+          apps = requests.get(f'{base}/v1/apps?filter[bundleId]=io.dynolabs.cinova', headers=h).json()
+          if not apps.get('data'):
+              print('::error::App io.dynolabs.cinova not in ASC'); sys.exit(1)
+          app_id = apps['data'][0]['id']
+          groups = requests.get(f'{base}/v1/betaGroups?filter[app]={app_id}', headers=h).json()
+          group = next(g for g in groups['data'] if g['attributes']['name'] == 'Founders')
+          ver = os.environ['BUILD_VERSION']
+          build_id = None
+          for _ in range(30):
+              builds = requests.get(f'{base}/v1/builds?filter[app]={app_id}&filter[version]={ver}&limit=1', headers=h).json()
+              if builds.get('data'):
+                  build_id = builds['data'][0]['id']; break
+              time.sleep(20)
+          if not build_id:
+              print(f'::error::Build {ver} not in ASC'); sys.exit(1)
+          rel = { 'data': [ { 'type': 'builds', 'id': build_id } ] }
+          r = requests.post(f'{base}/v1/betaGroups/{group["id"]}/relationships/builds',
+              headers={**h, 'Content-Type':'application/json'},
+              data=json.dumps(rel))
+          print(f'status={r.status_code} body={r.text}')
+          sys.exit(0 if r.status_code == 204 else 1)
+          PY

@@ -52,15 +52,18 @@ npx expo run:android
 
 ## CI/CD pipeline
 
-> Source: previously the "CI/CD Pipeline" section of `README.md` (merged here on 2026-05-21).
+> Source: previously the "CI/CD Pipeline" section of `README.md` (merged here on 2026-05-21); rewired on 2026-05-21 to retire EAS/Expo-Go and adopt the vcard-sibling macOS-native TestFlight pipeline (issue #100).
 
 Three GitHub Actions workflows live in `.github/workflows/`:
 
 | Workflow | Trigger | What it does |
 |---|---|---|
 | `backend.yml` | push to `main` under `backend/**` | Builds `api` + `ingestion` images, pushes to GHCR, bumps SHA in `openova-private` manifests |
-| `mobile.yml` | push to `main` under `mobile/**` | Runs `tsc --noEmit` + Expo export check (static validation, no credentials needed) |
-| `eas-build.yml` | push to `main` under `mobile/**`, version tags `v*`, or manual dispatch | EAS production / preview builds for iOS + Android via `expo-github-action` |
+| `ci.yml` | push to `main` or PR touching `mobile/**` | Runs `tsc --noEmit` + `npm run lint` on ubuntu-latest |
+| `ios.yml` | push to `main` touching `mobile/**` or `.maestro/**`, or manual dispatch | macos-latest: `npx expo prebuild` → Podfile patch → CocoaPods → fastlane cert + sigh → sim build → Maestro E2E gate → archive (manual signing) → IPA → altool upload to TestFlight → assign to "Founders" beta group |
+| `asc-assign-build.yml` | manual dispatch | Re-assigns a specific CFBundleVersion to "Founders" beta group (rescue path when the in-line assignment was skipped) |
+
+Retired workflows (deleted in PR for #100): `mobile.yml` (replaced by `ci.yml`), `eas-build.yml` (EAS no longer in the build path — `ios.yml` builds natively on macOS runners; EAS retained only as a manual local fallback via `eas build` for developer-machine builds).
 
 ### Backend deploy flow
 
@@ -78,23 +81,39 @@ Push to backend/**
                      commit + push → Flux reconciles in ~1 min)
 ```
 
-Images published: `ghcr.io/foundrylab-app/cinova/api:<sha>` and `ghcr.io/foundrylab-app/cinova/ingestion:<sha>`.
+Images published: `ghcr.io/dynolabs-io/cinova/api:<sha>` and `ghcr.io/dynolabs-io/cinova/ingestion:<sha>`.
 
 Required repo secrets:
 
-- `GITHUB_TOKEN` — auto-provided, used for GHCR push.
-- `OPENOVA_PRIVATE_PAT` — PAT with write access to `openova-io/openova-private`.
-- `EXPO_TOKEN` — Expo account token for EAS builds.
+| Secret | Used by | Source |
+|---|---|---|
+| `GITHUB_TOKEN` | `backend.yml` | Auto-provided |
+| `OPENOVA_PRIVATE_PAT` | `backend.yml` | PAT with write access to `openova-io/openova-private` |
+| `APPLE_TEAM_ID` | `ios.yml` | Dynolabs Apple Developer Team ID (`77GHJHUGD4`) |
+| `APP_STORE_CONNECT_ISSUER_ID` | `ios.yml`, `asc-assign-build.yml` | ASC API issuer UUID |
+| `APP_STORE_CONNECT_KEY_ID` | `ios.yml`, `asc-assign-build.yml` | ASC API key ID |
+| `APP_STORE_CONNECT_PRIVATE_KEY` | `ios.yml`, `asc-assign-build.yml` | base64 of `AuthKey_*.p8` |
+| `IOS_DIST_CERT_P12` | (reserved — `ios.yml` regenerates via fastlane cert instead) | base64 of distribution `.p12` |
+| `IOS_DIST_P12_PASSWORD` | (paired with `IOS_DIST_CERT_P12`) | Password for the `.p12` |
+| `IOS_DIST_PROVISION` | (reserved — `ios.yml` regenerates via fastlane sigh) | base64 of `Cinova_AppStore.mobileprovision` |
 
-### Mobile build flow
+Bootstrap on a fresh clone via `./scripts/bootstrap-secrets.sh` — prompts for each value once and pushes via `gh secret set`. The 6 Apple secrets are re-used verbatim from `dynolabs-io/vcard` (`gh secret list -R dynolabs-io/vcard`) because they belong to the org's single Apple Developer Team. The 7th (`IOS_DIST_PROVISION`) is per-app and must be generated fresh for `io.dynolabs.cinova` in the Apple Developer portal.
 
-EAS builds run on:
+### iOS TestFlight build flow
 
-- Every push to `main` under `mobile/**` → `preview` profile, Android (auto)
-- Version tags `v*` → `production` profile, all platforms
-- Manual `workflow_dispatch` → operator chooses profile + platform
+Single workflow `ios.yml` triggers on every push to `main` touching `mobile/**` or `.maestro/**`. End-to-end on a `macos-latest` GitHub-hosted runner (~25–45 min wall time):
 
-Profiles + credentials are configured in `mobile/eas.json` and EAS dashboard secrets (Apple Developer / Google Play). App Store / Play Store submissions remain manual.
+1. **Prebuild** — `npx expo prebuild --platform ios --no-install --clean` generates the native Xcode project under `mobile/ios/`.
+2. **CFBundleVersion bump** — `PlistBuddy` sets `CFBundleVersion=${{ github.run_number }}` so each upload is unique (altool silently dedupes otherwise).
+3. **Podfile patch** — disables signing for Pod static-lib targets + forces `SKIP_INSTALL=NO` on the app target (Xcode 26 trap: `SKIP_INSTALL=YES` default leaves `Products/Applications/` empty).
+4. **Certificate + provisioning profile** — `fastlane cert` creates a fresh distribution cert; `fastlane sigh` regenerates the App Store profile bound to that cert. ASC API key is used directly; the per-app `IOS_DIST_PROVISION` secret is reserved as a fallback.
+5. **Simulator build + Maestro E2E gate** — `xcodebuild` builds for iOS Simulator, app is installed, Maestro flows under `.maestro/` run with crash-log monitoring. If any flow fails, archive + upload are skipped.
+6. **Archive** — `xcodebuild archive` with `CODE_SIGN_STYLE=Manual` and the just-fetched profile.
+7. **IPA wrap** — `Xcode 26` broke `-exportArchive`; the workflow wraps the archive's `.app` into a `Payload/<App>.app.ipa` ZIP directly.
+8. **Upload** — `xcrun altool --upload-app` to App Store Connect.
+9. **Beta group assignment** — POST `/v1/betaGroups/{Founders}/relationships/builds` to make the build visible to internal testers (default is `hasAccessToAllBuilds=False`).
+
+Android EAS builds remain manual (`eas build --platform android`); the existing `mobile/eas.json` is retained for that purpose only.
 
 ## Manual rollback (when GitHub Actions can't deploy)
 
@@ -106,7 +125,7 @@ KNOWN_GOOD=abc1234
 
 # 2. Edit the manifest pin in openova-private
 cd ~/repos/openova-private
-sed -i "s|image: ghcr.io/foundrylab-app/cinova/api:.*|image: ghcr.io/foundrylab-app/cinova/api:${KNOWN_GOOD}|" \
+sed -i "s|image: ghcr.io/dynolabs-io/cinova/api:.*|image: ghcr.io/dynolabs-io/cinova/api:${KNOWN_GOOD}|" \
   clusters/contabo-mkt/apps/cinova/services/api.yaml
 
 # 3. Commit + push — Flux reconciles in ~1 min
@@ -137,7 +156,7 @@ chmod +x create-github-issues.sh
 ./create-github-issues.sh
 ```
 
-Creates 48 issues across 9 phases with appropriate labels on `foundrylab-app/cinova`. The script is idempotent at the level of "issue with same title already exists" — re-run safely.
+Creates 48 issues across 9 phases with appropriate labels on `dynolabs-io/cinova`. The script is idempotent at the level of "issue with same title already exists" — re-run safely.
 
 Existing label taxonomy:
 

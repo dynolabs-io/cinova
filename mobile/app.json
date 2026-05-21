@@ -18,7 +18,7 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "io.openova.cinova",
+      "bundleIdentifier": "io.dynolabs.cinova",
       "infoPlist": {
         "NSCameraUsageDescription": "Cinova does not use the camera.",
         "NSMicrophoneUsageDescription": "Cinova does not use the microphone.",
@@ -34,7 +34,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0a0a0a"
       },
-      "package": "io.openova.cinova",
+      "package": "io.dynolabs.cinova",
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE",
