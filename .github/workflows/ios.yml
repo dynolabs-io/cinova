@@ -460,6 +460,13 @@ jobs:
                       sys.exit(0)
           ")
           echo "destination: $DEST"
+          # The Podfile patch above sets DEPLOYMENT_LOCATION=YES + INSTALL_PATH=$(LOCAL_APPS_DIR)
+          # so that the ARCHIVE step (later) populates Products/Applications/ in the .xcarchive.
+          # But `xcodebuild build` does NOT run the deploy phase — with those settings active,
+          # build redirects BUILT_PRODUCTS_DIR to the deployment location AND skips populating
+          # it (no install phase), so Products/Release-iphonesimulator/<App>.app is never
+          # written. Override both to defaults for the SIM build only. Confirmed via run
+          # 26223284361 — without this, only intermediates (.hmap, .pch, .dia) emit.
           xcodebuild build \
             -workspace *.xcworkspace \
             -scheme "${{ steps.scheme.outputs.scheme }}" \
@@ -471,7 +478,11 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             ONLY_ACTIVE_ARCH=YES \
-            ARCHS=arm64
+            ARCHS=arm64 \
+            DEPLOYMENT_LOCATION=NO \
+            INSTALL_PATH=
+          echo "=== Built .app(s) ==="
+          find $RUNNER_TEMP/sim-build/Build/Products/Release-iphonesimulator -maxdepth 1 -type d -name "*.app" 2>/dev/null
 
       - name: Boot iOS Simulator
         run: |

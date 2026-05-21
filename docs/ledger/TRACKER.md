@@ -34,7 +34,7 @@ iOS pipeline iteration log (live):
 | 26221703006 | `94aea95` | failure | "Expected .app under Release-iphonesimulator/" — Podfile's DEPLOYMENT_LOCATION=YES sent it to `/tmp/Cinova.dst/` | Find in both locations |
 | 26222345040 | `836105e` | failure | fastlane cert: "reached the maximum number of Distribution certificates" — 3 dist certs existed; revoke-oldest only removed 1, leaving 2 | Revoke ALL pre-existing dist certs (CI keychains are ephemeral) |
 | 26222547474 | `372d2d4` | failure | install-app step exited 1 with NO diagnostic output — `set -euo pipefail` + `find ... \| grep -v dSYM \| head -1` killed bash before the diagnostic if-block when grep found 0 non-dSYM matches | Drop pipe-to-grep; use `find -not -path "*dSYM*"` and `set -u` (no -e/pipefail) for discovery block |
-| 26223284361 | `ecb3383` | in-flight (watching) | — | — |
+| 26223284361 | `ecb3383` | failure | install-app: diagnostic confirmed no `Cinova.app` anywhere — SIM build produced only intermediates (`.hmap`, `.dia`, `.pch`, `Cinova.build/`); the Podfile patch's `DEPLOYMENT_LOCATION=YES` redirects BUILT_PRODUCTS_DIR but `xcodebuild build` (no install) doesn't run the deploy phase → app never lands | Override `DEPLOYMENT_LOCATION=NO INSTALL_PATH=` on the SIM-build xcodebuild only; archive still gets YES via Podfile patch. Also strengthened Maestro flow (assertVisible on all 5 tab labels after onboarding) |
 
 Cleared in-flight (substrate):
 - Apple Developer bundle ID `io.dynolabs.cinova` (T8F2BSD4H7) — created via `POST /v1/bundleIds` in run 26221495210; persistent
