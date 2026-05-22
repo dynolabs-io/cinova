@@ -1,0 +1,64 @@
+name: asc-set-export-compliance (one-shot)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_version:
+        description: 'CFBundleVersion to declare non-exempt encryption for'
+        required: true
+        default: '14'
+
+jobs:
+  declare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pyjwt cryptography requests
+      - env:
+          KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY_B64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          BUILD_VERSION: ${{ inputs.build_version }}
+        run: |
+          python3 - <<'PY'
+          import os, base64, time, jwt, requests, json, sys
+          key_blob = os.environ['PRIVATE_KEY_B64']
+          try:
+              decoded = base64.b64decode(key_blob)
+              key = decoded if decoded.startswith(b'-----BEGIN') else key_blob.encode()
+          except Exception:
+              key = key_blob.encode()
+          tok = jwt.encode({'iss': os.environ['ISSUER_ID'], 'iat': int(time.time()),
+                            'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'},
+                           key, algorithm='ES256', headers={'kid': os.environ['KEY_ID']})
+          h = {'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'}
+          base = 'https://api.appstoreconnect.apple.com'
+
+          apps = requests.get(f'{base}/v1/apps?filter[bundleId]=io.dynolabs.cinova', headers=h).json()
+          app_id = apps['data'][0]['id']
+          ver = os.environ['BUILD_VERSION']
+          builds = requests.get(f'{base}/v1/builds?filter[app]={app_id}&filter[version]={ver}', headers=h).json()
+          if not builds.get('data'):
+              print(f'::error::Build {ver} not found'); sys.exit(1)
+          build_id = builds['data'][0]['id']
+          attrs = builds['data'][0]['attributes']
+          print(f'Build {ver}: id={build_id}')
+          print(f'  processingState={attrs.get("processingState")}')
+          print(f'  usesNonExemptEncryption={attrs.get("usesNonExemptEncryption")}')
+          print(f'  expired={attrs.get("expired")}')
+
+          # PATCH the build's usesNonExemptEncryption to false
+          payload = {'data': {
+              'type': 'builds',
+              'id': build_id,
+              'attributes': {'usesNonExemptEncryption': False},
+          }}
+          r = requests.patch(f'{base}/v1/builds/{build_id}', headers=h, json=payload, timeout=20)
+          print(f'\nPATCH /v1/builds/{build_id} status={r.status_code}')
+          if r.status_code not in (200, 204):
+              print(f'body={r.text[:600]}')
+              sys.exit(1)
+          print('::notice::Export compliance declared: usesNonExemptEncryption=false')
+          PY
