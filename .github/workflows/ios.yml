@@ -720,16 +720,47 @@ jobs:
               print(f'::warning::Beta group "{group_name}" not found — create it once in ASC, future runs will pick it up'); sys.exit(0)
           group_id = group['id']
 
+          # Two-phase wait:
+          #   Phase 1 — build resource appears in ASC (altool returns before processing
+          #             starts; the build row materialises within ~2 min)
+          #   Phase 2 — build reaches an internally-testable state
+          #             (processingState=VALID + buildAudienceType in INTERNAL_ONLY/APP_STORE_ELIGIBLE)
+          #             First builds on a new ASC record take 15-30 min for export-compliance
+          #             checks. Wait up to 45 min.
+          # First build on run 26279869138 confirmed this: build appeared fast but
+          # POST /v1/betaGroups/.../builds returned HTTP 422
+          # "Build is not in an internally testable state" because processingState was
+          # still PROCESSING when we tried to assign.
           build_id = None
-          for attempt in range(30):
+          for attempt in range(20):    # ~6 min
               builds = requests.get(f'{base}/v1/builds?filter[app]={app_id}&filter[version]={run_number}&limit=1', headers=h, timeout=20).json()
               if builds.get('data'):
                   build_id = builds['data'][0]['id']
+                  print(f'Build {run_number} appeared in ASC: id={build_id}')
                   break
               time.sleep(20)
           if not build_id:
-              print(f'::warning::Build {run_number} not in ASC after 10 min — assignment skipped'); sys.exit(0)
+              print(f'::warning::Build {run_number} not in ASC after 6 min — assignment skipped'); sys.exit(0)
 
+          # Phase 2: wait for processingState=VALID. Apple sets:
+          #   PROCESSING → VALID (testable) | INVALID (rejected)
+          target_states = {'VALID'}
+          for attempt in range(135):   # 45 min @ 20s
+              b = requests.get(f'{base}/v1/builds/{build_id}', headers=h, timeout=20).json()
+              ps = b.get('data', {}).get('attributes', {}).get('processingState')
+              if ps in target_states:
+                  print(f'Build processingState: {ps} ✓')
+                  break
+              if ps == 'INVALID':
+                  print(f'::error::Build {run_number} INVALID — check ASC')
+                  sys.exit(1)
+              if attempt % 6 == 0:
+                  print(f'Waiting on processingState (currently {ps}) … attempt {attempt+1}/135')
+              time.sleep(20)
+          else:
+              print(f'::warning::Build still not VALID after 45 min (last: {ps}) — run asc-assign-build.yml manually once Apple finishes processing'); sys.exit(0)
+
+          # Phase 3: assign to beta group
           rel = { 'data': [ { 'type': 'builds', 'id': build_id } ] }
           r = requests.post(f'{base}/v1/betaGroups/{group_id}/relationships/builds',
               headers={**h, 'Content-Type': 'application/json'},

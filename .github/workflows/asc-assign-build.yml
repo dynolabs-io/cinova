@@ -46,6 +46,20 @@ jobs:
               time.sleep(20)
           if not build_id:
               print(f'::error::Build {ver} not in ASC'); sys.exit(1)
+          # Wait for processingState=VALID before assigning (Apple's "internally
+          # testable" precondition — HTTP 422 otherwise)
+          for attempt in range(135):   # 45 min @ 20s
+              b = requests.get(f'{base}/v1/builds/{build_id}', headers=h, timeout=20).json()
+              ps = b.get('data', {}).get('attributes', {}).get('processingState')
+              if ps == 'VALID':
+                  print(f'processingState=VALID ✓'); break
+              if ps == 'INVALID':
+                  print(f'::error::Build {ver} INVALID — check ASC'); sys.exit(1)
+              if attempt % 6 == 0:
+                  print(f'Waiting on processingState ({ps}) … {attempt+1}/135')
+              time.sleep(20)
+          else:
+              print(f'::error::Build {ver} not VALID after 45 min (last: {ps})'); sys.exit(1)
           rel = { 'data': [ { 'type': 'builds', 'id': build_id } ] }
           r = requests.post(f'{base}/v1/betaGroups/{group["id"]}/relationships/builds',
               headers={**h, 'Content-Type':'application/json'},
