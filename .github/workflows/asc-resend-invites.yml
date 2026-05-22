@@ -1,0 +1,81 @@
+name: asc-resend-invites (one-shot)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  invite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pyjwt cryptography requests
+      - env:
+          KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY_B64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os, base64, time, jwt, requests, json
+          kb = os.environ['PRIVATE_KEY_B64']
+          try:
+              d = base64.b64decode(kb)
+              key = d if d.startswith(b'-----BEGIN') else kb.encode()
+          except Exception:
+              key = kb.encode()
+          tok = jwt.encode({'iss': os.environ['ISSUER_ID'], 'iat': int(time.time()),
+                            'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'},
+                           key, algorithm='ES256', headers={'kid': os.environ['KEY_ID']})
+          h = {'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'}
+          base = 'https://api.appstoreconnect.apple.com'
+
+          # 1. Confirm cinova app id
+          apps = requests.get(f'{base}/v1/apps?filter[bundleId]=io.dynolabs.cinova', headers=h).json()
+          app_id = apps['data'][0]['id']
+          print(f'App ID: {app_id}')
+
+          # 2. List ALL ASC users + their TestFlight access state for cinova
+          users = requests.get(f'{base}/v1/users?include=visibleApps&limit=20', headers=h).json()
+          print(f"\n=== ASC team users ({len(users.get('data', []))}) ===")
+          for u in users.get('data', []):
+              a = u['attributes']
+              ua = a.get('username')
+              roles = a.get('roles', [])
+              all_apps = a.get('allAppsVisible', False)
+              prov = a.get('provisioningAllowed', False)
+              # Get this user's visibleApps explicitly
+              v = requests.get(f'{base}/v1/users/{u["id"]}/visibleApps', headers=h).json()
+              visible_ids = [va['id'] for va in v.get('data', [])]
+              has_cinova = app_id in visible_ids or all_apps
+              print(f"  id={u['id']} {ua}")
+              print(f"    roles={roles} allAppsVisible={all_apps} provisioning={prov}")
+              print(f"    cinova visible: {has_cinova}")
+
+          # 3. List current beta testers in Founders + their tester resource IDs
+          GROUP_ID = 'ffb228b9-9ad3-44aa-90e7-967bb06576bd'
+          testers = requests.get(f'{base}/v1/betaGroups/{GROUP_ID}/betaTesters', headers=h).json()
+          print(f"\n=== Founders testers ({len(testers.get('data', []))}) ===")
+          target_emails = ['emrahbaysal@gmail.com', 'hatyil@gmail.com']
+          tester_ids = {}
+          for t in testers.get('data', []):
+              a = t['attributes']
+              tester_ids[a.get('email')] = t['id']
+              print(f"  id={t['id']} email={a.get('email')} state={a.get('state')} inviteType={a.get('inviteType')}")
+
+          # 4. Send invitations for each via POST /v1/betaTesterInvitations
+          # This is Apple's "re-send invitation" endpoint
+          print(f"\n=== Sending invitations ===")
+          for email, tid in tester_ids.items():
+              payload = {'data': {
+                  'type': 'betaTesterInvitations',
+                  'relationships': {
+                      'app':        {'data': {'type': 'apps',        'id': app_id}},
+                      'betaTester': {'data': {'type': 'betaTesters', 'id': tid}},
+                  }
+              }}
+              r = requests.post(f'{base}/v1/betaTesterInvitations', headers=h, json=payload, timeout=20)
+              print(f"  {email}: HTTP {r.status_code}")
+              if r.status_code not in (200, 201, 204):
+                  print(f"    body={r.text[:400]}")
+          PY
