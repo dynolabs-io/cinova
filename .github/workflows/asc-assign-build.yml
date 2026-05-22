@@ -11,7 +11,7 @@ on:
 jobs:
   assign:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 55    # phase-2 wait is up to 45 min for Apple's processingState=VALID
     steps:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
