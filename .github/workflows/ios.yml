@@ -760,6 +760,28 @@ jobs:
           else:
               print(f'::warning::Build still not VALID after 45 min (last: {ps}) — run asc-assign-build.yml manually once Apple finishes processing'); sys.exit(0)
 
+          # Phase 2b: declare export compliance (usesNonExemptEncryption=false).
+          # Apple's "internally testable" precondition needs this PATCH; without it,
+          # POST /v1/betaGroups/.../builds returns HTTP 422 ENTITY_UNPROCESSABLE
+          # "Build is not in an internally testable state" even though processingState
+          # is VALID. Confirmed on builds 13 + 14: usesNonExemptEncryption was None
+          # post-upload; PATCH to false made the build assignable immediately.
+          # Long-term fix: add ITSAppUsesNonExemptEncryption=false to Info.plist via
+          # app.config.ts so altool sets this attribute on upload, but the PATCH is
+          # the safety-net that always works.
+          ec_payload = {'data': {'type': 'builds', 'id': build_id,
+                                  'attributes': {'usesNonExemptEncryption': False}}}
+          r = requests.patch(f'{base}/v1/builds/{build_id}',
+              headers={**h, 'Content-Type': 'application/json'},
+              data=json.dumps(ec_payload), timeout=20)
+          if r.status_code in (200, 204):
+              print(f'Export compliance declared: usesNonExemptEncryption=false')
+          elif r.status_code == 409:
+              print(f'Export compliance already declared (409)')
+          else:
+              print(f'::warning::Export compliance PATCH HTTP {r.status_code}: {r.text[:300]}')
+              # Don't fail — try assignment anyway, may already be declared
+
           # Phase 3: assign to beta group
           rel = { 'data': [ { 'type': 'builds', 'id': build_id } ] }
           r = requests.post(f'{base}/v1/betaGroups/{group_id}/relationships/builds',

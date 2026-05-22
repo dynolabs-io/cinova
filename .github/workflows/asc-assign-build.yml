@@ -60,6 +60,13 @@ jobs:
               time.sleep(20)
           else:
               print(f'::error::Build {ver} not VALID after 45 min (last: {ps})'); sys.exit(1)
+          # Declare export compliance — Apple's "internally testable" precondition
+          # (HTTP 422 "Build is not in an internally testable state" otherwise)
+          ecp = {'data': {'type': 'builds', 'id': build_id,
+                          'attributes': {'usesNonExemptEncryption': False}}}
+          ec = requests.patch(f'{base}/v1/builds/{build_id}',
+              headers={**h, 'Content-Type':'application/json'}, data=json.dumps(ecp))
+          print(f'export-compliance PATCH status={ec.status_code}')
           rel = { 'data': [ { 'type': 'builds', 'id': build_id } ] }
           r = requests.post(f'{base}/v1/betaGroups/{group["id"]}/relationships/builds',
               headers={**h, 'Content-Type':'application/json'},
