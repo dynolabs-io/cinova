@@ -198,3 +198,29 @@ Then hand-bucket into the tables above. Refresh on:
 Screenshots committed to `docs/walks/walk-{1..6}-*.png` (`caa7e5b`) and posted to #106 comment 4525406913.
 
 Build 18 (latest) also uploaded + VALID + IN_BETA_TESTING during this session via `ios.yml` run 26331392307 — `asc-assign-build.yml` run for build 18 currently in-flight to attach the existing testers.
+
+## 2026-05-23 — Issue board cleanup (founder directive)
+
+11 stale/shipped/obsolete issues closed in one pass:
+
+| # | Title | Reason |
+|---|---|---|
+| 7  | TMDB bulk load                                    | Shipped — `backend/cmd/ingestion/` mode=bulk; backend parked #107 |
+| 56 | Expo EAS build config                             | EAS retired in #101 |
+| 69 | Per-user scoring profile presets                  | Shipped — `backend/internal/scoring/` |
+| 71 | Discover Reels synopsis + award badge             | Shipped — walk evidence in #106 |
+| 73 | EAS automated iOS+Android workflow                | EAS retired in #101 |
+| 74 | K8s CronJob daily delta                           | Shipped — openova-private cronjobs |
+| 75 | Wikidata enrichment for TV                        | Shipped — `backend/internal/wikidata/` |
+| 76 | Genre/theme chips clickable                       | Shipped — #96 tracks filter behavior bug |
+| 77 | Tab icons '?' glyphs                              | Shipped — fix `e4bc827`, walk evidence #106 |
+| 78 | Actor+movie detail spinner                        | Shipped — content gated on #107 backend re-enable |
+| 105| ASC app record (Apple-UI blocker)                 | Resolved — founder created record 2026-05-22 |
+
+Filed: #110 (rotate OPENOVA_PRIVATE_PAT — backend.yml deploy step fails Bad credentials post-rotation)
+
+Remaining open work: 28 issues (#7 closed dropped count from 29). All have valid scope; none are rubbish. Major buckets:
+- 3 infra (#103, #107, #110) — date-anchored / parked / blocked-ext
+- 1 testflight UAT (#106)
+- 6 mobile in-progress (Cast, app-store metadata, ASC+Play setup, etc.)
+- 17 mobile UAT awaiting walks (most gated on #107 backend re-enable)
