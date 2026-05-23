@@ -1,6 +1,6 @@
 # cinova — Repo-specific Notes
 
-> This is a product repo (FoundryLab's Cinova app). Generic OpenOva platform working principles live in `~/.claude/CLAUDE.md` (user-global).
+> This is a product repo (Dynolabs' Cinova app at `dynolabs-io/cinova` since 2026-05-21 — was previously `foundrylab-app/cinova`). Generic OpenOva platform working principles live in `~/.claude/CLAUDE.md` (user-global).
 
 ## What this is
 
@@ -26,8 +26,9 @@ Cinova is a mobile-first AI-powered movie and TV discovery app. The repo contain
 - PostgreSQL 16 (relational)
 - Valkey (cache)
 - Axon (internal Claude API gateway)
-- Container registry: `ghcr.io/foundrylab-app/cinova`
-- Deploy: K3s + Flux on contabo-mkt (manifests live in `openova-private/clusters/contabo-mkt/apps/cinova/`)
+- Container registry: `ghcr.io/dynolabs-io/cinova`
+- iOS distribution: TestFlight via App Store Connect (bundle `io.dynolabs.cinova`); `ios.yml` builds + uploads autonomously
+- Deploy: K3s + Flux on contabo-mkt (manifests live in `openova-private/clusters/contabo-mkt/apps/cinova/`) — currently scaled-to-0 + suspended (#107)
 
 ## Development workflow
 
@@ -47,7 +48,8 @@ npx expo start
 ## CI/CD
 
 `backend/**` push → build API + ingestion images → push GHCR → bump SHA in `openova-private/clusters/contabo-mkt/apps/cinova/services/api.yaml` → Flux reconciles.
-`mobile/**` push → expo export check; EAS builds are manual.
+`mobile/**` push → `ci.yml` (tsc + lint) + `ios.yml` (macos-latest: prebuild → ASC API bootstraps bundle/cert/profile → sim build + Maestro gate → archive → IPA → altool to TestFlight → assign to Founders).
+Manual rescue: `asc-assign-build.yml` re-assigns a specific build to "Founders" group.
 
 ## Canonical docs
 

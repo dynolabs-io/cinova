@@ -29,7 +29,7 @@ A change is done when **all five gates** pass. "PR merged + tests green" is **no
 
 After merge:
 
-- GHCR tag `ghcr.io/foundrylab-app/cinova/api:<short-sha>` exists.
+- GHCR tag `ghcr.io/dynolabs-io/cinova/api:<short-sha>` exists.
 - `openova-private/clusters/contabo-mkt/apps/cinova/services/api.yaml` is bumped to that SHA on `main`.
 - Flux reconcile log shows the deployment rolled out cleanly: `kubectl -n cinova rollout status deploy/api` returns `successfully rolled out`.
 - `curl https://api.cinova.openova.io/healthz` returns 200.

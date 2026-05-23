@@ -45,7 +45,7 @@ Anonymous-to-registered migration preserves the `user_id` so existing watchlist/
 | Neo4j credentials | `openova-private` Sealed Secret → K8s Secret `cinova-neo4j` | Rotate every 6 months. |
 | Valkey password | `openova-private` Sealed Secret → K8s Secret `cinova-valkey` | Rotate every 6 months. |
 | `AXON_TOKEN` | `openova-private` Sealed Secret → K8s Secret `cinova-axon` | Tied to Axon gateway's token lifecycle; rotate on rotation of Axon. |
-| `OPENOVA_PRIVATE_PAT` | GitHub repo secret on `foundrylab-app/cinova` | Rotate every 90 days; tied to the cinova-bot machine user. |
+| `OPENOVA_PRIVATE_PAT` | GitHub repo secret on `dynolabs-io/cinova` | Rotate every 90 days; tied to the cinova-bot machine user. |
 | `EXPO_TOKEN` | GitHub repo secret + EAS dashboard | Rotate every 90 days. |
 | Apple Developer / Google Play credentials | EAS dashboard only | Apple-cert lifecycle; Google service-account key 12 months. |
 

@@ -39,5 +39,5 @@
 
 ## Root-cause fixes shipped
 
-- [PR #N](https://github.com/foundrylab-app/cinova/pull/N) — <what it fixed>
+- [PR #N](https://github.com/dynolabs-io/cinova/pull/N) — <what it fixed>
 ```
