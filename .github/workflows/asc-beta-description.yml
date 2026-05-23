@@ -1,0 +1,96 @@
+name: asc-beta-description (one-shot)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pyjwt cryptography requests
+      - env:
+          KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY_B64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os, base64, time, jwt, requests, json
+          kb = os.environ['PRIVATE_KEY_B64']
+          try:
+              d = base64.b64decode(kb)
+              key = d if d.startswith(b'-----BEGIN') else kb.encode()
+          except Exception:
+              key = kb.encode()
+          tok = jwt.encode({'iss': os.environ['ISSUER_ID'], 'iat': int(time.time()),
+                            'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'},
+                           key, algorithm='ES256', headers={'kid': os.environ['KEY_ID']})
+          h = {'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'}
+          base = 'https://api.appstoreconnect.apple.com'
+
+          apps = requests.get(f'{base}/v1/apps?filter[bundleId]=io.dynolabs.cinova', headers=h).json()
+          app_id = apps['data'][0]['id']
+          builds = requests.get(f'{base}/v1/builds?filter[app]={app_id}&filter[version]=14', headers=h).json()
+          build_id = builds['data'][0]['id']
+
+          DESCRIPTION = "Cinova is an AI-powered movie and TV discovery app. Browse a vertical-trailer reels feed, search using natural language ('slow-burn thriller set in Scandinavia'), view CinovaScore (Bayesian + graph-prestige) ratings, and curate your watchlist. The Founders test build validates: app launches, tab navigation, onboarding, anonymous session creation, and offline-resilient UI rendering."
+          FEEDBACK_EMAIL = "hatyil@gmail.com"
+          MARKETING_URL = "https://cinova.app"
+          PRIVACY_URL = "https://cinova.app/privacy"
+
+          # 1. betaAppLocalizations — set description + feedback email at app level
+          loc = requests.get(f'{base}/v1/apps/{app_id}/betaAppLocalizations', headers=h).json()
+          print(f"existing betaAppLocalizations: {len(loc.get('data', []))}")
+          if not loc.get('data'):
+              payload = {'data': {
+                  'type': 'betaAppLocalizations',
+                  'attributes': {
+                      'locale': 'en-US',
+                      'description': DESCRIPTION,
+                      'feedbackEmail': FEEDBACK_EMAIL,
+                      'marketingUrl': MARKETING_URL,
+                      'privacyPolicyUrl': PRIVACY_URL,
+                  },
+                  'relationships': {'app': {'data': {'type': 'apps', 'id': app_id}}}
+              }}
+              r = requests.post(f'{base}/v1/betaAppLocalizations', headers=h, json=payload)
+              print(f"create localization HTTP {r.status_code}")
+              if r.status_code not in (200, 201):
+                  print(f"  body={r.text[:500]}")
+          else:
+              loc_id = loc['data'][0]['id']
+              payload = {'data': {'type': 'betaAppLocalizations', 'id': loc_id, 'attributes': {
+                  'description': DESCRIPTION, 'feedbackEmail': FEEDBACK_EMAIL,
+                  'marketingUrl': MARKETING_URL, 'privacyPolicyUrl': PRIVACY_URL,
+              }}}
+              r = requests.patch(f'{base}/v1/betaAppLocalizations/{loc_id}', headers=h, json=payload)
+              print(f"patch localization HTTP {r.status_code}")
+
+          # 2. betaBuildLocalizations — "What's new in this build"
+          bloc = requests.get(f'{base}/v1/builds/{build_id}/betaBuildLocalizations', headers=h).json()
+          if not bloc.get('data'):
+              payload = {'data': {
+                  'type': 'betaBuildLocalizations',
+                  'attributes': {'locale': 'en-US', 'whatsNew': 'Initial Cinova TestFlight build. AI-driven movie discovery — vertical reels, NL search, CinovaScore ratings, watchlist.'},
+                  'relationships': {'build': {'data': {'type': 'builds', 'id': build_id}}}
+              }}
+              r = requests.post(f'{base}/v1/betaBuildLocalizations', headers=h, json=payload)
+              print(f"create build-localization HTTP {r.status_code}")
+              if r.status_code not in (200, 201):
+                  print(f"  body={r.text[:500]}")
+
+          # 3. resubmit for beta-app-review
+          payload = {'data': {
+              'type': 'betaAppReviewSubmissions',
+              'relationships': {'build': {'data': {'type': 'builds', 'id': build_id}}}
+          }}
+          r = requests.post(f'{base}/v1/betaAppReviewSubmissions', headers=h, json=payload, timeout=20)
+          print(f"resubmit for review HTTP {r.status_code}")
+          if r.status_code in (200, 201):
+              print(f"  submitted: {r.json()['data']['id']}")
+              print(f"  attributes: {r.json()['data']['attributes']}")
+          else:
+              print(f"  body={r.text[:600]}")
+          PY
