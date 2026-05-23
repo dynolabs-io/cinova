@@ -224,3 +224,33 @@ Remaining open work: 28 issues (#7 closed dropped count from 29). All have valid
 - 1 testflight UAT (#106)
 - 6 mobile in-progress (Cast, app-store metadata, ASC+Play setup, etc.)
 - 17 mobile UAT awaiting walks (most gated on #107 backend re-enable)
+
+## 2026-05-24 — BACKLOG-STANDARDS audit
+
+Driven by [dynolabs-io/workflow#BACKLOG-STANDARDS.md](https://github.com/dynolabs-io/workflow/blob/main/docs/BACKLOG-STANDARDS.md). Triage decision tree applied per-issue. Best-effort first pass:
+
+| Action | Count | Issues |
+|---|---|---|
+| A (fix in place) | 4 | #45 (Chromecast → parked) · #89, #90, #91 (reels bugs — schema + severity) |
+| B (close + re-file) | 3 | #54 → #113 · #55 → #112 · #57 → #111 |
+| C (close as not-planned) | 1 | #86 (shipped) |
+
+### State before → after
+
+| Bucket | Before | After |
+|---|---|---|
+| `status/in-progress` | 4 | **0** (all stale claims demoted/re-filed) |
+| `status/uat` | 18 | 18 |
+| `status/parked` | 1 (#107) | **2** (added #45) |
+| Unclaimed | 12 | 14 (added 3 new conformant #111/112/113; closed 1 obsolete #86) |
+| Total open | 35 | **30** |
+
+### Labels canon now applied
+
+- Created repo labels: `severity/p0`, `severity/p1`, `severity/p2`, `severity/p3`, `blocker` (none existed before).
+- Applied `severity/p2` to reels-bug cluster #89/90/91/96.
+- `status/blocked-ext` was created earlier this session for #105/#110 (both now closed).
+
+### Remaining work for next audit pass
+
+Unclaimed backlog still has 11 March-21-era issues without schema conformance (#81, #88, #92, #93, #94, #95, #96). All have intent-clear bodies but use `## Bug` / `## Goal` / `## Tasks` rather than the canonical `## Problem` / `## Acceptance criteria` / `## Out of scope` / `## Repos touched`. Each needs Action A reformat (~5 min/issue). Defer to next focused audit session.
