@@ -14,11 +14,11 @@ import (
 	neo4j "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/rs/zerolog/log"
 
-	"github.com/foundrylab-app/cinova/backend/internal/auth"
-	"github.com/foundrylab-app/cinova/backend/internal/config"
-	"github.com/foundrylab-app/cinova/backend/internal/graph"
-	"github.com/foundrylab-app/cinova/backend/internal/models"
-	"github.com/foundrylab-app/cinova/backend/internal/store"
+	"github.com/dynolabs-io/cinova/backend/internal/auth"
+	"github.com/dynolabs-io/cinova/backend/internal/config"
+	"github.com/dynolabs-io/cinova/backend/internal/graph"
+	"github.com/dynolabs-io/cinova/backend/internal/models"
+	"github.com/dynolabs-io/cinova/backend/internal/store"
 )
 
 const (

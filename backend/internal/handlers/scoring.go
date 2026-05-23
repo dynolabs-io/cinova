@@ -6,10 +6,10 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/foundrylab-app/cinova/backend/internal/auth"
-	"github.com/foundrylab-app/cinova/backend/internal/graph"
-	"github.com/foundrylab-app/cinova/backend/internal/models"
-	"github.com/foundrylab-app/cinova/backend/internal/scoring"
+	"github.com/dynolabs-io/cinova/backend/internal/auth"
+	"github.com/dynolabs-io/cinova/backend/internal/graph"
+	"github.com/dynolabs-io/cinova/backend/internal/models"
+	"github.com/dynolabs-io/cinova/backend/internal/scoring"
 )
 
 // ScoringHandler handles GET/PUT /api/v1/me/scoring-profile.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/foundrylab-app/cinova/backend/internal/models"
+	"github.com/dynolabs-io/cinova/backend/internal/models"
 )
 
 // RateTitle creates or updates a RATED relationship from an owner (User or Session)

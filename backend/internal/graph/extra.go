@@ -11,7 +11,7 @@ import (
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j/dbtype"
 
-	"github.com/foundrylab-app/cinova/backend/internal/models"
+	"github.com/dynolabs-io/cinova/backend/internal/models"
 )
 
 // asciiName normalises a person name to lowercase ASCII for fuzzy matching.

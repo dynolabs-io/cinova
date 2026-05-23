@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/foundrylab-app/cinova/backend/internal/models"
+	"github.com/dynolabs-io/cinova/backend/internal/models"
 )
 
 const (

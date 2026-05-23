@@ -13,14 +13,14 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/time/rate"
 
-	"github.com/foundrylab-app/cinova/backend/internal/config"
-	"github.com/foundrylab-app/cinova/backend/internal/enrichment"
-	"github.com/foundrylab-app/cinova/backend/internal/graph"
-	"github.com/foundrylab-app/cinova/backend/internal/models"
-	"github.com/foundrylab-app/cinova/backend/internal/scoring"
-	"github.com/foundrylab-app/cinova/backend/internal/tmdb"
-	"github.com/foundrylab-app/cinova/backend/internal/wikidata"
-	"github.com/foundrylab-app/cinova/backend/internal/youtube"
+	"github.com/dynolabs-io/cinova/backend/internal/config"
+	"github.com/dynolabs-io/cinova/backend/internal/enrichment"
+	"github.com/dynolabs-io/cinova/backend/internal/graph"
+	"github.com/dynolabs-io/cinova/backend/internal/models"
+	"github.com/dynolabs-io/cinova/backend/internal/scoring"
+	"github.com/dynolabs-io/cinova/backend/internal/tmdb"
+	"github.com/dynolabs-io/cinova/backend/internal/wikidata"
+	"github.com/dynolabs-io/cinova/backend/internal/youtube"
 )
 
 const (

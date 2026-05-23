@@ -21,11 +21,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
-	"github.com/foundrylab-app/cinova/backend/internal/config"
-	"github.com/foundrylab-app/cinova/backend/internal/graph"
-	"github.com/foundrylab-app/cinova/backend/internal/langfuse"
-	"github.com/foundrylab-app/cinova/backend/internal/models"
-	"github.com/foundrylab-app/cinova/backend/internal/store"
+	"github.com/dynolabs-io/cinova/backend/internal/config"
+	"github.com/dynolabs-io/cinova/backend/internal/graph"
+	"github.com/dynolabs-io/cinova/backend/internal/langfuse"
+	"github.com/dynolabs-io/cinova/backend/internal/models"
+	"github.com/dynolabs-io/cinova/backend/internal/store"
 )
 
 const (

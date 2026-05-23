@@ -1,4 +1,4 @@
-module github.com/foundrylab-app/cinova/backend
+module github.com/dynolabs-io/cinova/backend
 
 go 1.23.0
 

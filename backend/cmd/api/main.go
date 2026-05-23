@@ -15,15 +15,15 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	"github.com/foundrylab-app/cinova/backend/internal/auth"
-	"github.com/foundrylab-app/cinova/backend/internal/chat"
-	"github.com/foundrylab-app/cinova/backend/internal/config"
-	"github.com/foundrylab-app/cinova/backend/internal/graph"
-	"github.com/foundrylab-app/cinova/backend/internal/handlers"
-	"github.com/foundrylab-app/cinova/backend/internal/langflow"
-	"github.com/foundrylab-app/cinova/backend/internal/search"
-	"github.com/foundrylab-app/cinova/backend/internal/store"
-	"github.com/foundrylab-app/cinova/backend/internal/workflow"
+	"github.com/dynolabs-io/cinova/backend/internal/auth"
+	"github.com/dynolabs-io/cinova/backend/internal/chat"
+	"github.com/dynolabs-io/cinova/backend/internal/config"
+	"github.com/dynolabs-io/cinova/backend/internal/graph"
+	"github.com/dynolabs-io/cinova/backend/internal/handlers"
+	"github.com/dynolabs-io/cinova/backend/internal/langflow"
+	"github.com/dynolabs-io/cinova/backend/internal/search"
+	"github.com/dynolabs-io/cinova/backend/internal/store"
+	"github.com/dynolabs-io/cinova/backend/internal/workflow"
 )
 
 func main() {

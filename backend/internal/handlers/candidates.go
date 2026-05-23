@@ -6,8 +6,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/foundrylab-app/cinova/backend/internal/chat"
-	"github.com/foundrylab-app/cinova/backend/internal/graph"
+	"github.com/dynolabs-io/cinova/backend/internal/chat"
+	"github.com/dynolabs-io/cinova/backend/internal/graph"
 )
 
 // CandidatesHandler exposes Neo4j candidate lookup to internal callers (e.g. Langflow).
