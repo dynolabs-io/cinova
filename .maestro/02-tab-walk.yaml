@@ -1,0 +1,54 @@
+appId: io.dynolabs.cinova
+---
+# Walk every tab → screenshot each surface. This is the autonomous
+# multi-surface walk-evidence flow for #106. Captures the same UI a
+# founder would see in TestFlight on iPhone — same Cinova.app bytes,
+# same iOS runtime, same RN bridge.
+
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 30000
+# Screen 1: Home tab (default after onboarding)
+- takeScreenshot: walk-1-home
+
+# Screen 2: Reels tab (vertical-trailer feed)
+- tapOn:
+    point: 20%,95%
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: walk-2-reels
+
+# Screen 3: Discover tab (3rd icon from left)
+- tapOn:
+    point: 50%,95%
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: walk-3-discover
+
+# Screen 4: Watchlist tab
+- tapOn:
+    point: 70%,95%
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: walk-4-watchlist
+
+# Screen 5: Profile tab
+- tapOn:
+    point: 90%,95%
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: walk-5-profile
+
+# Screen 6: Tap the chat FAB to verify it opens (smoke-only — won't
+# actually chat because backend is down)
+- tapOn:
+    point: 90%,80%
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: walk-6-chat

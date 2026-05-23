@@ -1,7 +1,7 @@
 appId: io.dynolabs.cinova
 ---
-# Smoke gate — minimum proof the app boots, JS bundle loads, native modules
-# link, and the tab navigator renders. Per-pillar walks (Reels / Discover /
-# Search / Watchlist / Profile) are added as separate flows referenced here
-# once each tab is stable enough for headless assertion.
+# Smoke gate + multi-surface walk evidence.
+#   01-launch.yaml — boot proof, no native crash
+#   02-tab-walk.yaml — screenshot every tab + chat FAB (walk evidence for #106)
 - runFlow: 01-launch.yaml
+- runFlow: 02-tab-walk.yaml
