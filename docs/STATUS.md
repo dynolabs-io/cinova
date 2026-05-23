@@ -2,13 +2,15 @@
 
 > **WHAT**: Snapshot of what's actually shipped today vs the target shape in [ARCHITECTURE.md](ARCHITECTURE.md). Refreshed on every code-complete PR. Live work + open backlog live in [ledger/TRACKER.md](ledger/TRACKER.md).
 > **AUTHORITY**: 📐 PERMANENT-refreshable. Each section dated; when reality drifts from this doc, fix the doc.
-> **AS-OF**: 2026-05-21
+> **AS-OF**: 2026-05-23
 
 ## Pillars at a glance
 
 | Pillar | State | Notes |
 |---|---|---|
-| Backend API | 🟢 Shipped + live | All routes in [ARCHITECTURE.md API surface](ARCHITECTURE.md#api-surface) exist; `/healthz` + `/readyz` live at `api.cinova.openova.io`. |
+| Backend API | 🟡 Shipped, scaled-to-0 | All routes exist; intentionally scaled-to-0 + Flux Kustomization suspended on `contabo-mkt` Sovereign per `openova-private` commit `faeffea2`. Re-enable required to walk content-facing UI surfaces. |
+| iOS pipeline (`ios.yml`) | 🟢 Shipped + autonomous | macOS-native build → archive → IPA → altool → TestFlight → assign to Founders, all driven from `git push origin main`. ASC bundle-ID/PUSH/cert/profile autonomous via API. Build 14 (1.0) in TestFlight as of 2026-05-22, processingState=VALID. |
+| iOS app — CI sim launch + tab bar | 🟢 VERIFIED-PARTIAL | Screenshot at `docs/walks/2026-05-21-cinova-build14-launch.png` proves app launches without native crash + tab bar renders. iPhone-device install confirmation in #106. |
 | Ingestion (TMDB delta) | 🟢 Shipped — running as daily K8s CronJob on contabo-mkt. |
 | Ingestion (TMDB bulk) | 🟢 Shipped — operator runs manually for first-time / country addition. |
 | Ingestion (Wikidata influence graph) | 🟢 Shipped — Neo4j populated with director influences + TV award/critic data. |
@@ -64,21 +66,31 @@
 | `movie/[id]` | 🟡 (#78, #80, #94) |
 | `person/[id]` | 🟡 (#78) |
 
-## Open-issue snapshot (as of 2026-05-21)
+## Open-issue snapshot (as of 2026-05-23)
 
 | Category | Count |
 |---|---|
-| Total open | ~42 |
-| `status/in-progress` | 6 |
+| Total open | ~44 |
+| `status/in-progress` | 7 |
 | `status/uat` | 19 |
 | `status/completed` (awaiting user verification) | 7 |
+| `status/blocked-ext` | 1 |
+| Untriaged | ~12 |
 | `area/mobile` | 34 |
 | `area/backend` | 8 |
 | `area/data` | 7 |
-| `area/infra` | 2 |
-| `area/ci-cd` | 2 |
+| `area/infra` | 4 |
+| `area/ci-cd` | 3 |
 
 Live, machine-current snapshot lives in [ledger/TRACKER.md](ledger/TRACKER.md).
+
+## Major changes since prior STATUS (2026-05-21 → 2026-05-23)
+
+- **Repo transferred** `foundrylab-app/cinova` → `dynolabs-io/cinova` (#100). `foundrylab-app` org deleted.
+- **iOS pipeline retooled** off EAS → vcard-sibling pattern: macOS-native build + archive + altool + Maestro gate (#101 + #102).
+- **TestFlight build 14 LIVE** (#105 ASC record created, #106 install walk pending).
+- **Bundle ID changed**: `io.openova.cinova` → `io.dynolabs.cinova` (any existing TestFlight installs under the old ID are invalidated).
+- **GHCR path migrated**: `ghcr.io/foundrylab-app/cinova/*` → `ghcr.io/dynolabs-io/cinova/*`; `openova-private` Flux manifests cutover in `openova-io/openova-private#163`.
 
 ## Known gaps vs target architecture
 
