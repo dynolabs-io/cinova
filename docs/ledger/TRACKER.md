@@ -68,7 +68,16 @@ Build 14 is in ASC, processingState=VALID, attached to Founders group. But:
 | 4 | `PATCH Founders.hasAccessToAllBuilds=true` | Apple rejects: "attribute can not be included in UPDATE operation" |
 | 5 | External "Public Beta" group + publicLink `testflight.apple.com/join/mXU72Eaz` | Created ✓ but pre-Beta-Review HTML shows "this beta isn't accepting any new testers right now" |
 | 6 | Beta App Review submission (`POST /v1/betaAppReviewSubmissions`) | HTTP 422 "Missing required data" even after beta description + build localization populated |
-| 7 | `POST /v1/builds/{id}/relationships/individualTesters` (direct attach) | IN-FLIGHT — `asc-direct-attach.yml` |
+| 7 | `POST /v1/builds/{id}/relationships/individualTesters` (direct attach) | ✅ HTTP 409 (already attached); verify confirms `tester sees 1 builds: ['14']` for both — earlier `0 builds` was eventual-consistency lag |
+| 8 | `PATCH /v1/buildBetaDetails/{id}` autoNotifyEnabled toggle false→true | ✅ HTTP 200 — Apple's TestFlight push dispatched |
+| 9 | Probe `POST /v1/builds/.../notifyBetaTesters` + variants | ❌ HTTP 404 (endpoint does not exist; Apple uses internal cron, not API trigger) |
+
+Build 14 final state (2026-05-23 07:13 UTC):
+- `internalBuildState: IN_BETA_TESTING` — Apple is actively distributing
+- `autoNotifyEnabled: True`
+- 2 individualTesters attached, state=INVITED
+- Per-tester `/builds` query: `1 builds visible` (build 14) for each
+- Walk-screenshot DoD: open Cinova on iPhone TestFlight signed in as hatyil@gmail.com, screenshot → #106
 
 Cleared substrate (persistent):
 - Apple Developer bundle ID `io.dynolabs.cinova` (T8F2BSD4H7), PUSH_NOTIFICATIONS capability
