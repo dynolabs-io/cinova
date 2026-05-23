@@ -1,0 +1,72 @@
+name: asc-fix-group (set hasAccessToAllBuilds + reattach build)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pyjwt cryptography requests
+      - env:
+          KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY_B64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os, base64, time, jwt, requests, json
+          kb = os.environ['PRIVATE_KEY_B64']
+          try:
+              d = base64.b64decode(kb)
+              key = d if d.startswith(b'-----BEGIN') else kb.encode()
+          except Exception:
+              key = kb.encode()
+          tok = jwt.encode({'iss': os.environ['ISSUER_ID'], 'iat': int(time.time()),
+                            'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'},
+                           key, algorithm='ES256', headers={'kid': os.environ['KEY_ID']})
+          h = {'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'}
+          base = 'https://api.appstoreconnect.apple.com'
+
+          apps = requests.get(f'{base}/v1/apps?filter[bundleId]=io.dynolabs.cinova', headers=h).json()
+          app_id = apps['data'][0]['id']
+          builds = requests.get(f'{base}/v1/builds?filter[app]={app_id}&filter[version]=14', headers=h).json()
+          build_id = builds['data'][0]['id']
+
+          GROUP_ID = 'ffb228b9-9ad3-44aa-90e7-967bb06576bd'  # Founders
+
+          # Step 1: PATCH the group with hasAccessToAllBuilds=True
+          patch = {'data': {
+              'type': 'betaGroups', 'id': GROUP_ID,
+              'attributes': {'hasAccessToAllBuilds': True}
+          }}
+          r = requests.patch(f'{base}/v1/betaGroups/{GROUP_ID}', headers=h, json=patch, timeout=20)
+          print(f"PATCH hasAccessToAllBuilds=True HTTP {r.status_code}")
+          if r.status_code not in (200, 204):
+              print(f"  body={r.text[:500]}")
+
+          # Step 2: explicitly POST build 14 to group relationship (re-attach)
+          rel = {'data': [{'type': 'builds', 'id': build_id}]}
+          r = requests.post(f'{base}/v1/betaGroups/{GROUP_ID}/relationships/builds',
+                            headers=h, json=rel, timeout=20)
+          print(f"POST build to group HTTP {r.status_code}")
+          if r.status_code not in (200, 204, 409):
+              print(f"  body={r.text[:500]}")
+
+          # Step 3: verify final state
+          time.sleep(2)
+          g = requests.get(f'{base}/v1/betaGroups/{GROUP_ID}', headers=h).json()
+          print(f"\nFounders attributes after fix:")
+          for k, v in g['data']['attributes'].items():
+              print(f"  {k}: {v}")
+          # Tester builds
+          for email in ['hatyil@gmail.com', 'emrahbaysal@gmail.com']:
+              t = requests.get(f'{base}/v1/betaTesters?filter[email]={email}', headers=h).json()
+              for r in t.get('data', []):
+                  ab = requests.get(f'{base}/v1/betaTesters/{r["id"]}/builds', headers=h).json()
+                  print(f"\n  {email} sees {len(ab.get('data', []))} builds")
+                  for b in ab.get('data', []):
+                      print(f"    - id={b['id']} v={b['attributes'].get('version')}")
+          PY
