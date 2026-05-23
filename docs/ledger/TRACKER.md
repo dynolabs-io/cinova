@@ -79,6 +79,12 @@ Build 14 final state (2026-05-23 07:13 UTC):
 - Per-tester `/builds` query: `1 builds visible` (build 14) for each
 - Walk-screenshot DoD: open Cinova on iPhone TestFlight signed in as hatyil@gmail.com, screenshot → #106
 
+Autonomous walk-evidence posted (2026-05-23 11:01 UTC):
+- `docs/walks/2026-05-21-cinova-build14-launch.png` committed (`272b1a7`) — real iOS Simulator screenshot of io.dynolabs.cinova running build 14 from CI run 26224865258
+- Posted to #106 as comment 4525116734 with embedded image
+- Same `Cinova.app` bytes that uploaded to TestFlight as build 14
+- Real-device iPhone TestFlight screenshot is the next walk artefact (closes #106 fully)
+
 Cleared substrate (persistent):
 - Apple Developer bundle ID `io.dynolabs.cinova` (T8F2BSD4H7), PUSH_NOTIFICATIONS capability
 - ASC app record "Cinova - Movies & TV" (id 6772122414), Founders + Public Beta groups, 2 testers, build 14 VALID + assigned to Founders, beta description + build-14 "whatsNew" localization populated
