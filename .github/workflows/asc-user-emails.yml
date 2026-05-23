@@ -1,0 +1,59 @@
+name: asc-user-emails (probe Apple ID alias mismatch)
+
+on:
+  workflow_dispatch:
+
+# Hypothesis: founder's iPhone TestFlight is signed in with a DIFFERENT
+# Apple ID than the gmail.com address we attached as betaTester. Apple
+# IDs can have an iCloud-primary + gmail-alias setup, where the iPhone
+# uses the iCloud address but ASC user is recorded under gmail.
+# /v1/users/{id} exposes the canonical username — confirm it matches.
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pyjwt cryptography requests
+      - env:
+          KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY_B64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os, base64, time, jwt, requests, json
+          kb = os.environ['PRIVATE_KEY_B64']
+          try:
+              d = base64.b64decode(kb)
+              key = d if d.startswith(b'-----BEGIN') else kb.encode()
+          except Exception:
+              key = kb.encode()
+          tok = jwt.encode({'iss': os.environ['ISSUER_ID'], 'iat': int(time.time()),
+                            'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'},
+                           key, algorithm='ES256', headers={'kid': os.environ['KEY_ID']})
+          h = {'Authorization': f'Bearer {tok}'}
+          base = 'https://api.appstoreconnect.apple.com'
+
+          users = requests.get(f'{base}/v1/users?limit=20', headers=h).json()
+          print(f"=== ALL ASC users — full attributes ===")
+          for u in users.get('data', []):
+              a = u['attributes']
+              print(f"\nUser id={u['id']}")
+              for k, v in a.items():
+                  print(f"  {k}: {v}")
+              # Invitations sent TO this user (different from tester invites)
+              uinv = requests.get(f'{base}/v1/userInvitations?filter[email]={a.get("username")}', headers=h).json()
+              if uinv.get('data'):
+                  print(f"  ! pending userInvitations: {len(uinv['data'])}")
+                  for inv in uinv['data']:
+                      print(f"    - {inv['attributes']}")
+
+          # Also: pull beta tester state with ALL ranges (limit 200)
+          print(f"\n=== ALL betaTesters for this team ===")
+          tt = requests.get(f'{base}/v1/betaTesters?limit=200', headers=h).json()
+          for t in tt.get('data', []):
+              a = t['attributes']
+              print(f"  id={t['id']} email={a.get('email')} state={a.get('state')} inviteType={a.get('inviteType')}")
+          PY
