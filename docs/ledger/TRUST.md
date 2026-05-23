@@ -17,19 +17,22 @@ Per user-global `~/.claude/CLAUDE.md` §3 rule 6: verification is READ-ONLY. The
 
 | Surface | State | Walked SHA | Walked by | Date | Evidence |
 |---|---|---|---|---|---|
-| Home tab — trending feed renders within 2s | 🔴 UNVERIFIED | — | — | — | — |
-| Home tab — tap poster → movie detail loads w/ CinovaScore | 🔴 UNVERIFIED | — | — | — | — |
-| Discover (reels) — swipe through ≥ 5 vertical trailers autoplay | 🔴 UNVERIFIED | — | — | — | — |
+| iOS app boots without native crash | 🟡 VERIFIED-PARTIAL | `2038bd3` build 14 | claude-cinova-session-222aa08c | 2026-05-21 | [docs/walks/2026-05-21-cinova-build14-launch.png](../walks/2026-05-21-cinova-build14-launch.png) — iOS Sim screenshot from ios.yml run 26224865258; same Cinova.app bytes as TestFlight build 14 |
+| iOS tab bar renders (5 tabs + chat FAB) | 🟡 VERIFIED-PARTIAL | `2038bd3` build 14 | claude-cinova-session-222aa08c | 2026-05-21 | Same screenshot — 5 tab icons + chat FAB visible. **Tabs are icon-only, no text labels** (intentional design) |
+| iOS app installable from TestFlight | 🟡 VERIFIED-PARTIAL | build 14 | claude | 2026-05-22 | Apple ASC: build 14 processingState=VALID, internalBuildState=IN_BETA_TESTING, attached to Founders group + both individualTesters (#106). iPhone-device install confirmation pending. |
+| Home tab — trending feed renders within 2s | 🔴 UNVERIFIED | — | — | — | Backend `api.cinova.openova.io` scaled-to-0 (openova-private `faeffea2`); content area is blank by design until backend re-enabled |
+| Home tab — tap poster → movie detail loads w/ CinovaScore | 🔴 UNVERIFIED | — | — | — | Blocked on backend |
+| Discover (reels) — swipe through ≥ 5 vertical trailers autoplay | 🔴 UNVERIFIED | — | — | — | Blocked on backend |
 | Discover (reels) — Save persists across app restart | 🔴 UNVERIFIED | — | — | — | — |
 | Discover (reels) — country filter NOT applied unless user set | 🔴 UNVERIFIED | — | — | — | Last regression: `5f240fd` removed accidental filter |
-| Search — NL query returns ≥ 3 hits | 🔴 UNVERIFIED | — | — | — | — |
-| Search — tap a hit lands on detail | 🔴 UNVERIFIED | — | — | — | — |
-| Watchlist — save from 2 surfaces, both visible after restart | 🔴 UNVERIFIED | — | — | — | — |
-| AI chat — response cites ≥ 1 specific title with reasoning | 🔴 UNVERIFIED | — | — | — | Known bug: country hardcoded US (#84) |
-| Auth — anonymous → signup migrates watchlist | 🔴 UNVERIFIED | — | — | — | — |
-| Auth — restart app, still logged in | 🔴 UNVERIFIED | — | — | — | — |
-| API `/healthz` returns 200 | 🔴 UNVERIFIED | — | — | — | — |
-| API `/readyz` returns 200 (DB + cache check) | 🔴 UNVERIFIED | — | — | — | — |
+| Search — NL query returns ≥ 3 hits | 🔴 UNVERIFIED | — | — | — | Blocked on backend |
+| Search — tap a hit lands on detail | 🔴 UNVERIFIED | — | — | — | Blocked on backend |
+| Watchlist — save from 2 surfaces, both visible after restart | 🔴 UNVERIFIED | — | — | — | Blocked on backend |
+| AI chat — response cites ≥ 1 specific title with reasoning | 🔴 UNVERIFIED | — | — | — | Known bug: country hardcoded US (#84) — blocked on backend |
+| Auth — anonymous → signup migrates watchlist | 🔴 UNVERIFIED | — | — | — | Blocked on backend |
+| Auth — restart app, still logged in | 🔴 UNVERIFIED | — | — | — | Blocked on backend |
+| API `/healthz` returns 200 | 🔴 UNVERIFIED | — | — | — | Backend scaled to 0 |
+| API `/readyz` returns 200 (DB + cache check) | 🔴 UNVERIFIED | — | — | — | Backend scaled to 0 |
 
 ## Update protocol
 
