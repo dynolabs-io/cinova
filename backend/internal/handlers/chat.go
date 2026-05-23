@@ -12,12 +12,12 @@ import (
 	"go.temporal.io/sdk/client"
 	temporalclient "go.temporal.io/sdk/client"
 
-	"github.com/foundrylab-app/cinova/backend/internal/auth"
-	"github.com/foundrylab-app/cinova/backend/internal/chat"
-	"github.com/foundrylab-app/cinova/backend/internal/langflow"
-	"github.com/foundrylab-app/cinova/backend/internal/models"
-	"github.com/foundrylab-app/cinova/backend/internal/store"
-	"github.com/foundrylab-app/cinova/backend/internal/workflow"
+	"github.com/dynolabs-io/cinova/backend/internal/auth"
+	"github.com/dynolabs-io/cinova/backend/internal/chat"
+	"github.com/dynolabs-io/cinova/backend/internal/langflow"
+	"github.com/dynolabs-io/cinova/backend/internal/models"
+	"github.com/dynolabs-io/cinova/backend/internal/store"
+	"github.com/dynolabs-io/cinova/backend/internal/workflow"
 )
 
 // ChatHandler handles POST /api/v1/me/chat and POST /api/v1/me/chat/stream.

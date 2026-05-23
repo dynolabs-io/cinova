@@ -12,9 +12,9 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/foundrylab-app/cinova/backend/internal/chat"
-	"github.com/foundrylab-app/cinova/backend/internal/graph"
-	"github.com/foundrylab-app/cinova/backend/internal/models"
+	"github.com/dynolabs-io/cinova/backend/internal/chat"
+	"github.com/dynolabs-io/cinova/backend/internal/graph"
+	"github.com/dynolabs-io/cinova/backend/internal/models"
 )
 
 // TaskQueue is the Temporal task queue name for all cinova chat workflows.

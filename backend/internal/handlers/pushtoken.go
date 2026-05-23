@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/foundrylab-app/cinova/backend/internal/auth"
-	"github.com/foundrylab-app/cinova/backend/internal/store"
+	"github.com/dynolabs-io/cinova/backend/internal/auth"
+	"github.com/dynolabs-io/cinova/backend/internal/store"
 	"github.com/rs/zerolog/log"
 )
 

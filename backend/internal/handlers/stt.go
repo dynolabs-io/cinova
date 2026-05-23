@@ -12,7 +12,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/foundrylab-app/cinova/backend/internal/config"
+	"github.com/dynolabs-io/cinova/backend/internal/config"
 )
 
 // STTHandler handles speech-to-text transcription via Groq Whisper.

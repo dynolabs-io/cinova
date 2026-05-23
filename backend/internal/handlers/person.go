@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
 
-	"github.com/foundrylab-app/cinova/backend/internal/graph"
+	"github.com/dynolabs-io/cinova/backend/internal/graph"
 )
 
 // PersonHandler handles person (actor/director) API requests.

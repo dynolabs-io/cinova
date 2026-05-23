@@ -5,7 +5,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
-	"github.com/foundrylab-app/cinova/backend/internal/chat"
+	"github.com/dynolabs-io/cinova/backend/internal/chat"
 )
 
 // Start creates a Temporal client + worker, registers the chat workflow and

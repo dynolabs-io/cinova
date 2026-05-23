@@ -7,7 +7,7 @@ import (
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j/dbtype"
 
-	"github.com/foundrylab-app/cinova/backend/internal/models"
+	"github.com/dynolabs-io/cinova/backend/internal/models"
 )
 
 // MovieRepository provides graph operations for movies, TV shows, people, and providers.

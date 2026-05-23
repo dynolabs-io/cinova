@@ -9,9 +9,9 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/foundrylab-app/cinova/backend/internal/auth"
-	"github.com/foundrylab-app/cinova/backend/internal/graph"
-	"github.com/foundrylab-app/cinova/backend/internal/store"
+	"github.com/dynolabs-io/cinova/backend/internal/auth"
+	"github.com/dynolabs-io/cinova/backend/internal/graph"
+	"github.com/dynolabs-io/cinova/backend/internal/store"
 )
 
 const recCacheTTL = 30 * time.Minute

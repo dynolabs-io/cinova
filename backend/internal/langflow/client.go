@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/foundrylab-app/cinova/backend/internal/models"
+	"github.com/dynolabs-io/cinova/backend/internal/models"
 )
 
 // Client calls the Langflow run API.
