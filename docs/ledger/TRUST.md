@@ -20,6 +20,11 @@ Per user-global `~/.claude/CLAUDE.md` §3 rule 6: verification is READ-ONLY. The
 | iOS app boots without native crash | 🟡 VERIFIED-PARTIAL | `2038bd3` build 14 | claude-cinova-session-222aa08c | 2026-05-21 | [docs/walks/2026-05-21-cinova-build14-launch.png](../walks/2026-05-21-cinova-build14-launch.png) — iOS Sim screenshot from ios.yml run 26224865258; same Cinova.app bytes as TestFlight build 14 |
 | iOS tab bar renders (5 tabs + chat FAB) | 🟡 VERIFIED-PARTIAL | `2038bd3` build 14 | claude-cinova-session-222aa08c | 2026-05-21 | Same screenshot — 5 tab icons + chat FAB visible. **Tabs are icon-only, no text labels** (intentional design) |
 | iOS app installable from TestFlight | 🟡 VERIFIED-PARTIAL | build 14 | claude | 2026-05-22 | Apple ASC: build 14 processingState=VALID, internalBuildState=IN_BETA_TESTING, attached to Founders group + both individualTesters (#106). iPhone-device install confirmation pending. |
+| iOS Home tab — visual frame renders | 🟢 VERIFIED-PASS | `ff6730e` build 18 | claude-cinova-session-222aa08c | 2026-05-23 | [docs/walks/walk-1-home.png](../walks/walk-1-home.png) from ios.yml run 26331965196 |
+| iOS Reels tab — visual frame renders | 🟢 VERIFIED-PASS | `ff6730e` build 18 | claude-cinova-session-222aa08c | 2026-05-23 | [docs/walks/walk-2-reels.png](../walks/walk-2-reels.png) |
+| iOS Discover tab — visual frame renders | 🟢 VERIFIED-PASS | `ff6730e` build 18 | claude-cinova-session-222aa08c | 2026-05-23 | [docs/walks/walk-3-discover.png](../walks/walk-3-discover.png) |
+| iOS Watchlist tab — visual frame renders | 🟢 VERIFIED-PASS | `ff6730e` build 18 | claude-cinova-session-222aa08c | 2026-05-23 | [docs/walks/walk-4-watchlist.png](../walks/walk-4-watchlist.png) |
+| iOS Profile tab — visual frame renders | 🟢 VERIFIED-PASS | `ff6730e` build 18 | claude-cinova-session-222aa08c | 2026-05-23 | [docs/walks/walk-5-profile.png](../walks/walk-5-profile.png) |
 | Home tab — trending feed renders within 2s | 🔴 UNVERIFIED | — | — | — | Backend `api.cinova.openova.io` scaled-to-0 (openova-private `faeffea2`); content area is blank by design until backend re-enabled |
 | Home tab — tap poster → movie detail loads w/ CinovaScore | 🔴 UNVERIFIED | — | — | — | Blocked on backend |
 | Discover (reels) — swipe through ≥ 5 vertical trailers autoplay | 🔴 UNVERIFIED | — | — | — | Blocked on backend |
