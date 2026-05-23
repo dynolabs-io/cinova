@@ -598,6 +598,14 @@ jobs:
             mkdir -p $RUNNER_TEMP/maestro-debug
             cp -R ~/.maestro/tests $RUNNER_TEMP/maestro-debug/
           fi
+          # Maestro's `takeScreenshot: NAME` writes NAME.png to the directory
+          # from which maestro was invoked (github.workspace, the repo root).
+          # Without this collection the screenshots are LOST. Captured under
+          # $RUNNER_TEMP/maestro-screenshots/ for the artifact upload.
+          mkdir -p $RUNNER_TEMP/maestro-screenshots
+          find "$GITHUB_WORKSPACE" -maxdepth 2 -name "walk-*.png" -exec cp {} $RUNNER_TEMP/maestro-screenshots/ \; 2>/dev/null || true
+          echo "=== walk screenshots captured ==="
+          ls -la $RUNNER_TEMP/maestro-screenshots/ 2>/dev/null || true
           # NATIVE-CRASH DETECTION — Maestro reports flows passed if it
           # didn't actively detect a failed assertion, but the JS
           # ErrorBoundary doesn't catch native bridge crashes. Grep the
@@ -616,6 +624,7 @@ jobs:
           name: maestro-results
           path: |
             ${{ runner.temp }}/maestro-junit.xml
+            ${{ runner.temp }}/maestro-screenshots/**
             ${{ runner.temp }}/maestro-debug/**
             ${{ runner.temp }}/sim.log
           if-no-files-found: warn
