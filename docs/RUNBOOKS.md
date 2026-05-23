@@ -172,5 +172,35 @@ Existing label taxonomy:
 | `status/uat` | code done, walk pending |
 | `status/completed` | walk passed, awaiting user verification |
 | `status/parked` | blocked or deprioritised |
+| `status/blocked-ext` | Waiting on external dep (Apple UI, GitHub admin, etc) |
 
 Per user-global `~/.claude/CLAUDE.md` §6: GitHub does NOT auto-mutex status labels — remove the old one before adding the new one.
+
+## Autonomous walk-evidence capture (iOS)
+
+When user-global `~/.claude/CLAUDE.md` §-3 requires walk-screenshot in an issue and no iPhone is accessible, use the CI iOS Simulator path:
+
+1. `ios.yml` builds `Cinova.app` for iOS Simulator (the same JS+native bytes that ship to TestFlight after re-signing for distribution).
+2. Maestro flow `.maestro/02-tab-walk.yaml` walks every tab + chat FAB, screenshots each surface via `takeScreenshot`.
+3. Screenshots are copied to `$RUNNER_TEMP/maestro-debug/` and uploaded as workflow artifact `maestro-results`.
+4. Pull artifacts locally:
+   ```bash
+   gh run download <RUN_ID> -R dynolabs-io/cinova --name maestro-results -D /tmp/walk
+   ```
+5. Commit relevant screenshots to `docs/walks/YYYY-MM-DD-<context>.png`.
+6. Embed in GitHub issue with `![alt](https://raw.githubusercontent.com/dynolabs-io/cinova/main/docs/walks/...)`.
+
+This is autonomous walk-evidence for the **iOS-binary layer**. CONTENT-FACING surfaces (Home feed, Reels swipe, Search results, Watchlist render, AI chat) require the backend at `api.cinova.openova.io` to be running — currently scaled-to-0 + Flux Kustomization suspended on the `contabo-mkt` Sovereign per `openova-private` commit `faeffea2`. Re-enable via `flux resume kustomization cinova -n flux-system` on the cluster (or by editing the Kustomization YAML to remove `suspend: true`) when backend-dependent surfaces need to be walked.
+
+## TestFlight build distribution checklist
+
+When `ios.yml` succeeds and you want the build assignable to internal testers, these conditions must ALL hold (verified by `asc-assign-build.yml` automatically, manually probable via the ASC API):
+
+1. `build.processingState == VALID` (~15-30 min for first build, instant subsequently)
+2. `build.usesNonExemptEncryption != null` (we PATCH it to `false` in `asc-assign-build.yml`)
+3. `buildBetaDetail.internalBuildState == IN_BETA_TESTING`
+4. Tester is attached via `POST /v1/betaTesters` with relationship to beta group (one-time)
+5. Tester is in an internal group OR the build is in an external group that's passed Beta App Review
+6. Apple's autoNotify push has been dispatched (toggle `autoNotifyEnabled` false→true to force)
+
+If iPhone TestFlight doesn't show the build despite all 6 conditions, the iPhone is signed in with a different Apple ID than the tester email (Apple ID primary vs alias mismatch). Confirm via TestFlight app → Settings → Apple ID shown.
