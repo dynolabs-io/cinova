@@ -1,0 +1,75 @@
+name: asc-poll-state (check if iPhone consumed the build)
+
+on:
+  workflow_dispatch:
+
+# Poll for evidence that the iPhone TestFlight pulled build 14:
+#  - betaTester state: INVITED → ACCEPTED would mean the redemption email was clicked
+#  - betaTester.appDevices: would list iPhone UDIDs that have installed
+#  - build.individualTesters: state changes
+#  - buildBetaDetail.externalBuildState: track Apple's eventual-consistency
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pyjwt cryptography requests
+      - env:
+          KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY_B64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os, base64, time, jwt, requests, json
+          kb = os.environ['PRIVATE_KEY_B64']
+          try:
+              d = base64.b64decode(kb)
+              key = d if d.startswith(b'-----BEGIN') else kb.encode()
+          except Exception:
+              key = kb.encode()
+          tok = jwt.encode({'iss': os.environ['ISSUER_ID'], 'iat': int(time.time()),
+                            'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'},
+                           key, algorithm='ES256', headers={'kid': os.environ['KEY_ID']})
+          h = {'Authorization': f'Bearer {tok}'}
+          base = 'https://api.appstoreconnect.apple.com'
+
+          apps = requests.get(f'{base}/v1/apps?filter[bundleId]=io.dynolabs.cinova', headers=h).json()
+          app_id = apps['data'][0]['id']
+          builds = requests.get(f'{base}/v1/builds?filter[app]={app_id}&filter[version]=14', headers=h).json()
+          build_id = builds['data'][0]['id']
+
+          # 1. buildBetaDetail
+          r = requests.get(f'{base}/v1/builds/{build_id}/buildBetaDetail', headers=h).json()
+          if r.get('data'):
+              a = r['data']['attributes']
+              print(f"=== Build 14 betaDetail ===")
+              for k in ['internalBuildState', 'externalBuildState', 'autoNotifyEnabled']:
+                  print(f"  {k}: {a.get(k)}")
+
+          # 2. individualTesters (with full attributes including state + appDevices)
+          ind = requests.get(f'{base}/v1/builds/{build_id}/individualTesters?include=apps', headers=h).json()
+          print(f"\n=== Build 14 individualTesters ===")
+          for t in ind.get('data', []):
+              a = t['attributes']
+              print(f"  - {a.get('email')}")
+              for k in ['state', 'inviteType', 'appDevices', 'lastModifiedDate']:
+                  print(f"      {k}: {a.get(k)}")
+
+          # 3. betaTester resources (team-wide)
+          for email in ['hatyil@gmail.com', 'emrahbaysal@gmail.com']:
+              tt = requests.get(f'{base}/v1/betaTesters?filter[email]={email}', headers=h).json()
+              for t in tt.get('data', []):
+                  print(f"\n=== betaTester {email} ===")
+                  for k, v in t['attributes'].items():
+                      print(f"  {k}: {v}")
+
+          # 4. preReleaseVersions — Apple's "version" view of the build
+          prv = requests.get(f'{base}/v1/preReleaseVersions?filter[app]={app_id}&filter[platform]=IOS&limit=5', headers=h).json()
+          print(f"\n=== preReleaseVersions ({len(prv.get('data', []))}) ===")
+          for v in prv.get('data', []):
+              a = v['attributes']
+              print(f"  - version={a.get('version')} platform={a.get('platform')}")
+          PY
