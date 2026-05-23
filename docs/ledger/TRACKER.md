@@ -38,19 +38,41 @@ iOS pipeline iteration log (live):
 | 26224123786 | `0d8f2e4` | failure | `Cinova.app` built at expected location ✓ (DEPLOYMENT_LOCATION fix worked). Install + sim boot ✓. Maestro clearState failed: "Failed to get app binary directory for bundle io.dynolabs.cinova … No such file or directory" — the .app's Info.plist contains `io.openova.cinova`, NOT the bundle ID we expected | **mobile/app.config.ts overrode app.json's bundleIdentifier** (TypeScript config takes precedence in Expo when both present). Update app.config.ts + store-assets/metadata.json from io.openova.cinova → io.dynolabs.cinova |
 | 26224865258 | `2038bd3` | failure | App launches ✓, tab bar renders ✓ (5 icons + chat FAB visible in screenshot). Maestro `assertVisible: "Home"` failed after 76s — cinova's tab bar is **icon-only, no text labels**. Backend is scaled-to-0 + Flux suspended (openova-private/faeffea2) so Home content area is blank by design | Relax maestro to: launchApp → 30s wait → takeScreenshot → assertNotVisible error-boundary strings. Don't assert on tab labels (icon-only) or content (backend dead). Native-crash detection in workflow is secondary gate |
 | 26225696674 | `5bccd41` | failure | **Maestro PASSED** ✓ (smoke gate works). Archive failed: `Provisioning profile "Dynolabs Cinova App Store" doesn't include the Push Notifications capability` + `... doesn't include the aps-environment entitlement` | Bundle ID was created via `POST /v1/bundleIds` with no capabilities. Add `POST /v1/bundleIdCapabilities` step (capabilityType=PUSH_NOTIFICATIONS) BEFORE fastlane sigh. cinova uses expo-notifications which requires aps-environment |
-| 26226740000 | `869f929` | failure | **Archive PASSED** ✓ + IPA wrapped ✓. altool upload failed: `ERROR: Cannot determine the Apple ID from Bundle ID 'io.dynolabs.cinova' and platform 'IOS' (12)` — no ASC app record exists for the bundle ID, and Apple's ASC REST API forbids `CREATE` on the apps resource (HTTP 403). | **PIPELINE COMPLETE; blocks on Apple-UI click**. Filed as #105 — founder creates ASC app record for io.dynolabs.cinova (~2 min at appstoreconnect.apple.com). After that one-time action, every subsequent build will reach TestFlight autonomously. |
+| 26226740000 | `869f929` | failure | **Archive PASSED** ✓ + IPA wrapped ✓. altool upload failed: `ERROR: Cannot determine the Apple ID from Bundle ID 'io.dynolabs.cinova' and platform 'IOS' (12)` — no ASC app record exists for the bundle ID, and Apple's ASC REST API forbids `CREATE` on the apps resource (HTTP 403). | **PIPELINE COMPLETE; blocks on Apple-UI click**. Filed as #105 — founder created ASC app "Cinova - Movies & TV" (id 6772122414) at 2026-05-22 ~09:00 UTC. |
 
-## End-of-iteration summary (2026-05-21)
+## 2026-05-22 — Build 14 reaches TestFlight (post-ASC-create)
 
-- **10 ios.yml iterations**, ~116 min macOS-runner wallclock (free on public repo).
-- **Every step works end-to-end** except the final altool upload, which is blocked by an Apple-side restriction (ASC REST API has no CREATE for apps resource).
-- **Blocking issue**: #105 — founder creates "Cinova" record at https://appstoreconnect.apple.com with bundle ID `io.dynolabs.cinova`. After that one-time UI click, the pipeline is fully autonomous.
-- **No further code changes expected** on the pipeline itself until first green TestFlight upload validates the end-to-end loop. Stopping the iteration loop here to avoid burning runner-minutes on a deterministic failure.
+After founder created the ASC record per #105:
 
-Cleared in-flight (substrate):
-- Apple Developer bundle ID `io.dynolabs.cinova` (T8F2BSD4H7) — created via `POST /v1/bundleIds` in run 26221495210; persistent
-- ASC app record for `io.dynolabs.cinova` — **NOT YET CREATED** (Apple API forbids; relying on altool auto-create on first upload)
-- "Founders" beta group — skipped because ASC record doesn't exist yet; re-attempted post-upload
+| Run | SHA | Result | Diagnosis | Fix shipped |
+|---|---|---|---|---|
+| 26279869138 | `91ef2e6` | partial success | **Build uploaded ✓ (build 13)**, altool returned "UPLOAD SUCCEEDED with no errors". Assign-to-Founders step failed: HTTP 422 "Build is not in an internally testable state" because processingState was still PROCESSING when assign fired immediately after upload | Two-phase wait: poll for build resource appearance (6 min), then poll for processingState=VALID (45 min) before assign |
+| 26281419755 | (rerun) | cancelled | asc-assign-build.yml had timeout-minutes=5; in-script polling needs ~45 min | Bump workflow-level timeout to 55 min |
+| 26284227101 | manual assign for v14 | partial success | processingState=VALID ✓ but HTTP 422 "not internally testable" still — root cause: Apple requires explicit declaration of `usesNonExemptEncryption` (build was uploaded with that attribute=None) | `PATCH /v1/builds/{id}` with `{usesNonExemptEncryption: false}` before assign |
+| 26284313968 | post-export-compliance retry | **success** ✓ | processingState=VALID + usesNonExemptEncryption=False + POST to betaGroups → HTTP 204 | Folded both fixes into ios.yml + asc-assign-build.yml permanently |
+
+## 2026-05-23 — Build visibility to testers (open work, this session)
+
+Filed as **#106**.
+
+Build 14 is in ASC, processingState=VALID, attached to Founders group. But:
+- `/v1/betaTesters/{id}/builds` returns `[]` for both `hatyil@gmail.com` and `emrahbaysal@gmail.com`
+- Founder reports Cinova doesn't appear in iPhone TestFlight (signed in as hatyil)
+- Apple invitation emails to gmail.com unreliable (emrahbaysal got nothing; hatyil's invite "revoked or invalid" on forward)
+
+| Attempt | Mechanism | Result |
+|---|---|---|
+| 1 | `POST /v1/betaTesters` (email-invite flow) | HTTP 201 but state=None for both |
+| 2 | `POST /v1/betaTesterInvitations` (explicit resend) | HTTP 201, no email delivery |
+| 3 | Delete 9 duplicate tester records + single clean re-create | state=INVITED but builds still empty |
+| 4 | `PATCH Founders.hasAccessToAllBuilds=true` | Apple rejects: "attribute can not be included in UPDATE operation" |
+| 5 | External "Public Beta" group + publicLink `testflight.apple.com/join/mXU72Eaz` | Created ✓ but pre-Beta-Review HTML shows "this beta isn't accepting any new testers right now" |
+| 6 | Beta App Review submission (`POST /v1/betaAppReviewSubmissions`) | HTTP 422 "Missing required data" even after beta description + build localization populated |
+| 7 | `POST /v1/builds/{id}/relationships/individualTesters` (direct attach) | IN-FLIGHT — `asc-direct-attach.yml` |
+
+Cleared substrate (persistent):
+- Apple Developer bundle ID `io.dynolabs.cinova` (T8F2BSD4H7), PUSH_NOTIFICATIONS capability
+- ASC app record "Cinova - Movies & TV" (id 6772122414), Founders + Public Beta groups, 2 testers, build 14 VALID + assigned to Founders, beta description + build-14 "whatsNew" localization populated
 
 ## Counts (open issues)
 
