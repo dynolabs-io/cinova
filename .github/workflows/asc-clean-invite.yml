@@ -1,0 +1,98 @@
+name: asc-clean-invite (autonomous internal-tester recovery)
+
+on:
+  workflow_dispatch:
+
+# Goal: produce a working TestFlight-install path for at least one tester
+# without operator action. Strategy:
+#   1. Nuke ALL duplicate beta-tester records (my repeated POSTs created
+#      fragmented duplicates with state=None)
+#   2. Re-create ONE clean tester record per ASC team user
+#   3. POST /v1/betaTesterInvitations — capture the response which may
+#      contain a targetUrl / redemption link
+#   4. If no URL in response, fall back to GET /v1/betaTesterInvitations
+#      to list outstanding invitations + their attributes
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pyjwt cryptography requests
+      - env:
+          KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY_B64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os, base64, time, jwt, requests, json
+          kb = os.environ['PRIVATE_KEY_B64']
+          try:
+              d = base64.b64decode(kb)
+              key = d if d.startswith(b'-----BEGIN') else kb.encode()
+          except Exception:
+              key = kb.encode()
+          tok = jwt.encode({'iss': os.environ['ISSUER_ID'], 'iat': int(time.time()),
+                            'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'},
+                           key, algorithm='ES256', headers={'kid': os.environ['KEY_ID']})
+          h = {'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'}
+          base = 'https://api.appstoreconnect.apple.com'
+          GROUP_ID = 'ffb228b9-9ad3-44aa-90e7-967bb06576bd'  # Founders
+          PUBLIC_GROUP_ID = None  # Will look up
+          apps = requests.get(f'{base}/v1/apps?filter[bundleId]=io.dynolabs.cinova', headers=h).json()
+          app_id = apps['data'][0]['id']
+
+          # ===  STEP 1 — list and DELETE all existing tester records  ===
+          for email in ['hatyil@gmail.com', 'emrahbaysal@gmail.com']:
+              print(f"\n=== cleanup {email} ===")
+              tt = requests.get(f'{base}/v1/betaTesters?filter[email]={email}&limit=200', headers=h).json()
+              ids = [t['id'] for t in tt.get('data', [])]
+              print(f"found {len(ids)} existing tester records")
+              for tid in ids:
+                  r = requests.delete(f'{base}/v1/betaTesters/{tid}', headers=h, timeout=15)
+                  print(f"  DELETE {tid}: HTTP {r.status_code}")
+
+          # ===  STEP 2 — create exactly ONE tester per email, in Founders  ===
+          fresh_ids = {}
+          for email, first, last in [
+              ('hatyil@gmail.com',      'Hatice', 'Baysal'),
+              ('emrahbaysal@gmail.com', 'Emrah',  'Baysal'),
+          ]:
+              payload = {'data': {
+                  'type': 'betaTesters',
+                  'attributes': {'email': email, 'firstName': first, 'lastName': last},
+                  'relationships': {'betaGroups': {'data': [{'type': 'betaGroups', 'id': GROUP_ID}]}}
+              }}
+              r = requests.post(f'{base}/v1/betaTesters', headers=h, json=payload, timeout=20)
+              print(f"\nCREATE {email}: HTTP {r.status_code}")
+              if r.status_code in (200, 201):
+                  d = r.json()['data']
+                  fresh_ids[email] = d['id']
+                  print(f"  id={d['id']} attrs={d['attributes']}")
+
+          # ===  STEP 3 — explicitly POST /v1/betaTesterInvitations  ===
+          for email, tid in fresh_ids.items():
+              payload = {'data': {
+                  'type': 'betaTesterInvitations',
+                  'relationships': {
+                      'app':        {'data': {'type': 'apps',        'id': app_id}},
+                      'betaTester': {'data': {'type': 'betaTesters', 'id': tid}},
+                  }
+              }}
+              r = requests.post(f'{base}/v1/betaTesterInvitations', headers=h, json=payload, timeout=20)
+              print(f"\nINVITE {email}: HTTP {r.status_code}")
+              if r.status_code in (200, 201):
+                  print(f"  response: {json.dumps(r.json(), indent=2)[:2000]}")
+              else:
+                  print(f"  body={r.text[:400]}")
+
+          # ===  STEP 4 — read tester state with all available attributes  ===
+          print(f"\n=== final tester state (with all attributes) ===")
+          for email, tid in fresh_ids.items():
+              r = requests.get(f'{base}/v1/betaTesters/{tid}?include=betaGroups,apps', headers=h)
+              if r.status_code == 200:
+                  print(f"\n{email}:")
+                  print(json.dumps(r.json(), indent=2)[:1500])
+          PY
