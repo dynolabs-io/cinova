@@ -1,54 +1,53 @@
 appId: io.dynolabs.cinova
 ---
-# Walk every tab → screenshot each surface. This is the autonomous
-# multi-surface walk-evidence flow for #106. Captures the same UI a
-# founder would see in TestFlight on iPhone — same Cinova.app bytes,
-# same iOS runtime, same RN bridge.
-
+# Walk every tab → screenshot each surface. Same Cinova.app bytes as
+# TestFlight build 14, same iOS runtime. Tabs use `title:` in
+# Tabs.Screen options — React Navigation exposes these as accessibility
+# labels even though tab bar is icon-only visually.
 - launchApp:
     stopApp: true
 - waitForAnimationToEnd:
     timeout: 30000
-# Screen 1: Home tab (default after onboarding)
+
+# Home tab (default landing)
 - takeScreenshot: walk-1-home
 
-# Screen 2: Reels tab (vertical-trailer feed)
+# Reels
 - tapOn:
-    point: 20%,95%
+    text: "Reels"
     optional: true
 - waitForAnimationToEnd:
     timeout: 5000
 - takeScreenshot: walk-2-reels
 
-# Screen 3: Discover tab (3rd icon from left)
+# Discover (vertical-trailer grid)
 - tapOn:
-    point: 50%,95%
+    text: "Discover"
     optional: true
 - waitForAnimationToEnd:
     timeout: 5000
 - takeScreenshot: walk-3-discover
 
-# Screen 4: Watchlist tab
+# Watchlist
 - tapOn:
-    point: 70%,95%
+    text: "Watchlist"
     optional: true
 - waitForAnimationToEnd:
     timeout: 5000
 - takeScreenshot: walk-4-watchlist
 
-# Screen 5: Profile tab
+# Profile
 - tapOn:
-    point: 90%,95%
+    text: "Profile"
     optional: true
 - waitForAnimationToEnd:
     timeout: 5000
 - takeScreenshot: walk-5-profile
 
-# Screen 6: Tap the chat FAB to verify it opens (smoke-only — won't
-# actually chat because backend is down)
+# Chat FAB (floating button — opens chat modal)
 - tapOn:
-    point: 90%,80%
+    id: "chat-fab"
     optional: true
 - waitForAnimationToEnd:
     timeout: 5000
-- takeScreenshot: walk-6-chat
+- takeScreenshot: walk-6-chat-or-final
