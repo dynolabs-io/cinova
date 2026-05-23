@@ -1,0 +1,70 @@
+name: asc-direct-attach (tester ← → build direct relationship)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pyjwt cryptography requests
+      - env:
+          KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY_B64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os, base64, time, jwt, requests, json
+          kb = os.environ['PRIVATE_KEY_B64']
+          try:
+              d = base64.b64decode(kb)
+              key = d if d.startswith(b'-----BEGIN') else kb.encode()
+          except Exception:
+              key = kb.encode()
+          tok = jwt.encode({'iss': os.environ['ISSUER_ID'], 'iat': int(time.time()),
+                            'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'},
+                           key, algorithm='ES256', headers={'kid': os.environ['KEY_ID']})
+          h = {'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'}
+          base = 'https://api.appstoreconnect.apple.com'
+
+          apps = requests.get(f'{base}/v1/apps?filter[bundleId]=io.dynolabs.cinova', headers=h).json()
+          app_id = apps['data'][0]['id']
+          builds = requests.get(f'{base}/v1/builds?filter[app]={app_id}&filter[version]=14', headers=h).json()
+          build_id = builds['data'][0]['id']
+          print(f"build 14 id={build_id}")
+
+          # Direct attach: POST /v1/builds/{build_id}/relationships/individualTesters
+          # Apple's "Individual Testers" endpoint — bypasses group entirely
+          for email in ['hatyil@gmail.com', 'emrahbaysal@gmail.com']:
+              t = requests.get(f'{base}/v1/betaTesters?filter[email]={email}', headers=h).json()
+              for r in t.get('data', []):
+                  tid = r['id']
+                  # Try: builds → individualTesters
+                  payload = {'data': [{'type': 'betaTesters', 'id': tid}]}
+                  res = requests.post(f'{base}/v1/builds/{build_id}/relationships/individualTesters',
+                                       headers=h, json=payload, timeout=20)
+                  print(f"\n{email} tid={tid}")
+                  print(f"  POST builds/.../individualTesters HTTP {res.status_code}")
+                  if res.status_code not in (200, 204, 201):
+                      print(f"    body={res.text[:400]}")
+                  # And try the reverse: tester → builds
+                  payload2 = {'data': [{'type': 'builds', 'id': build_id}]}
+                  res2 = requests.post(f'{base}/v1/betaTesters/{tid}/relationships/builds',
+                                        headers=h, json=payload2, timeout=20)
+                  print(f"  POST betaTesters/.../builds HTTP {res2.status_code}")
+                  if res2.status_code not in (200, 204, 201):
+                      print(f"    body={res2.text[:400]}")
+                  # Verify
+                  v = requests.get(f'{base}/v1/betaTesters/{tid}/builds', headers=h).json()
+                  print(f"  verify: tester sees {len(v.get('data', []))} builds: {[b['attributes'].get('version') for b in v.get('data', [])]}")
+
+          # Final state check
+          ind = requests.get(f'{base}/v1/builds/{build_id}/individualTesters', headers=h).json()
+          print(f"\nBuild 14 individualTesters ({len(ind.get('data', []))}):")
+          for t in ind.get('data', []):
+              a = t['attributes']
+              print(f"  - {a.get('email')} state={a.get('state')}")
+          PY
