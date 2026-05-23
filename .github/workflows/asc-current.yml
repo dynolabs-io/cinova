@@ -1,0 +1,53 @@
+name: asc-current (snapshot all builds + delivery state)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pyjwt cryptography requests
+      - env:
+          KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY_B64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os, base64, time, jwt, requests
+          kb = os.environ['PRIVATE_KEY_B64']
+          try:
+              d = base64.b64decode(kb)
+              key = d if d.startswith(b'-----BEGIN') else kb.encode()
+          except Exception:
+              key = kb.encode()
+          tok = jwt.encode({'iss': os.environ['ISSUER_ID'], 'iat': int(time.time()), 'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'}, key, algorithm='ES256', headers={'kid': os.environ['KEY_ID']})
+          h = {'Authorization': f'Bearer {tok}'}
+          base = 'https://api.appstoreconnect.apple.com'
+          apps = requests.get(f'{base}/v1/apps?filter[bundleId]=io.dynolabs.cinova', headers=h).json()
+          app_id = apps['data'][0]['id']
+          builds = requests.get(f'{base}/v1/builds?filter[app]={app_id}&sort=-uploadedDate&limit=10', headers=h).json()
+          print(f"=== All builds ===")
+          for b in builds.get('data', []):
+              a = b['attributes']
+              print(f"  v{a.get('version')} id={b['id']} state={a.get('processingState')} encryption={a.get('usesNonExemptEncryption')} uploaded={a.get('uploadedDate')[:19]}")
+              ind = requests.get(f"{base}/v1/builds/{b['id']}/individualTesters", headers=h).json()
+              testers_emails = [t['attributes'].get('email') for t in ind.get('data', [])]
+              tester_states = [t['attributes'].get('state') for t in ind.get('data', [])]
+              print(f"     individualTesters: {len(ind.get('data', []))} {list(zip(testers_emails, tester_states))}")
+              bbd = requests.get(f"{base}/v1/builds/{b['id']}/buildBetaDetail", headers=h).json()
+              if 'data' in bbd and bbd['data']:
+                  ba = bbd['data']['attributes']
+                  print(f"     internalState={ba.get('internalBuildState')} externalState={ba.get('externalBuildState')} autoNotify={ba.get('autoNotifyEnabled')}")
+          # Per-tester visibility for the LATEST + earliest
+          print(f"\n=== Per-tester visibility ===")
+          for email in ['hatyil@gmail.com', 'emrahbaysal@gmail.com']:
+              tt = requests.get(f'{base}/v1/betaTesters?filter[email]={email}', headers=h).json()
+              for r in tt.get('data', []):
+                  ab = requests.get(f'{base}/v1/betaTesters/{r["id"]}/builds', headers=h).json()
+                  vs = [b['attributes'].get('version') for b in ab.get('data', [])]
+                  print(f"  {email} sees {len(vs)} builds: {sorted(vs)}")
+          PY
