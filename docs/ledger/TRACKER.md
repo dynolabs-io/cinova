@@ -180,3 +180,21 @@ Then hand-bucket into the tables above. Refresh on:
 - ≥ 5 label changes since AS-OF date
 - Any session-ending commit
 - Any cross-repo migration affecting this repo's image paths or remote
+
+## 2026-05-23 — Multi-surface walk evidence captured for #106
+
+| Run | SHA | Outcome |
+|---|---|---|
+| 26331168746 | 38f7fae | cancelled (superseded) |
+| 26331165699 | 38f7fae | failure (point-coords brittle in 02-tab-walk.yaml) |
+| 26331392307 | 331aecb | success — Maestro ran but takeScreenshot output not uploaded (artifact step missed walk-*.png at workspace root) |
+| 26331927878 | ff6730e | failure — transient `Could not resolve host: github.com` during CocoaPods libavif fetch |
+| 26331965196 | ff6730e | **SUCCESS** — full 6-frame walk evidence captured |
+
+`.maestro/02-tab-walk.yaml` walks Home → Reels → Discover → Watchlist → Profile → Chat FAB and `takeScreenshot`s each surface.
+
+`ios.yml` patched (`ff6730e`) to copy walk-*.png from `$GITHUB_WORKSPACE` to `$RUNNER_TEMP/maestro-screenshots/` before artifact upload — without that, Maestro's takeScreenshot output lands at workspace root and gets discarded.
+
+Screenshots committed to `docs/walks/walk-{1..6}-*.png` (`caa7e5b`) and posted to #106 comment 4525406913.
+
+Build 18 (latest) also uploaded + VALID + IN_BETA_TESTING during this session via `ios.yml` run 26331392307 — `asc-assign-build.yml` run for build 18 currently in-flight to attach the existing testers.
