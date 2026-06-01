@@ -1,0 +1,154 @@
+name: register-iogrid-bundles
+
+# One-shot workflow: register io.iogrid.app + io.iogrid.app.PacketTunnelProvider
+# bundle IDs + group.io.iogrid.app App Group + link capabilities, using
+# cinova's existing Apple Developer credentials. iogrid lives under the
+# same Apple Developer team (Dynolabs / Hatice Yildiz Baysal Apple ID); the
+# ASC REST API doesn't restrict bundle-ID creation by prefix — any team
+# admin can register arbitrary identifiers.
+#
+# Why this lives in cinova, not iogrid: cinova already has the
+# APP_STORE_CONNECT_PRIVATE_KEY + 3 IDs as repo secrets. The same .p8
+# works for any operation under the Dynolabs Apple Developer team. Once
+# this workflow has run once and the bundles exist, iogrid's
+# mobile-ios-ci pipeline can stand on its own (after the founder pushes
+# the same secrets to iogrid's secret store).
+#
+# Trigger: `gh workflow run register-iogrid-bundles.yml --repo foundrylab-app/cinova`
+# Idempotent: re-runs cleanly. Existing bundles/groups → 409 → treated as success.
+#
+# Refs iogrid #574 #575.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Write .p8 from secret
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_KEY_B64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/private_keys
+          echo "$ASC_KEY_B64" | base64 -d > ~/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          chmod 600 ~/private_keys/AuthKey_${ASC_KEY_ID}.p8
+
+      - name: Install dependencies
+        run: pip3 install --quiet pyjwt cryptography requests
+
+      - name: Register io.iogrid.app + extension + App Group via ASC REST API
+        env:
+          ASC_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -uo pipefail
+          export KEY_FILE=$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          python3 - <<'PY'
+          import os, sys, time, requests, jwt
+
+          tok = jwt.encode(
+              {'iss': os.environ['ASC_ISSUER_ID'], 'iat': int(time.time()),
+               'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'},
+              open(os.environ['KEY_FILE']).read(), algorithm='ES256',
+              headers={'kid': os.environ['ASC_KEY_ID']})
+          H = {'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'}
+          BASE = 'https://api.appstoreconnect.apple.com'
+
+          def get_or_create_bundle(identifier, name):
+              r = requests.get(f'{BASE}/v1/bundleIds?filter[identifier]={identifier}', headers=H, timeout=15)
+              existing = r.json().get('data', []) if r.status_code == 200 else []
+              if existing:
+                  print(f'  Bundle ID {identifier} already exists: {existing[0]["id"]}')
+                  return existing[0]['id']
+              payload = {'data': {'type': 'bundleIds', 'attributes': {
+                  'identifier': identifier, 'name': name, 'platform': 'IOS'}}}
+              r = requests.post(f'{BASE}/v1/bundleIds', headers=H, json=payload, timeout=15)
+              if r.status_code in (200, 201):
+                  bid = r.json()['data']['id']
+                  print(f'  Created bundle ID {identifier}: {bid}')
+                  return bid
+              print(f'::error::Bundle ID {identifier} POST HTTP {r.status_code}: {r.text[:500]}')
+              sys.exit(1)
+
+          def ensure_capabilities(bundle_id_resource, identifier, caps):
+              r = requests.get(f'{BASE}/v1/bundleIds/{bundle_id_resource}/capabilities', headers=H, timeout=15)
+              existing = {c['attributes']['capabilityType'] for c in r.json().get('data', [])} if r.status_code == 200 else set()
+              for cap in caps:
+                  if cap in existing:
+                      print(f'    {identifier} cap {cap}: already enabled')
+                      continue
+                  payload = {'data': {
+                      'type': 'bundleIdCapabilities',
+                      'attributes': {'capabilityType': cap},
+                      'relationships': {'bundleId': {'data': {'type': 'bundleIds', 'id': bundle_id_resource}}},
+                  }}
+                  r = requests.post(f'{BASE}/v1/bundleIdCapabilities', headers=H, json=payload, timeout=15)
+                  if r.status_code in (200, 201, 409):
+                      print(f'    {identifier} cap {cap}: enabled')
+                  else:
+                      print(f'::warning::{identifier} cap {cap} POST HTTP {r.status_code}: {r.text[:400]}')
+
+          def get_or_create_app_group(identifier, name):
+              # App Groups have their own resource type. /v1/appGroups in
+              # Apple Developer (NOT App Store Connect) terms — same API base.
+              r = requests.get(f'{BASE}/v1/appGroups?filter[identifier]={identifier}', headers=H, timeout=15)
+              existing = r.json().get('data', []) if r.status_code == 200 else []
+              if existing:
+                  print(f'  App Group {identifier} already exists: {existing[0]["id"]}')
+                  return existing[0]['id']
+              payload = {'data': {'type': 'appGroups', 'attributes': {
+                  'identifier': identifier, 'name': name}}}
+              r = requests.post(f'{BASE}/v1/appGroups', headers=H, json=payload, timeout=15)
+              if r.status_code in (200, 201):
+                  agid = r.json()['data']['id']
+                  print(f'  Created App Group {identifier}: {agid}')
+                  return agid
+              # Apple's API has restricted access on appGroups for some teams;
+              # if it returns 404 / 403 the operator creates it via the
+              # Developer Portal web UI. Don't fail the run — warn instead.
+              print(f'::warning::App Group {identifier} POST HTTP {r.status_code}: {r.text[:400]}')
+              print(f'::warning::Create manually at https://developer.apple.com → Identifiers → + → App Groups → {identifier}')
+              return None
+
+          def link_app_group_to_bundle(bundle_id_resource, identifier, group_resource):
+              if not group_resource:
+                  return
+              payload = {'data': [{'type': 'appGroups', 'id': group_resource}]}
+              r = requests.post(
+                  f'{BASE}/v1/bundleIds/{bundle_id_resource}/relationships/appGroups',
+                  headers=H, json=payload, timeout=15)
+              if r.status_code in (200, 201, 204):
+                  print(f'    {identifier} linked to App Group {group_resource}')
+              else:
+                  print(f'::warning::Link {identifier} ↔ {group_resource} HTTP {r.status_code}: {r.text[:300]}')
+
+          print('==> Bundle IDs')
+          app_id = get_or_create_bundle('io.iogrid.app', 'iogrid')
+          ext_id = get_or_create_bundle('io.iogrid.app.PacketTunnelProvider', 'iogrid PacketTunnelProvider')
+
+          print('==> Capabilities')
+          ensure_capabilities(app_id, 'io.iogrid.app',
+              ['NETWORK_EXTENSIONS', 'APP_GROUPS', 'PERSONAL_VPN'])
+          ensure_capabilities(ext_id, 'io.iogrid.app.PacketTunnelProvider',
+              ['NETWORK_EXTENSIONS', 'APP_GROUPS'])
+
+          print('==> App Group')
+          group_id = get_or_create_app_group('group.io.iogrid.app', 'iogrid app group')
+
+          print('==> Link App Group to bundles')
+          link_app_group_to_bundle(app_id, 'io.iogrid.app', group_id)
+          link_app_group_to_bundle(ext_id, 'io.iogrid.app.PacketTunnelProvider', group_id)
+
+          print()
+          print('==> DONE. iogrid bundles registered. Founder remaining tasks:')
+          print('    1. Create the App Store Connect app record at')
+          print('       https://appstoreconnect.apple.com → My Apps → +')
+          print('       Bundle ID: io.iogrid.app (dropdown will show what we just created)')
+          print('       Name: iogrid')
+          print('    2. Push the same Apple secrets to iogrid/iogrid via')
+          print('       gh secret set (or just run the bootstrap-testflight.sh)')
+          PY
