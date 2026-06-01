@@ -160,7 +160,7 @@ jobs:
           set -uo pipefail
           export KEY_FILE=$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8
 
-          gem install fastlane --no-document --silent
+          sudo gem install fastlane --no-document --silent
 
           # Spaceship.app_groups create + link via Ruby. The .p8 + key_id +
           # issuer_id are sufficient to authenticate the portal session.
