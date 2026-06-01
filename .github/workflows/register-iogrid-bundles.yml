@@ -144,11 +144,65 @@ jobs:
           link_app_group_to_bundle(ext_id, 'io.iogrid.app.PacketTunnelProvider', group_id)
 
           print()
-          print('==> DONE. iogrid bundles registered. Founder remaining tasks:')
-          print('    1. Create the App Store Connect app record at')
-          print('       https://appstoreconnect.apple.com → My Apps → +')
-          print('       Bundle ID: io.iogrid.app (dropdown will show what we just created)')
-          print('       Name: iogrid')
-          print('    2. Push the same Apple secrets to iogrid/iogrid via')
-          print('       gh secret set (or just run the bootstrap-testflight.sh)')
+          print('==> DONE (REST API portion). App Group creation runs next via Spaceship.')
           PY
+
+      - name: Create App Group + link bundles via fastlane Spaceship
+        env:
+          ASC_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        # Apple's public REST API doesn't expose POST /v1/appGroups (404
+        # "resource does not exist"). Spaceship goes through the older
+        # portal.apple.com session API which DOES support App Group
+        # creation. fastlane bundles Spaceship; we just need Ruby.
+        run: |
+          set -uo pipefail
+          export KEY_FILE=$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8
+
+          gem install fastlane --no-document --silent
+
+          # Spaceship.app_groups create + link via Ruby. The .p8 + key_id +
+          # issuer_id are sufficient to authenticate the portal session.
+          ruby <<'RUBY'
+          require 'spaceship'
+
+          Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
+            key_id:     ENV['ASC_KEY_ID'],
+            issuer_id:  ENV['ASC_ISSUER_ID'],
+            filepath:   ENV['KEY_FILE'],
+          )
+
+          group_id = 'group.io.iogrid.app'
+          group_name = 'iogrid app group'
+
+          # ── Create or find the App Group ─────────────────────────
+          existing = Spaceship::Portal::AppGroup.find(group_id)
+          if existing
+            puts "  App Group #{group_id} already exists: #{existing.app_group_id}"
+            group = existing
+          else
+            group = Spaceship::Portal::AppGroup.create!(group_id, group_name)
+            puts "  Created App Group #{group_id}: #{group.app_group_id}"
+          end
+
+          # ── Link App Group to both bundle IDs ────────────────────
+          ['io.iogrid.app', 'io.iogrid.app.PacketTunnelProvider'].each do |bundle_id|
+            app = Spaceship::Portal::App.find(bundle_id)
+            unless app
+              warn "::warning::Bundle #{bundle_id} not found via Spaceship — REST API step should have created it"
+              next
+            end
+            # update_service handles app-group linking idempotently
+            app.associate_groups([group])
+            puts "  #{bundle_id} linked to App Group #{group_id}"
+          end
+
+          puts
+          puts '==> DONE. Founder remaining tasks:'
+          puts '    1. Create the App Store Connect app record at'
+          puts '       https://appstoreconnect.apple.com → My Apps → +'
+          puts '       Bundle ID: io.iogrid.app (dropdown shows the bundle we just created)'
+          puts '       Name: iogrid'
+          puts '    2. Run mobile/ios/scripts/bootstrap-testflight.sh on the iogrid repo'
+          RUBY
