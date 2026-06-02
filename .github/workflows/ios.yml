@@ -117,7 +117,17 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" || true
-          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed s/\"//g)
+          # Replace the user keychain search list with ONLY our new
+          # keychain — do NOT append the existing ones. macos-latest
+          # runners can carry stale "Apple Distribution: HATICE YILDIZ
+          # BAYSAL" certs in the login keychain from prior CI jobs on
+          # sibling Dynolabs team projects (iogrid / vcard / ping).
+          # If the search list includes them, xcodebuild manual signing
+          # picks the FIRST matching cert by generic name "Apple
+          # Distribution" — which may be a stale revoked cert rather
+          # than our freshly-fastlane-cert one, causing archive to fail.
+          # Cross-port from iogrid mobile-ios-ci e912ac7 (2026-06-02).
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
           security default-keychain -s "$KEYCHAIN_PATH"
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
           echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
